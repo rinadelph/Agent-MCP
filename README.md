@@ -1,6 +1,6 @@
 # Agent MCP Template
 
-A template for creating multi-agent systems using the MCP (Multi-Agent Collaboration Protocol) for coordinated, efficient AI collaboration.
+A MCP for creating multi-agent systems using the MCP (Multi-Agent Collaboration Protocol) for coordinated, efficient AI collaboration.
 
 ## Features
 
@@ -9,7 +9,7 @@ A template for creating multi-agent systems using the MCP (Multi-Agent Collabora
 - Context and knowledge sharing between agents
 - Graph visualization of agent interactions
 - Support for embedding and RAG capabilities
-- Interactive dashboard
+- Interactive dashboard for visualizing tasks, agents and context.
 
 ## Project Planning with the Main Context Document (MCD)
 
