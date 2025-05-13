@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Agent MCP Template for creating multi-agent systems"
 authors = [{name = "Agent MCP Team"}]
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 license = {text = "MIT"}
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -25,6 +25,7 @@ dependencies = [
     "python-dotenv",
     "sqlite-vec",
     "httpx",
+    "mcp>=1.8.1",
 ]
 
 [project.optional-dependencies]
@@ -40,7 +41,7 @@ packages = ["mcp_template"]
 
 [tool.black]
 line-length = 88
-target-version = ["py38"]
+target-version = ["py310"]
 
 [tool.isort]
 profile = "black"
