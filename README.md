@@ -15,7 +15,7 @@ A framework for creating multi-agent systems using the MCP (Multi-Agent Collabor
    ```bash
    uv run -m mcp_template.main --port 8080 --project-dir /path/to/your/project
    ```
-   **Important**: Save the admin token displayed when server starts
+   **Important**: The admin token is stored in the `.agent/mcp_state.db` SQLite database under project context. Install a SQLite viewer extension to access it.
 
 3. **Create Main Context Document (MCD)**:
    - Create detailed `MCD.md` with system architecture, API routes, data models, etc.
@@ -106,6 +106,29 @@ With a comprehensive MCD, agents can implement your application part-by-part wit
 
 ## Multi-Agent Workflow
 
+### Workflow Overview
+
+1. **Begin with Deep Research**: Before coding, use AI to help create a comprehensive Main Context Document (MCD)
+2. **Start the Infrastructure**: Launch the MCP server and locate your admin token in the database
+3. **Admin Agent Setup**: Initialize your admin agent with the token and INSTRUCTIONS.md
+4. **Worker Creation**: Admin creates specialized workers for different aspects of your project
+5. **Task Assignment**: Admin breaks down the MCD into discrete tasks and assigns to workers
+6. **Parallel Development**: Workers execute tasks while sharing context through the MCP
+7. **Context Preservation**: All agents store their knowledge in the central database
+
+### Development Loop
+
+```mermaid
+graph TD
+    A[Research & MCD Creation] --> B[MCP Server Setup]
+    B --> C[Admin Agent Initialization]
+    C --> D[Worker Agent Creation]
+    D --> E[Task Assignment]
+    E --> F[Parallel Development]
+    F --> G[Knowledge Storage in MCP DB]
+    G --> E
+```
+
 ### Architecture Overview
 
 The MCP system uses a hierarchical structure with:
@@ -124,15 +147,19 @@ Options:
 - `--port`: Port to run the server on (default: 8080)
 - `--project-dir`: Base directory for the project
 
-#### 2. Configure Admin Token
+#### 2. Access Admin Token
 
-The admin token provides privileged access to the MCP server. You can set it in your `.env` file:
+The admin token provides privileged access to the MCP server and is required for all agent operations.
 
-```
-MCP_ADMIN_TOKEN=your_custom_admin_token
-```
+**Finding the Admin Token**:
+1. After starting the server, a token is automatically generated
+2. This token is stored in the `.agent/mcp_state.db` SQLite database
+3. Install a SQLite viewer extension for VS Code or another SQLite tool
+4. Open the database and check the `project_context` table
+5. Look for the admin token entry
 
-If not set, a random token will be generated at server startup and printed to the console. Make note of this token as it's required for admin operations.
+**Agent Tokens**:
+Agent-specific tokens are also stored in the `.agent` folder. These tokens give each agent its specific permissions and identity within the MCP system.
 
 #### 3. Launching Agents
 
