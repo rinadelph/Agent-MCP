@@ -1,0 +1,3097 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MCP Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css">
+    <!-- Vis.js Network CSS -->
+    <link href="https://unpkg.com/vis-network/styles/vis-network.min.css" rel="stylesheet" type="text/css" />
+    <!-- Font Awesome 5 Free CSS (for icons) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" integrity="sha512-1ycn6IcaQQ40/MKBW2W4Rhis/DbILU74C1vSrLJxCq57o941Ym01SwNsOMqvEBFlcgUa6xLiPY/NS5R+E6ztJQ==\" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <style>
+        :root {
+            --primary-color: #3498db;
+            --secondary-color: #2ecc71;
+            --warning-color: #f39c12;
+            --danger-color: #e74c3c;
+            --dark-color: #1a1a1a; /* Darker BG */
+            --light-color: #ecf0f1; /* Light Text */
+            --medium-color: #7f8c8d;
+            --border-color: #333;
+        }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #2c3e50; /* Dark background */
+            color: var(--light-color); /* Light text */
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        .header { 
+            background-color: var(--dark-color);
+            color: white;
+            padding: 0.5rem 1rem; /* Reduced padding */
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .content-wrapper {
+            flex-grow: 1;
+            display: flex;
+            padding: 10px;
+            overflow: hidden; /* Prevent body scroll */
+        }
+        .sidebar {
+            background-color: #282c34; /* Darker sidebar */
+            color: var(--light-color);
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            border: 1px solid var(--border-color);
+            flex: 0 0 280px; /* Fixed width */
+            margin-right: 10px;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto; /* Allow sidebar scroll if needed */
+        }
+        .main-content {
+            background-color: var(--dark-color); /* Match body or slightly different */
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            border: 1px solid var(--border-color);
+            flex-grow: 1;
+            display: flex; /* Make it flex to contain graph */
+            padding: 5px; /* Minimal padding around graph */
+            overflow: hidden; /* Prevent content overflow */
+        }
+        
+        /* Split View Styles */
+        .split-view-container {
+            display: flex;
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+        
+        .split-pane {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-width: 0; /* Allow panes to shrink below content size */
+            min-height: 0;
+            overflow: hidden;
+        }
+        
+        .split-pane-header {
+            background-color: #333842;
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .split-pane-content {
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .resize-handle {
+            width: 8px;
+            background-color: #444;
+            cursor: col-resize;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .resize-handle::after {
+            content: "";
+            width: 2px;
+            height: 30px;
+            background-color: #666;
+            border-radius: 1px;
+        }
+        
+        .resize-handle:hover::after,
+        .resize-handle.active::after {
+            background-color: var(--primary-color);
+        }
+        
+        #network-visualization {
+            width: 100%;
+            height: 100%;
+            border: none; /* Remove border for dark mode */
+            background-color: var(--dark-color); /* Ensure graph BG matches */
+        }
+        .card {
+            background-color: #333842; /* Darker cards */
+            border: 1px solid #444;
+            color: var(--light-color);
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 15px;
+        }
+         .card-header {
+            background-color: #444a57; /* Darker card header */
+            color: white;
+            border-bottom: 1px solid var(--border-color);
+            border-radius: 8px 8px 0 0 !important;
+            font-weight: 600;
+            padding: 0.5rem 1rem; /* Smaller header */
+        }
+        .card-body p {
+            margin-bottom: 0.5rem;
+        }
+        .spinner-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(255,255,255,0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            border-radius: 8px;
+        }
+        .details-panel {
+            background-color: #282c34; /* Darker details panel */
+            color: var(--light-color);
+            border-left: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            flex: 0 0 320px; /* Fixed width */
+            margin-left: 10px;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            height: calc(100vh - 120px); /* Adjusted height for tabs */
+        }
+        .details-panel h4, .details-panel h5, .details-panel h6 {
+             border-bottom: 1px solid var(--border-color);
+             color: #aab;
+        }
+        .details-panel pre {
+            background-color: #222;
+            border: 1px solid var(--border-color);
+            color: #ccc;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            max-height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap; /* Wrap long lines */
+            word-wrap: break-word;
+        }
+        .details-panel .action-item {
+            border-bottom: 1px dotted #444;
+            font-size: 0.8em;
+            margin-bottom: 5px;
+            padding-bottom: 5px;
+        }
+        .details-panel .action-item:last-child {
+            border-bottom: none;
+        }
+        .view-container {
+            display: none; /* Hide views by default */
+            height: 100%; /* Fill parent */
+            width: 100%;
+        }
+        .view-container.active {
+            display: block; /* Show active view */
+        }
+        #agent-explorer-view {
+            display: flex;
+            height: 100%;
+        }
+        #agent-master-list {
+            flex: 0 0 250px; /* Fixed width for list */
+            overflow-y: auto;
+            border-right: 1px solid #eee;
+            padding-right: 10px;
+        }
+        #agent-detail-panel {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding-left: 15px;
+        }
+        .agent-list-item {
+            padding: 8px;
+            cursor: pointer;
+            border-radius: 4px;
+            margin-bottom: 5px;
+            border-left: 4px solid transparent;
+        }
+        .agent-list-item:hover {
+            background-color: #444a57;
+        }
+        .agent-list-item.selected {
+            background-color: #555c68;
+            font-weight: bold;
+        }
+        .nav-pills .nav-link {
+            color: #ccc;
+        }
+        .nav-pills .nav-link.active {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        .text-muted {
+             color: #999 !important; /* Make muted text lighter */
+        }
+        
+        /* Chatbox Styles */
+        .chatbox-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 350px;
+            border-radius: 10px;
+            overflow: hidden;
+            background-color: #282c34;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            border: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            z-index: 1000;
+        }
+        
+        .chatbox-header {
+            background-color: var(--dark-color);
+            color: white;
+            padding: 10px 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .chatbox-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+        }
+        
+        .chatbox-controls {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .chatbox-controls button {
+            background: none;
+            border: none;
+            color: #ccc;
+            cursor: pointer;
+            padding: 0;
+            font-size: 14px;
+        }
+        
+        .chatbox-controls button:hover {
+            color: white;
+        }
+        
+        .chat-tabs {
+            display: flex;
+            background-color: #333842;
+            border-bottom: 1px solid var(--border-color);
+            overflow-x: auto;
+        }
+        
+        .chat-tab {
+            padding: 8px 12px;
+            font-size: 13px;
+            cursor: pointer;
+            white-space: nowrap;
+            border-right: 1px solid var(--border-color);
+            background-color: #333842;
+            color: #ccc;
+        }
+        
+        .chat-tab.active {
+            background-color: #444a57;
+            color: white;
+            font-weight: 500;
+        }
+        
+        .chat-tab:hover:not(.active) {
+            background-color: #3a3f4b;
+        }
+        
+        .new-chat-tab {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            cursor: pointer;
+            color: #999;
+        }
+        
+        .new-chat-tab:hover {
+            color: white;
+        }
+        
+        .chatbox-messages {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 15px;
+            height: 300px;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .message {
+            max-width: 85%;
+            padding: 8px 12px;
+            margin-bottom: 10px;
+            border-radius: 10px;
+            position: relative;
+            word-wrap: break-word;
+        }
+        
+        .message.user {
+            align-self: flex-end;
+            background-color: var(--primary-color);
+            color: white;
+            border-bottom-right-radius: 2px;
+        }
+        
+        .message.agent {
+            align-self: flex-start;
+            background-color: #444a57;
+            color: white;
+            border-bottom-left-radius: 2px;
+        }
+        
+        .message-time {
+            font-size: 10px;
+            opacity: 0.8;
+            text-align: right;
+            margin-top: 2px;
+        }
+        
+        .chatbox-input {
+            border-top: 1px solid var(--border-color);
+            padding: 10px 15px;
+            display: flex;
+            background-color: #333842;
+        }
+        
+        .chatbox-input input {
+            flex-grow: 1;
+            background-color: #444a57;
+            border: 1px solid #555;
+            border-radius: 18px;
+            padding: 8px 15px;
+            color: white;
+            outline: none;
+        }
+        
+        .chatbox-input input:focus {
+            border-color: var(--primary-color);
+        }
+        
+        .send-button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 36px;
+            height: 36px;
+            margin-left: 10px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .send-button:hover {
+            background-color: #2980b9;
+        }
+        
+        .chatbox-toggle {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background-color: var(--primary-color);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            border: none;
+            z-index: 999;
+        }
+        
+        .chatbox-toggle:hover {
+            background-color: #2980b9;
+        }
+        
+        .chatbox-minimized {
+            height: 45px !important;
+        }
+        
+        .chatbox-minimized .chatbox-messages,
+        .chatbox-minimized .chatbox-input,
+        .chatbox-minimized .chat-tabs {
+            display: none;
+        }
+        
+        .chatbox-hidden {
+            display: none !important;
+        }
+        
+        /* Animation */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .chatbox-container {
+            animation: fadeIn 0.3s ease forwards;
+        }
+        /* Enhanced Tree/Graph View Styles */
+        #network-visualization, #task-network-visualization {
+            background: #23272e;
+            border-radius: 10px;
+            border: 2px solid #444;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.25);
+            min-height: 400px;
+            transition: box-shadow 0.2s;
+        }
+        #network-visualization:focus, #task-network-visualization:focus {
+            box-shadow: 0 0 0 3px var(--primary-color);
+            outline: none;
+        }
+        .vis-network {
+            border-radius: 10px;
+        }
+        .vis-label {
+            font-size: 15px !important;
+            font-weight: 500;
+            color: #fff !important;
+            text-shadow: 0 1px 2px #000, 0 0 2px #23272e;
+            padding: 2px 8px;
+            border-radius: 6px;
+            background: rgba(30,34,40,0.7);
+            box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+        }
+        .vis-selected .vis-label {
+            background: var(--primary-color) !important;
+            color: #fff !important;
+            font-weight: bold;
+        }
+        .vis-node {
+            border-width: 3px !important;
+            border-color: #888 !important;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+        }
+        .vis-node.agent {
+            background: linear-gradient(135deg, #4CAF50 60%, #2ecc71 100%) !important;
+            border-color: #2ecc71 !important;
+        }
+        .vis-node.task {
+            background: linear-gradient(135deg, #FFC107 60%, #FFA000 100%) !important;
+            border-color: #FFA000 !important;
+        }
+        .vis-node.context {
+            background: linear-gradient(135deg, #9C27B0 60%, #7B1FA2 100%) !important;
+            border-color: #7B1FA2 !important;
+        }
+        .vis-node.file {
+            background: linear-gradient(135deg, #795548 60%, #5D4037 100%) !important;
+            border-color: #5D4037 !important;
+        }
+        .vis-node.admin {
+            background: linear-gradient(135deg, #607D8B 60%, #455A64 100%) !important;
+            border-color: #455A64 !important;
+        }
+        .vis-edge {
+            width: 2.5px !important;
+            color: #aaa !important;
+            opacity: 0.8;
+        }
+        .vis-edge .vis-arrow {
+            color: var(--primary-color) !important;
+        }
+        .vis-network .vis-navigation {
+            background: rgba(44,62,80,0.9);
+            border-radius: 6px;
+            padding: 6px 10px;
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 10;
+            display: flex;
+            gap: 8px;
+        }
+        .vis-network .vis-navigation button {
+            background: var(--primary-color);
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 15px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .vis-network .vis-navigation button:hover {
+            background: #217dbb;
+        }
+        /* Additional Enhanced Tree/Graph View Styles */
+        .vis-network:before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: radial-gradient(circle at center, rgba(52, 152, 219, 0.05) 0%, rgba(0, 0, 0, 0) 70%);
+            pointer-events: none;
+            border-radius: 10px;
+        }
+        
+        .graph-controls {
+            position: absolute;
+            bottom: 15px;
+            left: 15px;
+            z-index: 10;
+            display: flex;
+            gap: 8px;
+            flex-direction: column;
+            background: rgba(44, 62, 80, 0.85);
+            padding: 8px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+        
+        .graph-controls button {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .graph-controls button:hover {
+            background: #2980b9;
+            transform: scale(1.1);
+        }
+        
+        .graph-controls .separator {
+            height: 1px;
+            background: rgba(255, 255, 255, 0.2);
+            margin: 4px 0;
+        }
+        
+        /* Enhanced Node & Edge Styles */
+        .vis-node {
+            transition: transform 0.3s, box-shadow 0.3s, opacity 0.3s !important;
+        }
+        
+        .vis-node:hover {
+            transform: scale(1.1) !important;
+            box-shadow: 0 0 15px rgba(52, 152, 219, 0.5) !important;
+            z-index: 10 !important;
+        }
+        
+        .vis-node.highlight {
+            transform: scale(1.15) !important;
+            box-shadow: 0 0 20px rgba(231, 76, 60, 0.6) !important;
+            z-index: 20 !important;
+        }
+        
+        .vis-edge {
+            transition: opacity 0.3s, width 0.3s !important;
+        }
+        
+        .vis-edge.highlight {
+            width: 4px !important;
+            opacity: 1 !important;
+            z-index: 10 !important;
+        }
+        
+        /* Animated label appearance */
+        @keyframes labelFadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .vis-label {
+            animation: labelFadeIn 0.3s ease-out forwards;
+        }
+        
+        /* Styling for node levels in hierarchical view */
+        .hierarchical-level-0 { border-color: #e74c3c !important; }
+        .hierarchical-level-1 { border-color: #3498db !important; }
+        .hierarchical-level-2 { border-color: #2ecc71 !important; }
+        .hierarchical-level-3 { border-color: #f39c12 !important; }
+        .hierarchical-level-4 { border-color: #9b59b6 !important; }
+        .hierarchical-level-5 { border-color: #1abc9c !important; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1><i class="bi bi-cpu"></i> MCP Dashboard</h1>
+        <div>
+            <span id="server-status" class="badge bg-success">Server Online</span>
+            <span id="connection-badge" class="badge bg-primary ms-2">? Agents</span>
+        </div>
+    </div>
+    
+    <div class="content-wrapper">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <!-- Navigation Tabs -->
+            <ul class="nav nav-pills flex-column mb-auto" id="dashboard-nav">
+              <li class="nav-item">
+                <a href="#" class="nav-link active" data-view="graph-and-task">
+                  <i class="bi bi-grid-3x3-gap me-2"></i>Split View
+                </a>
+              </li>
+              <li>
+                <a href="#" class="nav-link" data-view="agent-explorer">
+                  <i class="bi bi-people me-2"></i>Agent Explorer
+                </a>
+              </li>
+              <!-- Add other views later -->
+            </ul>
+            <hr>
+            <div class="card mb-3">
+                <div class="card-header bg-primary text-white">
+                    <i class="bi bi-info-circle"></i> Server Info
+                </div>
+                <div class="card-body">
+                    <p><strong>Active Agents:</strong> <span id="agent-count">0</span></p>
+                    <p><strong>Project:</strong> <span id="project-name">Loading...</span></p>
+                </div>
+            </div>
+            
+            <div class="card mb-3">
+                <div class="card-header bg-primary text-white">
+                    <i class="bi bi-gear"></i> Controls
+                </div>
+                <div class="card-body">
+                    <button id="refresh-btn" class="btn btn-sm btn-outline-light mb-2 w-100">
+                        <i class="bi bi-arrow-clockwise"></i> Refresh Data
+                    </button>
+                    <button id="create-agent-btn" class="btn btn-sm btn-primary mb-2 w-100">
+                        <i class="bi bi-plus-circle"></i> Create Agent
+                    </button>
+                    <div class="btn-group btn-group-sm w-100 mb-2" role="group">
+                      <button type="button" class="btn btn-outline-secondary layout-btn active" data-layout="physics">Physics</button>
+                      <button type="button" class="btn btn-outline-secondary layout-btn" data-layout="hierarchical">Tree (LR)</button>
+                    </div>
+                    <div class="form-check form-switch mt-2">
+                        <input class="form-check-input" type="checkbox" id="auto-refresh-toggle" checked>
+                        <label class="form-check-label" for="auto-refresh-toggle">Auto-refresh (10s)</label>
+                    </div>
+                </div>
+            </div>
+            <!-- Node Details Area -->
+            <div class="card flex-grow-1">
+                 <div class="card-header bg-secondary text-white"><i class="bi bi-search"></i> Node Details</div>
+                 <div class="card-body overflow-auto" id="graph-node-details">
+                      <p class="text-muted small">Click a node in the Graph View to see details.</p>
+                 </div>
+            </div>
+        </div>
+        
+        <!-- Main Content Area -->
+        <div class="main-content">
+            <!-- Split View Container -->
+            <div class="split-view-container">
+                <!-- Graph View -->
+                <div class="split-pane" id="graph-view-pane">
+                    <div class="split-pane-header">
+                        <h6 class="m-0"><i class="bi bi-diagram-3"></i> Graph View</h6>
+                    </div>
+                    <div class="split-pane-content">
+                        <div id="network-visualization">
+                            <div class="spinner-overlay" id="graph-spinner">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading Graph...</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Resize Handle -->
+                <div class="resize-handle" id="main-resize-handle"></div>
+                
+                <!-- Task Tree View -->
+                <div class="split-pane" id="task-tree-pane">
+                    <div class="split-pane-header">
+                        <h6 class="m-0"><i class="bi bi-list-nested"></i> Task Tree</h6>
+                    </div>
+                    <div class="split-pane-content">
+                        <div id="task-network-visualization" style="width: 100%; height: 100%;">
+                            <div class="spinner-overlay" id="task-spinner">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading Task Tree...</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Hidden Agent Explorer (will be shown/hidden via JavaScript) -->
+            <div id="agent-explorer-container" style="display: none; width: 100%; height: 100%;">
+                <div id="agent-explorer-view">
+                    <div id="agent-master-list">
+                        <div class="text-center p-3"><div class="spinner-border spinner-border-sm" role="status"></div> Loading Agents...</div>
+                    </div>
+                    <div id="agent-detail-panel">
+                        <h5 class="text-muted p-3">Select an agent from the list to see details.</h5>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Details Panel (Now part of Agent Explorer or other views) -->
+        <!-- Removed the separate details panel div -->
+
+    </div>
+    
+    <!-- Task Edit Modal -->
+    <div class="modal fade text-dark" id="editTaskModal" tabindex="-1" aria-labelledby="editTaskModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="editTaskModalLabel">Edit Task</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <input type="hidden" id="editTaskId">
+            <input type="hidden" id="editAgentId">
+            <div class="mb-3">
+              <label for="editTaskTitle" class="form-label">Title</label>
+              <input type="text" class="form-control" id="editTaskTitle">
+            </div>
+            <div class="mb-3">
+              <label for="editTaskDesc" class="form-label">Description</label>
+              <textarea class="form-control" id="editTaskDesc" rows="3"></textarea>
+            </div>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                  <label for="editTaskStatus" class="form-label">Status</label>
+                  <select class="form-select" id="editTaskStatus">
+                    <option value="pending">Pending</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="completed">Completed</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                </div>
+                <div class="col-md-6 mb-3">
+                  <label for="editTaskPriority" class="form-label">Priority</label>
+                  <select class="form-select" id="editTaskPriority">
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                  </select>
+                </div>
+            </div>
+            <div class="mb-3">
+              <label for="editTaskNotes" class="form-label">Notes (Append Only)</label>
+              <div id="existingNotes" class="mb-2">
+                <!-- Existing notes will be displayed here -->
+              </div>
+              <textarea class="form-control" id="editTaskNotes" rows="2" placeholder="Add new notes here..."></textarea>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            <button type="button" class="btn btn-primary" onclick="saveTaskChanges()">Save Changes</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chatbox - This is the button that shows/hides the chatbox -->
+    <button class="chatbox-toggle" id="chatbox-toggle">
+        <i class="bi bi-chat-dots-fill"></i>
+    </button>
+    
+    <!-- Chatbox Container -->
+    <div class="chatbox-container chatbox-hidden" id="chatbox-container">
+        <div class="chatbox-header">
+            <div class="chatbox-title">
+                <i class="bi bi-robot"></i>
+                <span id="current-chat-agent">Agent Chat</span>
+            </div>
+            <div class="chatbox-controls">
+                <button id="minimize-chatbox"><i class="bi bi-dash-lg"></i></button>
+                <button id="close-chatbox"><i class="bi bi-x-lg"></i></button>
+            </div>
+        </div>
+        
+        <!-- Chat Tabs for different conversations -->
+        <div class="chat-tabs" id="chat-tabs">
+            <div class="chat-tab active" data-chat-id="default">General</div>
+            <div class="new-chat-tab" id="new-chat-tab">
+                <i class="bi bi-plus-circle"></i>
+            </div>
+        </div>
+        
+        <!-- Chat Messages Area -->
+        <div class="chatbox-messages" id="chatbox-messages">
+            <!-- Messages will be added here by JavaScript -->
+            <div class="message agent">
+                <div>Hello! How can I assist you today?</div>
+                <div class="message-time">Just now</div>
+            </div>
+        </div>
+        
+        <!-- Chat Input Area -->
+        <div class="chatbox-input">
+            <input type="text" id="chat-input" placeholder="Type your message..." />
+            <button class="send-button" id="send-message">
+                <i class="bi bi-send-fill"></i>
+            </button>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Vis.js Network JS -->
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <script>
+        // Format timestamps for display
+        function formatTimestamp(timestamp) {
+            if (!timestamp) return 'N/A';
+            
+            try {
+                const date = new Date(timestamp);
+                return date.toLocaleString();
+            } catch (e) {
+                return timestamp;
+            }
+        }
+        
+        // Get status class based on task status
+        function getStatusClass(status) {
+            switch (status) {
+                case 'completed':
+                    return 'bg-green-100 text-green-800';
+                case 'in_progress':
+                    return 'bg-blue-100 text-blue-800';
+                case 'cancelled':
+                    return 'bg-red-100 text-red-800';
+                case 'pending':
+                default:
+                    return 'bg-yellow-100 text-yellow-800';
+            }
+        }
+        
+        let network = null;
+        let nodesDataSet = new vis.DataSet([]);
+        let edgesDataSet = new vis.DataSet([]);
+        let autoRefreshInterval = null;
+        const REFRESH_INTERVAL_MS = 10000; // 10 seconds
+        let currentView = 'graph-view'; // Track active view
+        let currentLayoutMode = 'physics'; // Default layout
+        let taskNetwork = null; // Network instance for task tree
+        let taskNodesDataSet = new vis.DataSet([]);
+        let taskEdgesDataSet = new vis.DataSet([]);
+
+        // Define Layout Options
+        const physicsOptions = {
+            physics: { 
+                enabled: true,
+                barnesHut: { 
+                    gravitationalConstant: -5000,
+                    centralGravity: 0.2,
+                    springLength: 150,  // Increased for better spacing
+                    springConstant: 0.08,
+                    damping: 0.12,
+                    avoidOverlap: 0.5   // Increased to prevent node overlap
+                },
+                maxVelocity: 50,
+                minVelocity: 0.1,
+                solver: 'barnesHut', 
+                stabilization: {
+                    enabled: true,
+                    iterations: 1000,   // Increased for better stabilization
+                    updateInterval: 25,
+                    fit: true
+                },
+                adaptiveTimestep: true
+            },
+            layout: {
+                hierarchical: { enabled: false } // Ensure hierarchical is off
+            },
+            nodes: {
+                shape: 'box',           // Default shape
+                borderWidth: 2,
+                shadow: true,
+                font: {
+                    size: 14,
+                    face: 'Segoe UI, sans-serif',
+                    color: '#ffffff'
+                },
+                scaling: {
+                    label: {
+                        enabled: true,
+                        min: 8,
+                        max: 20
+                    }
+                }
+            },
+            edges: {
+                width: 2,
+                shadow: true,
+                smooth: {
+                    type: 'continuous',
+                    forceDirection: 'none'
+                },
+                font: {
+                    size: 12,
+                    align: 'middle',
+                    background: 'rgba(40, 44, 52, 0.8)'
+                },
+                arrows: {
+                    to: { enabled: true, scaleFactor: 0.8 }
+                }
+            },
+            groups: {
+                agent: {
+                    shape: 'ellipse',
+                    borderWidth: 3,
+                    color: { background: '#4CAF50', border: '#2E7D32' }
+                },
+                task: {
+                    shape: 'box',
+                    borderWidth: 2,
+                    color: { background: '#FFC107', border: '#FFA000' }
+                },
+                context: {
+                    shape: 'diamond',
+                    borderWidth: 2,
+                    color: { background: '#9C27B0', border: '#7B1FA2' }
+                },
+                file: {
+                    shape: 'triangle',
+                    borderWidth: 2,
+                    color: { background: '#795548', border: '#5D4037' }
+                },
+                admin: {
+                    shape: 'star',
+                    borderWidth: 3,
+                    color: { background: '#607D8B', border: '#455A64' }
+                }
+            }
+        };
+
+        const hierarchicalOptions = {
+            physics: { enabled: false }, // Disable physics
+            layout: {
+                hierarchical: {
+                    enabled: true,
+                    levelSeparation: 250,
+                    nodeSpacing: 200,       // Increased from 180
+                    treeSpacing: 300,
+                    direction: 'LR',
+                    sortMethod: 'directed',
+                    shakeTowards: 'roots'   // Added to improve hierarchical layout
+                }
+            },
+            nodes: {
+                shape: 'box',
+                borderWidth: 2,
+                shadow: true,
+                font: {
+                    size: 14,
+                    face: 'Segoe UI, sans-serif',
+                    color: '#ffffff'
+                }
+            },
+            edges: {
+                width: 2,
+                shadow: true,
+                smooth: {
+                    type: 'cubicBezier',
+                    forceDirection: 'horizontal'
+                },
+                font: {
+                    size: 12,
+                    align: 'middle',
+                    background: 'rgba(40, 44, 52, 0.8)'
+                },
+                arrows: {
+                    to: { enabled: true, scaleFactor: 0.8 }
+                }
+            },
+            groups: {
+                agent: {
+                    shape: 'ellipse',
+                    borderWidth: 3,
+                    color: { background: '#4CAF50', border: '#2E7D32' }
+                },
+                task: {
+                    shape: 'box',
+                    borderWidth: 2,
+                    color: { background: '#FFC107', border: '#FFA000' }
+                },
+                context: {
+                    shape: 'diamond',
+                    borderWidth: 2,
+                    color: { background: '#9C27B0', border: '#7B1FA2' }
+                },
+                file: {
+                    shape: 'triangle',
+                    borderWidth: 2,
+                    color: { background: '#795548', border: '#5D4037' }
+                },
+                admin: {
+                    shape: 'star',
+                    borderWidth: 3,
+                    color: { background: '#607D8B', border: '#455A64' }
+                }
+            }
+        };
+
+        // Enhanced Graph/Tree View Options
+        const enhancedPhysicsOptions = {
+            physics: {
+                enabled: true,
+                barnesHut: {
+                    gravitationalConstant: -3500,
+                    centralGravity: 0.25,
+                    springLength: 180,
+                    springConstant: 0.09,
+                    damping: 0.13,
+                    avoidOverlap: 1.0
+                },
+                maxVelocity: 40,
+                minVelocity: 0.1,
+                solver: 'barnesHut',
+                stabilization: {
+                    enabled: true,
+                    iterations: 1200,
+                    updateInterval: 20,
+                    fit: true
+                },
+                adaptiveTimestep: true
+            },
+            layout: {
+                improvedLayout: true,
+                hierarchical: { enabled: false }
+            },
+            nodes: {
+                shape: 'box',
+                borderWidth: 3,
+                shadow: true,
+                font: {
+                    size: 16,
+                    face: 'Segoe UI, sans-serif',
+                    color: '#fff',
+                    strokeWidth: 2,
+                    strokeColor: '#000'
+                },
+                scaling: {
+                    label: {
+                        enabled: true,
+                        min: 10,
+                        max: 22
+                    }
+                }
+            },
+            edges: {
+                width: 2.5,
+                shadow: true,
+                smooth: {
+                    type: 'continuous',
+                    forceDirection: 'none'
+                },
+                font: {
+                    size: 13,
+                    align: 'middle',
+                    background: 'rgba(40, 44, 52, 0.8)'
+                },
+                arrows: {
+                    to: { enabled: true, scaleFactor: 0.9 }
+                }
+            },
+            interaction: {
+                navigationButtons: true,
+                keyboard: true,
+                zoomView: true,
+                dragView: true,
+                tooltipDelay: 200,
+                hover: true
+            },
+            groups: {
+                agent: {
+                    shape: 'ellipse',
+                    borderWidth: 3,
+                    color: { background: '#4CAF50', border: '#2E7D32' }
+                },
+                task: {
+                    shape: 'box',
+                    borderWidth: 2,
+                    color: { background: '#FFC107', border: '#FFA000' }
+                },
+                context: {
+                    shape: 'diamond',
+                    borderWidth: 2,
+                    color: { background: '#9C27B0', border: '#7B1FA2' }
+                },
+                file: {
+                    shape: 'triangle',
+                    borderWidth: 2,
+                    color: { background: '#795548', border: '#5D4037' }
+                },
+                admin: {
+                    shape: 'star',
+                    borderWidth: 3,
+                    color: { background: '#607D8B', border: '#455A64' }
+                }
+            }
+        };
+        const enhancedHierarchicalOptions = {
+            physics: { enabled: false },
+            layout: {
+                hierarchical: {
+                    enabled: true,
+                    levelSeparation: 220,
+                    nodeSpacing: 180,
+                    treeSpacing: 300,
+                    direction: 'UD',
+                    sortMethod: 'directed',
+                    shakeTowards: 'roots'
+                }
+            },
+            nodes: {
+                shape: 'box',
+                borderWidth: 3,
+                shadow: true,
+                font: {
+                    size: 16,
+                    face: 'Segoe UI, sans-serif',
+                    color: '#fff',
+                    strokeWidth: 2,
+                    strokeColor: '#000'
+                }
+            },
+            edges: {
+                width: 2.5,
+                shadow: true,
+                smooth: {
+                    type: 'cubicBezier',
+                    forceDirection: 'vertical'
+                },
+                font: {
+                    size: 13,
+                    align: 'middle',
+                    background: 'rgba(40, 44, 52, 0.8)'
+                },
+                arrows: {
+                    to: { enabled: true, scaleFactor: 0.9 }
+                }
+            },
+            interaction: {
+                navigationButtons: true,
+                keyboard: true,
+                zoomView: true,
+                dragView: true,
+                tooltipDelay: 200,
+                hover: true,
+                multiselect: true,
+                selectConnectedEdges: true,
+                hoverConnectedEdges: true
+            },
+            groups: enhancedPhysicsOptions.groups
+        };
+
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeGraph();
+            initializeTaskTreeGraph(); // Initialize task tree immediately
+            fetchGraphData();
+            fetchTaskTreeData(); // Fetch task tree data immediately
+            setupResizeHandlers(); // Set up resize functionality
+            startAutoRefresh();
+            setupNavigation();
+            setupLayoutButtons();
+            
+            // Toggle auto-refresh
+            document.getElementById('auto-refresh-toggle').addEventListener('change', function() {
+                if (this.checked) {
+                    startAutoRefresh();
+                } else {
+                    stopAutoRefresh();
+                }
+            });
+            
+            // Set up button handlers
+            document.getElementById('refresh-btn').addEventListener('click', () => {
+                fetchGraphData();
+                fetchTaskTreeData();
+                if (document.getElementById('agent-explorer-container').style.display !== 'none') {
+                    fetchAgentList();
+                }
+            });
+            document.getElementById('create-agent-btn').addEventListener('click', createAgent);
+            
+            // Initialize chatbox
+            initializeChatbox();
+        });
+
+        function setupResizeHandlers() {
+            const resizeHandle = document.getElementById('main-resize-handle');
+            const container = document.querySelector('.split-view-container');
+            const leftPane = document.getElementById('graph-view-pane');
+            const rightPane = document.getElementById('task-tree-pane');
+            
+            if (!resizeHandle || !container || !leftPane || !rightPane) return;
+            
+            let isResizing = false;
+            let initialX, initialLeftWidth;
+            
+            // Mouse events for resize handle
+            resizeHandle.addEventListener('mousedown', function(e) {
+                isResizing = true;
+                initialX = e.clientX;
+                initialLeftWidth = leftPane.getBoundingClientRect().width;
+                
+                resizeHandle.classList.add('active');
+                
+                // Prevent text selection during resize
+                document.body.style.userSelect = 'none';
+                
+                // Add mousemove and mouseup event listeners to document
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp);
+            });
+            
+            function onMouseMove(e) {
+                if (!isResizing) return;
+                
+                // Calculate how far the mouse has moved
+                const delta = e.clientX - initialX;
+                
+                // Calculate new width as a percentage
+                const containerWidth = container.getBoundingClientRect().width;
+                const newLeftWidth = (initialLeftWidth + delta) / containerWidth * 100;
+                
+                // Apply new width only if it's within valid range (10%-90%)
+                if (newLeftWidth > 10 && newLeftWidth < 90) {
+                    leftPane.style.flex = `0 0 ${newLeftWidth}%`;
+                    rightPane.style.flex = `0 0 ${100 - newLeftWidth}%`;
+                }
+            }
+            
+            function onMouseUp() {
+                isResizing = false;
+                resizeHandle.classList.remove('active');
+                
+                // Restore text selection
+                document.body.style.userSelect = '';
+                
+                // Remove event listeners
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+                
+                // Trigger a resize event to update graph renderings
+                window.dispatchEvent(new Event('resize'));
+            }
+        }
+
+        function setupNavigation() {
+            const navLinks = document.querySelectorAll('#dashboard-nav .nav-link');
+            const agentExplorerContainer = document.getElementById('agent-explorer-container');
+            const splitViewContainer = document.querySelector('.split-view-container');
+            
+            navLinks.forEach(link => {
+                link.addEventListener('click', function(event) {
+                    event.preventDefault();
+                    
+                    // Mark this link as active
+                    navLinks.forEach(navLink => navLink.classList.remove('active'));
+                    this.classList.add('active');
+                    
+                    const targetView = this.getAttribute('data-view');
+                    
+                    // Handle different views
+                    if (targetView === 'agent-explorer') {
+                        // Show agent explorer, hide split view
+                        if (agentExplorerContainer) agentExplorerContainer.style.display = 'block';
+                        if (splitViewContainer) splitViewContainer.style.display = 'none';
+                        
+                        // Load agent data
+                        fetchAgentList();
+                        currentView = 'agent-explorer-view';
+                    } else {
+                        // Show split view, hide agent explorer
+                        if (agentExplorerContainer) agentExplorerContainer.style.display = 'none';
+                        if (splitViewContainer) splitViewContainer.style.display = 'flex';
+                        
+                        // Set current view based on the active tab
+                        currentView = targetView === 'graph-and-task' ? 'graph-view' : 'task-tree-view';
+                    }
+                });
+            });
+        }
+        
+        // Function to update sidebar info (simple agent count for now)
+        function updateSidebarInfo(agentCount) {
+            document.getElementById('agent-count').textContent = agentCount;
+            document.getElementById('connection-badge').textContent = `${agentCount} Agents`;
+        }
+
+        function startAutoRefresh() {
+            stopAutoRefresh();
+            // Fetch initial data for both views
+            fetchGraphData(); 
+            fetchTaskTreeData();
+            
+            if (document.getElementById('agent-explorer-container').style.display !== 'none') {
+                fetchAgentList();
+            }
+            
+            autoRefreshInterval = setInterval(() => {
+                fetchGraphData();
+                fetchTaskTreeData();
+                
+                if (document.getElementById('agent-explorer-container').style.display !== 'none') {
+                    fetchAgentList();
+                }
+            }, REFRESH_INTERVAL_MS);
+            console.log("Auto-refresh started for all views");
+        }
+
+        function stopAutoRefresh() {
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+                console.log("Auto-refresh stopped.");
+            }
+        }
+
+        function initializeGraph() {
+            const container = document.getElementById('network-visualization');
+            const data = { nodes: nodesDataSet, edges: edgesDataSet };
+            
+            // Start with the default layout options
+            const initialOptions = Object.assign({}, 
+                (currentLayoutMode === 'hierarchical' ? enhancedHierarchicalOptions : enhancedPhysicsOptions)
+            );
+            
+            network = new vis.Network(container, data, initialOptions);
+            network.isHierarchical = currentLayoutMode === 'hierarchical';
+            network.hierarchicalLevelSeparation = enhancedHierarchicalOptions.layout.hierarchical.levelSeparation;
+
+            // Add custom controls
+            addCustomGraphControls('network-visualization', network);
+
+            // Main Graph Click Listener
+            network.on("click", function(params) {
+                console.log("Main Graph Click event:", params);
+                const detailsDiv = document.getElementById('graph-node-details');
+                if (!detailsDiv || currentView !== 'graph-view') return;
+
+                if (params.nodes.length > 0) {
+                    const nodeId = params.nodes[0];
+                    fetchAndDisplayGraphNodeDetails(nodeId);
+                    
+                    // Highlight the selected node and its connections
+                    highlightNode(nodeId, network);
+                } else {
+                    clearGraphDetailsPanel();
+                    clearHighlights(network);
+                }
+            });
+            
+            // Hover effects
+            network.on("hoverNode", function(params) {
+                network.canvas.body.container.style.cursor = 'pointer';
+            });
+            
+            network.on("blurNode", function(params) {
+                network.canvas.body.container.style.cursor = 'default';
+            });
+            
+            // Stabilized event
+            network.on("stabilized", function() {
+                console.log("Graph stabilized");
+                
+                // Apply level styling for hierarchical layout
+                if (network.isHierarchical) {
+                    const nodes = nodesDataSet.get();
+                    const enhancedNodes = enhanceNodesWithLevelStyling(nodes, network);
+                    if (enhancedNodes) nodesDataSet.update(enhancedNodes);
+                }
+            });
+        }
+
+        function fetchAndDisplayGraphNodeDetails(nodeId) {
+            const detailsDiv = document.getElementById('graph-node-details');
+            if (!detailsDiv) return;
+            detailsDiv.innerHTML = '<div class="text-center"><div class="spinner-border spinner-border-sm" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+
+            fetch(`/api/details?node_id=${encodeURIComponent(nodeId)}`)
+                .then(response => response.ok ? response.json() : Promise.reject('Failed to fetch details'))
+                .then(details => { renderGraphNodeDetails(details); })
+                .catch(error => {
+                    console.error(`Error fetching graph node details for ${nodeId}:`, error);
+                    detailsDiv.innerHTML = `<p class="text-danger small">Error loading details.</p>`;
+                });
+        }
+
+        function clearGraphDetailsPanel() {
+            const detailsDiv = document.getElementById('graph-node-details');
+            if (detailsDiv) {
+                detailsDiv.innerHTML = '<p class="text-muted small">Click a node in the Graph View to see details.</p>';
+            }
+        }
+
+        function renderGraphNodeDetails(details) {
+            const detailsDiv = document.getElementById('graph-node-details');
+            if (!detailsDiv) return;
+            // Re-use logic from Agent Explorer detail rendering, slightly adapted
+            if (!details || !details.data) {
+                detailsDiv.innerHTML = '<p class="text-danger small">Invalid details received.</p>';
+                return;
+            }
+            const data = details.data;
+            const nodeType = details.type || 'unknown';
+            
+            let content = '';
+            
+            // Create header with icon and title
+            let icon, title, color, bgClass;
+            switch(nodeType) {
+                case 'agent':
+                    icon = 'bi-person-badge';
+                    title = data.agent_id;
+                    color = '#4CAF50';
+                    bgClass = 'bg-success-subtle';
+                    break;
+                case 'task':
+                    icon = 'bi-clipboard-check';
+                    title = data.title || data.task_id;
+                    color = '#FFC107';
+                    bgClass = 'bg-warning-subtle';
+                    break;
+                case 'context':
+                    icon = 'bi-braces';
+                    title = data.context_key;
+                    color = '#9C27B0';
+                    bgClass = 'bg-info-subtle';
+                    break;
+                case 'file':
+                    icon = 'bi-file-earmark-text';
+                    title = data.filepath ? data.filepath.split('/').pop() : 'File';
+                    color = '#795548';
+                    bgClass = 'bg-secondary-subtle';
+                    break;
+                case 'admin':
+                    icon = 'bi-shield-lock';
+                    title = 'Admin';
+                    color = '#607D8B';
+                    bgClass = 'bg-light';
+                    break;
+                default:
+                    icon = 'bi-question-circle';
+                    title = details.id || 'Unknown';
+                    color = '#ccc';
+            }
+            
+            // Build header
+            content += `
+                <div class="d-flex align-items-center mb-2">
+                    <div class="me-2 p-2 rounded ${bgClass}" style="color: ${color}">
+                        <i class="bi ${icon} fs-5"></i>
+                    </div>
+                    <div>
+                        <div class="fw-bold">${title}</div>
+                        <div class="text-muted small text-uppercase">${nodeType}</div>
+                    </div>
+                </div>
+            `;
+
+            // Add node-specific details
+            if (nodeType === 'agent') {
+                const statusClass = data.status === 'active' ? 'bg-success' : 
+                                   data.status === 'terminated' ? 'bg-danger' : 'bg-secondary';
+                                   
+                content += `
+                    <div class="mb-2">
+                        <span class="badge ${statusClass}">${data.status || 'unknown'}</span>
+                    </div>
+                `;
+                
+                // Show capabilities if available
+                if (data.capabilities) {
+                    try {
+                        const caps = JSON.parse(data.capabilities || '[]');
+                        if (caps.length > 0) {
+                            content += '<div class="mb-2 small">';
+                            content += '<div class="fw-bold mb-1">Capabilities</div>';
+                            content += '<div class="d-flex flex-wrap gap-1">';
+                            caps.forEach(cap => {
+                                content += `<span class="badge bg-dark">${cap}</span>`;
+                            });
+                            content += '</div></div>';
+                        }
+                    } catch (e) {
+                        console.error('Error parsing capabilities:', e);
+                    }
+                }
+                
+                // Show current task if any
+                if (data.current_task) {
+                    content += `
+                        <div class="mb-2 small">
+                            <div class="fw-bold mb-1">Current Task</div>
+                            <a href="#" class="link-primary" onclick="fetchAndDisplayGraphNodeDetails('${data.current_task}'); return false;">
+                                ${data.current_task}
+                            </a>
+                        </div>
+                    `;
+                }
+                
+                // Create time info
+                if (data.created_at) {
+                    content += `
+                        <div class="small mb-2">
+                            <div class="fw-bold mb-1">Created</div>
+                            <div>${formatTimestamp(data.created_at)}</div>
+                        </div>
+                    `;
+                }
+                
+                // Add quick actions
+                content += `
+                    <div class="mt-3">
+                        <button class="btn btn-sm btn-outline-primary" onclick="fetchAgentDetails('${data.agent_id}'); document.querySelector('[data-bs-target=\\'#agent-explorer-view\\']').click();">
+                            <i class="bi bi-info-circle"></i> View Details
+                        </button>
+                        ${data.status !== 'terminated' ? 
+                            `<button class="btn btn-sm btn-outline-danger ms-1" onclick="terminateAgent('${data.agent_id}')">
+                                <i class="bi bi-x-circle"></i> Terminate
+                            </button>` : ''
+                        }
+                    </div>
+                `;
+            } else if (nodeType === 'task') {
+                // Task status badge
+                const statusClass = data.status === 'completed' ? 'bg-success' :
+                                   data.status === 'in_progress' ? 'bg-primary' :
+                                   data.status === 'cancelled' ? 'bg-danger' : 'bg-warning';
+                               
+                content += `
+                    <div class="mb-2">
+                        <span class="${statusClass} text-xs font-medium px-2.5 py-0.5 rounded">
+                            ${data.status || 'pending'}
+                        </span>
+                        ${data.priority ? `<span class="ml-2 bg-purple-100 text-purple-800 text-xs font-medium px-2.5 py-0.5 rounded">
+                            Priority: ${data.priority}
+                        </span>` : ''}
+                    </div>
+                    <div class="mb-4">
+                        <h3 class="text-sm font-semibold text-gray-500 mb-1">Assigned To</h3>
+                        <span class="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded">
+                            ${data.assigned_to || 'unassigned'}
+                        </span>
+                    </div>
+                    <div class="mb-4">
+                        <h3 class="text-sm font-semibold text-gray-500 mb-1">Description</h3>
+                        <p class="text-sm whitespace-pre-line">${data.description || 'No description'}</p>
+                    </div>
+                    ${data.depends_on_tasks ? `
+                    <div class="mb-4">
+                        <h3 class="text-sm font-semibold text-gray-500 mb-1">Dependencies</h3>
+                        <div class="flex flex-wrap gap-1">
+                            ${JSON.parse(data.depends_on_tasks || '[]').length > 0 ?
+                                JSON.parse(data.depends_on_tasks || '[]').map(dep => 
+                                    `<span class="bg-gray-100 text-gray-800 text-xs font-medium px-2.5 py-0.5 rounded">${dep}</span>`
+                                ).join('') :
+                                '<span class="text-sm text-gray-500">No dependencies</span>'
+                            }
+                        </div>
+                    </div>` : ''}
+                    ${data.notes ? `
+                    <div class="mb-4">
+                        <h3 class="text-sm font-semibold text-gray-500 mb-1">Notes</h3>
+                        <div class="text-sm whitespace-pre-line bg-gray-50 p-2 rounded">${data.notes}</div>
+                    </div>` : ''}
+                    <div class="mb-4">
+                        <h3 class="text-sm font-semibold text-gray-500 mb-1">Created</h3>
+                        <p class="text-sm">${formatTimestamp(data.created_at)}</p>
+                    </div>
+                    <div class="mb-4">
+                        <h3 class="text-sm font-semibold text-gray-500 mb-1">Updated</h3>
+                        <p class="text-sm">${formatTimestamp(data.updated_at)}</p>
+                    </div>
+                    
+                    <!-- Action buttons for tasks -->
+                    <div class="flex space-x-2 mt-4">
+                        <button class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm" 
+                            onclick="openTaskEditModal('${data.task_id}', '${data.assigned_to}')">
+                            Edit Task
+                        </button>
+                    </div>`;
+            } else if (nodeType === 'context') {
+                // Context value preview (JSON)
+                try {
+                    const value = data.value ? JSON.parse(data.value) : null;
+                    if (value) {
+                        content += `
+                            <div class="mb-2 small">
+                                <div class="fw-bold mb-1">Value</div>
+                                <div class="bg-dark bg-opacity-10 p-2 rounded overflow-auto" style="max-height: 120px;">
+                                    <pre class="mb-0" style="color: inherit;">${JSON.stringify(value, null, 2)}</pre>
+                                </div>
+                            </div>
+                        `;
+                    }
+                } catch (e) {
+                    content += `
+                        <div class="mb-2 small">
+                            <div class="fw-bold mb-1">Value</div>
+                            <div class="bg-dark bg-opacity-10 p-2 rounded text-truncate">
+                                ${data.value || 'No value'}
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                // Description & metadata
+                if (data.description) {
+                    content += `
+                        <div class="mb-2 small">
+                            <div class="fw-bold mb-1">Description</div>
+                            <div>${data.description}</div>
+                        </div>
+                    `;
+                }
+                
+                if (data.updated_by || data.last_updated) {
+                    content += `
+                        <div class="mb-2 small">
+                            <div class="fw-bold mb-1">Last Updated</div>
+                            <div>${data.updated_by ? `By: ${data.updated_by}` : ''} ${data.last_updated ? `at ${formatTimestamp(data.last_updated)}` : ''}</div>
+                        </div>
+                    `;
+                }
+            } else if (nodeType === 'file') {
+                // File path
+                if (data.filepath) {
+                    content += `
+                        <div class="mb-2 small">
+                            <div class="fw-bold mb-1">Path</div>
+                            <div class="text-break">${data.filepath}</div>
+                        </div>
+                    `;
+                }
+                
+                // Show which agent is currently using this file
+                if (data.agent_id) {
+                    content += `
+                        <div class="mb-2 small">
+                            <div class="fw-bold mb-1">Used By</div>
+                            <a href="#" class="link-primary" onclick="fetchAndDisplayGraphNodeDetails('agent_${data.agent_id}'); return false;">
+                                ${data.agent_id}
+                            </a>
+                            ${data.status ? `<span class="badge bg-info ms-1">${data.status}</span>` : ''}
+                        </div>
+                    `;
+                }
+            } else {
+                // For other/unknown node types, just show the data as JSON
+                content += `
+                    <div class="small">
+                        <pre class="bg-dark bg-opacity-10 p-2 rounded mb-0 overflow-auto" style="max-height: 200px; color: inherit;">
+${JSON.stringify(data, null, 2)}
+                        </pre>
+                    </div>
+                `;
+            }
+
+            // Actions and recent history
+            if (details.actions && details.actions.length > 0) {
+                content += '<h6 class="mt-3 mb-2 border-top pt-2"><i class="bi bi-activity"></i> Recent Actions</h6>';
+                content += '<div class="bg-dark bg-opacity-10 rounded p-1">';
+                content += '<ul class="list-unstyled mb-0 small">';
+                details.actions.slice(0, 5).forEach(action => {  // Limit to 5 most recent actions
+                    const time = formatTimestamp(action.timestamp);
+                    let detailsText = '';
+                    try { 
+                        const parsed = JSON.parse(action.details || '{}'); 
+                        detailsText = Object.entries(parsed)
+                            .map(([k,v]) => `<span class="badge bg-dark text-light me-1">${k}: ${JSON.stringify(v)}</span>`)
+                            .join(''); 
+                    } catch(e){ 
+                        detailsText = action.details || '';
+                    }
+                    
+                    let taskLink = action.task_id ? 
+                        `<a href="#" class="link-primary" onclick="fetchAndDisplayGraphNodeDetails('task_${action.task_id}'); return false;">${action.task_id}</a>` : 
+                        '';
+                    
+                    content += `
+                        <li class="p-1 border-bottom border-dark border-opacity-10">
+                            <div><strong>${action.action_type}</strong> by ${action.agent_id || 'N/A'} ${taskLink ? `(Task: ${taskLink})` : ''}</div>
+                            <div class="text-muted">${time}</div>
+                            ${detailsText ? `<div class="mt-1">${detailsText}</div>` : ''}
+                        </li>
+                    `;
+                });
+                
+                // Show "View more" if there are more than 5 actions
+                if (details.actions.length > 5) {
+                    content += `<div class="text-center p-1"><small><a href="#" class="link-secondary">View ${details.actions.length - 5} more...</a></small></div>`;
+                }
+                
+                content += '</ul>';
+                
+                content += '</div>';
+            }
+
+            detailsDiv.innerHTML = content;
+        }
+
+        function fetchGraphData() {
+            showSpinner();
+            // Update server status indicator
+            document.getElementById('server-status').classList.remove('bg-danger');
+            document.getElementById('server-status').classList.add('bg-success');
+            document.getElementById('server-status').textContent = 'Server Online';
+
+            // Fetch graph data
+            fetch('/api/graph-data')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log("Graph data received:", data);
+                    
+                    // Enhance the graph data before updating
+                    const enhancedData = enhanceGraphData(data);
+                    
+                    // Update Vis.js datasets
+                    nodesDataSet.update(enhancedData.nodes);
+                    edgesDataSet.update(enhancedData.edges);
+
+                    // Clean up nodes/edges that no longer exist
+                    const nodeIds = enhancedData.nodes.map(n => n.id);
+                    const edgeIds = enhancedData.edges.map(e => e.id || `${e.from}_${e.to}`); // Need consistent edge IDs if not provided
+                    nodesDataSet.getIds().forEach(id => {
+                        if (!nodeIds.includes(id)) {
+                            nodesDataSet.remove(id);
+                        }
+                    });
+                    
+                    // Also clean up edges
+                    edgesDataSet.getIds().forEach(id => {
+                        // Check if the edge is in the new data
+                        if (typeof id === 'string' && !edgeIds.includes(id)) {
+                            // If not, remove it from the dataset
+                            edgesDataSet.remove(id);
+                        }
+                    });
+
+                    // Update sidebar info
+                    const agentCount = enhancedData.nodes.filter(n => n.group === 'agent').length;
+                    updateSidebarInfo(agentCount);
+
+                    hideSpinner();
+                })
+                .catch(error => {
+                    console.error('Error fetching graph data:', error);
+                    document.getElementById('server-status').classList.remove('bg-success');
+                    document.getElementById('server-status').classList.add('bg-danger');
+                    document.getElementById('server-status').textContent = 'Server Error';
+                    hideSpinner();
+                });
+        }
+        
+        // Function to enhance graph data with improved visuals and relationships
+        function enhanceGraphData(data) {
+            // Make a deep copy to avoid modifying the original data
+            const enhancedData = {
+                nodes: JSON.parse(JSON.stringify(data.nodes)),
+                edges: JSON.parse(JSON.stringify(data.edges))
+            };
+            
+            // Enhance nodes with better tooltips and styling
+            enhancedData.nodes.forEach(node => {
+                // Create better tooltips for nodes
+                let tooltipHTML = '';
+                
+                if (node.group === 'agent') {
+                    const status = node.title.includes('Status:') ? node.title.split('Status:')[1].split('\\n')[0].trim() : 'unknown';
+                    const statusColor = status === 'active' ? '#4CAF50' : 
+                                       status === 'terminated' ? '#F44336' : '#9E9E9E';
+                    
+                    tooltipHTML = `
+                        <div style="max-width: 320px; padding: 12px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); background: #282c34; border: 2px solid ${statusColor};">
+                            <div style="font-weight: bold; color: #fff; margin-bottom: 8px; font-size: 16px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                                <i class="bi bi-person-badge" style="margin-right: 8px; color: ${statusColor};"></i>${node.label}
+                            </div>
+                            <div style="color: ${statusColor}; font-weight: 500; margin-top: 8px;">Status: ${status}</div>
+                            <div style="margin-top: 12px; font-size: 12px; color: #aaa;">Click for more details</div>
+                        </div>
+                    `;
+                } else if (node.group === 'task') {
+                    const status = node.title.includes('Status:') ? node.title.split('Status:')[1].split('\\n')[0].trim() : 'pending';
+                    
+                    let statusColor;
+                    switch(status) {
+                        case 'completed': statusColor = '#4CAF50'; break;
+                        case 'in_progress': statusColor = '#2196F3'; break;
+                        case 'cancelled': statusColor = '#F44336'; break;
+                        default: statusColor = '#FFC107';
+                    }
+                    
+                    tooltipHTML = `
+                        <div style="max-width: 320px; padding: 12px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); background: #282c34; border: 2px solid ${statusColor};">
+                            <div style="font-weight: bold; color: #fff; margin-bottom: 8px; font-size: 16px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                                <i class="bi bi-clipboard-check" style="margin-right: 8px; color: ${statusColor};"></i>${node.label}
+                            </div>
+                            <div style="color: ${statusColor}; font-weight: 500; margin-top: 8px;">Status: ${status}</div>
+                            <div style="margin-top: 12px; font-size: 12px; color: #aaa;">Click for more details</div>
+                        </div>
+                    `;
+                } else if (node.group === 'context') {
+                    tooltipHTML = `
+                        <div style="max-width: 320px; padding: 12px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); background: #282c34; border: 2px solid #9C27B0;">
+                            <div style="font-weight: bold; color: #fff; margin-bottom: 8px; font-size: 16px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                                <i class="bi bi-braces" style="margin-right: 8px; color: #9C27B0;"></i>Context: ${node.label}
+                            </div>
+                            <div style="margin-top: 12px; font-size: 12px; color: #aaa;">Click for more details</div>
+                        </div>
+                    `;
+                } else if (node.group === 'file') {
+                    tooltipHTML = `
+                        <div style="max-width: 320px; padding: 12px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); background: #282c34; border: 2px solid #795548;">
+                            <div style="font-weight: bold; color: #fff; margin-bottom: 8px; font-size: 16px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                                <i class="bi bi-file-earmark-text" style="margin-right: 8px; color: #795548;"></i>File: ${node.label}
+                            </div>
+                            <div style="margin-top: 12px; font-size: 12px; color: #aaa;">Click for more details</div>
+                        </div>
+                    `;
+                }
+                
+                // Use the HTML tooltip if created
+                if (tooltipHTML) {
+                    node.title = tooltipHTML;
+                }
+            });
+            
+            return enhancedData;
+        }
+
+        function showSpinner(elementId = 'graph-spinner') { 
+            const spinner = document.getElementById(elementId);
+            if (spinner) spinner.style.display = 'flex';
+         }
+        function hideSpinner(elementId = 'graph-spinner') { 
+             const spinner = document.getElementById(elementId);
+             if (spinner) spinner.style.display = 'none';
+         }
+
+        function createAgent() {
+            const agentId = prompt('Enter agent ID:');
+            if (!agentId) return;
+            
+            const adminToken = prompt('Enter admin token:');
+            if (!adminToken) return;
+            
+            showSpinner(); // Show spinner while creating
+            
+            fetch('/api/create-agent', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    token: adminToken,
+                    agent_id: agentId,
+                }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert(data.message); 
+                fetchGraphData(); // Refresh graph after action
+            })
+            .catch(error => {
+                console.error('Error creating agent:', error);
+                alert('Error creating agent. Check console for details.');
+                hideSpinner();
+            });
+        }
+        
+        function terminateAgent(agentId) {
+            const adminToken = prompt('Enter admin token for terminating ' + agentId + ':');
+            if (!adminToken) return;
+            
+            showSpinner(); // Show spinner while terminating
+
+            fetch('/api/terminate-agent', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    token: adminToken,
+                    agent_id: agentId,
+                }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert(data.message);
+                fetchGraphData(); // Refresh graph after action
+            })
+            .catch(error => {
+                console.error('Error terminating agent:', error);
+                alert('Error terminating agent. Check console for details.');
+                hideSpinner();
+            });
+        }
+
+        function fetchAgentList() {
+            const agentListDiv = document.getElementById('agent-master-list');
+            agentListDiv.innerHTML = '<div class="text-center p-3"><div class="spinner-border spinner-border-sm" role="status"></div> Loading Agents...</div>'; // Show loading
+
+            fetch('/api/agents')
+                .then(response => response.ok ? response.json() : Promise.reject('Failed to fetch agents'))
+                .then(agents => {
+                    renderAgentList(agents);
+                })
+                .catch(error => {
+                    console.error('Error fetching agent list:', error);
+                    agentListDiv.innerHTML = '<p class="text-danger p-3">Error loading agents.</p>';
+                });
+        }
+
+        function renderAgentList(agents) {
+            const agentListDiv = document.getElementById('agent-master-list');
+            agentListDiv.innerHTML = ''; // Clear previous list
+            if (!agents || agents.length === 0) {
+                agentListDiv.innerHTML = '<p class="text-muted p-3">No agents found.</p>';
+                return;
+            }
+
+            agents.forEach(agent => {
+                const item = document.createElement('div');
+                item.className = 'agent-list-item';
+                item.dataset.agentId = agent.agent_id;
+                item.innerHTML = `
+                    <span style="display: inline-block; width: 10px; height: 10px; background-color: ${agent.color || '#ccc'}; border-radius: 50%; margin-right: 5px;"></span>
+                    ${agent.agent_id} 
+                    <small class="text-muted">(${agent.status})</small>
+                `;
+                item.onclick = () => {
+                    // Highlight selection
+                    document.querySelectorAll('.agent-list-item.selected').forEach(el => el.classList.remove('selected'));
+                    item.classList.add('selected');
+                    // Fetch and display details
+                    fetchAgentDetails(agent.agent_id);
+                };
+                agentListDiv.appendChild(item);
+            });
+        }
+
+        function fetchAgentDetails(agentId) {
+            const detailPanel = document.getElementById('agent-detail-panel');
+            let content = '';
+            
+            // Special handling for Admin (which isn't a real agent in the database)
+            if (agentId === 'Admin') {
+                content = `
+                    <div class="p-4">
+                        <div class="flex items-center mb-4">
+                            <div class="bg-blue-100 rounded-full p-2 mr-3">
+                                <i class="fas fa-user-shield text-lg text-blue-500"></i>
+                            </div>
+                            <h2 class="text-xl font-semibold">Admin</h2>
+                        </div>
+                        <div class="mb-4">
+                            <span class="bg-green-100 text-green-800 text-xs font-medium px-2.5 py-0.5 rounded">
+                                system
+                            </span>
+                        </div>
+                        <div class="mb-4">
+                            <h3 class="text-sm font-semibold text-gray-500 mb-1">Description</h3>
+                            <p class="text-sm">The Admin user has full control over the MCP system and can manage agents and tasks.</p>
+                        </div>
+                    </div>
+                `;
+                detailPanel.innerHTML = content;
+                return;
+            }
+            
+            // For regular agents, fetch from API
+            const nodeId = `agent_${agentId}`;
+            detailPanel.innerHTML = '<div class="text-center p-3"><div class="spinner-border spinner-border-sm" role="status"></div> Loading Details...</div>'; // Show loading state
+
+            fetch(`/api/details?node_id=${encodeURIComponent(nodeId)}`)
+                .then(response => {
+                    if (!response.ok) {
+                        console.error(`Error response: ${response.status} ${response.statusText}`);
+                        return Promise.reject(`Failed to fetch details: ${response.status} ${response.statusText}`);
+                    }
+                    return response.json();
+                })
+                .then(details => {
+                    console.log('Agent details received:', details);
+                    renderAgentDetailsPanel(details); // Re-use panel rendering logic
+                })
+                .catch(error => {
+                    console.error(`Error fetching agent details for ${agentId}:`, error);
+                    detailPanel.innerHTML = `<p class="text-danger p-3">Error loading details for ${agentId}. See console for details.</p>`;
+                });
+        }
+        
+        function renderAgentDetailsPanel(details) {
+            const detailsPanel = document.getElementById('agent-detail-panel');
+            
+            if (!details) {
+                detailsPanel.innerHTML = '<p class="text-center py-4">Select a node to view details</p>';
+                return;
+            }
+
+            // Determine if this is an agent or a task
+            const isAgent = details.type === 'agent';
+            const isTask = details.type === 'task';
+            
+            // Extract the data object which contains all the properties
+            const data = details.data || {};
+
+            // Create a container for the details
+            let detailsContent = `
+                <div class="p-4">
+                    <div class="flex items-center mb-4">
+                        <div class="${isAgent ? 'bg-blue-100' : 'bg-yellow-100'} rounded-full p-2 mr-3">
+                            <i class="fas ${isAgent ? 'fa-robot' : 'fa-tasks'} text-lg ${isAgent ? 'text-blue-500' : 'text-yellow-600'}"></i>
+                        </div>
+                        <h2 class="text-xl font-semibold">${isAgent ? data.agent_id : data.task_id}</h2>
+                    </div>`;
+
+            if (isAgent) {
+                // Agent details
+                const statusClass = data.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
+                detailsContent += `
+                    <div class="mb-4">
+                        <span class="${statusClass} text-xs font-medium px-2.5 py-0.5 rounded">
+                            ${data.status || 'unknown'}
+                        </span>
+                    </div>
+                    <div class="mb-4">
+                        <h3 class="text-sm font-semibold text-gray-500 mb-1">Capabilities</h3>
+                        <div class="flex flex-wrap gap-1">
+                            ${data.capabilities ? 
+                                JSON.parse(data.capabilities || '[]').map(cap => 
+                                    `<span class="bg-gray-100 text-gray-800 text-xs font-medium px-2.5 py-0.5 rounded">${cap}</span>`
+                                ).join('') :
+                                '<span class="text-sm text-gray-500">No capabilities</span>'
+                            }
+                        </div>
+                    </div>
+                    
+                    <!-- Tasks Section -->
+                    <div class="mb-4">
+                        <h3 class="text-sm font-semibold text-gray-500 mb-2">Assigned Tasks</h3>
+                        <div class="flex flex-wrap gap-2">
+                            ${details.assigned_tasks && details.assigned_tasks.length > 0 ? 
+                                details.assigned_tasks.map(task => {
+                                    let statusColor;
+                                    switch (task.status) {
+                                        case 'completed':
+                                            statusColor = 'bg-green-100 text-green-800 border-green-200';
+                                            break;
+                                        case 'in_progress':
+                                            statusColor = 'bg-blue-100 text-blue-800 border-blue-200';
+                                            break;
+                                        case 'cancelled':
+                                            statusColor = 'bg-red-100 text-red-800 border-red-200';
+                                            break;
+                                        default:
+                                            statusColor = 'bg-yellow-100 text-yellow-800 border-yellow-200';
+                                    }
+                                    return `<div class="task-bubble ${statusColor} px-3 py-1 rounded-full text-xs border cursor-pointer" 
+                                               onclick="openTaskEditModal('${task.task_id}', '${data.agent_id}')"
+                                               data-task-id="${task.task_id}">
+                                               ${task.title}
+                                           </div>`;
+                                }).join('') : 
+                                '<span class="text-sm text-gray-500">No tasks assigned</span>'
+                            }
+                        </div>
+                    </div>`;
+
+                // Add creation and last activity timestamps
+                detailsContent += `
+                    <div class="mb-4">
+                        <h3 class="text-sm font-semibold text-gray-500 mb-1">Created</h3>
+                        <p class="text-sm">${formatTimestamp(data.created_at)}</p>
+                    </div>
+                    ${data.last_activity ? `
+                    <div class="mb-4">
+                        <h3 class="text-sm font-semibold text-gray-500 mb-1">Last Activity</h3>
+                        <p class="text-sm">${formatTimestamp(data.last_activity)}</p>
+                    </div>` : ''}
+                    
+                    <!-- Action buttons for agents -->
+                    <div class="flex space-x-2 mt-4">
+                        <!-- Terminate button only for active agents -->
+                        ${data.status === 'active' ? `
+                        <button class="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm" 
+                            onclick="terminateAgent('${data.agent_id}')">
+                            Terminate
+                        </button>` : ''}
+                    </div>`;
+            } else if (isTask) {
+                // Task details
+                const statusClass = getStatusClass(data.status);
+                detailsContent += `
+                    <div class="mb-4">
+                        <span class="${statusClass} text-xs font-medium px-2.5 py-0.5 rounded">
+                            ${data.status || 'pending'}
+                        </span>
+                        ${data.priority ? `<span class="ml-2 bg-purple-100 text-purple-800 text-xs font-medium px-2.5 py-0.5 rounded">
+                            Priority: ${data.priority}
+                        </span>` : ''}
+                    </div>
+                    <div class="mb-4">
+                        <h3 class="text-sm font-semibold text-gray-500 mb-1">Assigned To</h3>
+                        <span class="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded">
+                            ${data.assigned_to || 'unassigned'}
+                        </span>
+                    </div>
+                    <div class="mb-4">
+                        <h3 class="text-sm font-semibold text-gray-500 mb-1">Description</h3>
+                        <p class="text-sm whitespace-pre-line">${data.description || 'No description'}</p>
+                    </div>
+                    ${data.depends_on_tasks ? `
+                    <div class="mb-4">
+                        <h3 class="text-sm font-semibold text-gray-500 mb-1">Dependencies</h3>
+                        <div class="flex flex-wrap gap-1">
+                            ${JSON.parse(data.depends_on_tasks || '[]').length > 0 ?
+                                JSON.parse(data.depends_on_tasks || '[]').map(dep => 
+                                    `<span class="bg-gray-100 text-gray-800 text-xs font-medium px-2.5 py-0.5 rounded">${dep}</span>`
+                                ).join('') :
+                                '<span class="text-sm text-gray-500">No dependencies</span>'
+                            }
+                        </div>
+                    </div>` : ''}
+                    ${data.notes ? `
+                    <div class="mb-4">
+                        <h3 class="text-sm font-semibold text-gray-500 mb-1">Notes</h3>
+                        <div class="text-sm whitespace-pre-line bg-gray-50 p-2 rounded">${data.notes}</div>
+                    </div>` : ''}
+                    <div class="mb-4">
+                        <h3 class="text-sm font-semibold text-gray-500 mb-1">Created</h3>
+                        <p class="text-sm">${formatTimestamp(data.created_at)}</p>
+                    </div>
+                    <div class="mb-4">
+                        <h3 class="text-sm font-semibold text-gray-500 mb-1">Updated</h3>
+                        <p class="text-sm">${formatTimestamp(data.updated_at)}</p>
+                    </div>
+                    
+                    <!-- Action buttons for tasks -->
+                    <div class="flex space-x-2 mt-4">
+                        <button class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm" 
+                            onclick="openTaskEditModal('${data.task_id}', '${data.assigned_to}')">
+                            Edit Task
+                        </button>
+                    </div>`;
+            } else if (nodeType === 'context') {
+                // Context value preview (JSON)
+                try {
+                    const value = data.value ? JSON.parse(data.value) : null;
+                    if (value) {
+                        content += `
+                            <div class="mb-2 small">
+                                <div class="fw-bold mb-1">Value</div>
+                                <div class="bg-dark bg-opacity-10 p-2 rounded overflow-auto" style="max-height: 120px;">
+                                    <pre class="mb-0" style="color: inherit;">${JSON.stringify(value, null, 2)}</pre>
+                                </div>
+                            </div>
+                        `;
+                    }
+                } catch (e) {
+                    content += `
+                        <div class="mb-2 small">
+                            <div class="fw-bold mb-1">Value</div>
+                            <div class="bg-dark bg-opacity-10 p-2 rounded text-truncate">
+                                ${data.value || 'No value'}
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                // Description & metadata
+                if (data.description) {
+                    content += `
+                        <div class="mb-2 small">
+                            <div class="fw-bold mb-1">Description</div>
+                            <div>${data.description}</div>
+                        </div>
+                    `;
+                }
+                
+                if (data.updated_by || data.last_updated) {
+                    content += `
+                        <div class="mb-2 small">
+                            <div class="fw-bold mb-1">Last Updated</div>
+                            <div>${data.updated_by ? `By: ${data.updated_by}` : ''} ${data.last_updated ? `at ${formatTimestamp(data.last_updated)}` : ''}</div>
+                        </div>
+                    `;
+                }
+            } else if (nodeType === 'file') {
+                // File path
+                if (data.filepath) {
+                    content += `
+                        <div class="mb-2 small">
+                            <div class="fw-bold mb-1">Path</div>
+                            <div class="text-break">${data.filepath}</div>
+                        </div>
+                    `;
+                }
+                
+                // Show which agent is currently using this file
+                if (data.agent_id) {
+                    content += `
+                        <div class="mb-2 small">
+                            <div class="fw-bold mb-1">Used By</div>
+                            <a href="#" class="link-primary" onclick="fetchAndDisplayGraphNodeDetails('agent_${data.agent_id}'); return false;">
+                                ${data.agent_id}
+                            </a>
+                            ${data.status ? `<span class="badge bg-info ms-1">${data.status}</span>` : ''}
+                        </div>
+                    `;
+                }
+            } else {
+                // For other/unknown node types, just show the data as JSON
+                content += `
+                    <div class="small">
+                        <pre class="bg-dark bg-opacity-10 p-2 rounded mb-0 overflow-auto" style="max-height: 200px; color: inherit;">
+${JSON.stringify(data, null, 2)}
+                        </pre>
+                    </div>
+                `;
+            }
+
+            // Actions and recent history
+            if (details.actions && details.actions.length > 0) {
+                content += '<h6 class="mt-3 mb-2 border-top pt-2"><i class="bi bi-activity"></i> Recent Actions</h6>';
+                content += '<div class="bg-dark bg-opacity-10 rounded p-1">';
+                content += '<ul class="list-unstyled mb-0 small">';
+                details.actions.slice(0, 5).forEach(action => {  // Limit to 5 most recent actions
+                    const time = formatTimestamp(action.timestamp);
+                    let detailsText = '';
+                    try { 
+                        const parsed = JSON.parse(action.details || '{}'); 
+                        detailsText = Object.entries(parsed)
+                            .map(([k,v]) => `<span class="badge bg-dark text-light me-1">${k}: ${JSON.stringify(v)}</span>`)
+                            .join(''); 
+                    } catch(e){ 
+                        detailsText = action.details || '';
+                    }
+                    
+                    let taskLink = action.task_id ? 
+                        `<a href="#" class="link-primary" onclick="fetchAndDisplayGraphNodeDetails('task_${action.task_id}'); return false;">${action.task_id}</a>` : 
+                        '';
+                    
+                    content += `
+                        <li class="p-1 border-bottom border-dark border-opacity-10">
+                            <div><strong>${action.action_type}</strong> by ${action.agent_id || 'N/A'} ${taskLink ? `(Task: ${taskLink})` : ''}</div>
+                            <div class="text-muted">${time}</div>
+                            ${detailsText ? `<div class="mt-1">${detailsText}</div>` : ''}
+                        </li>
+                    `;
+                });
+                
+                // Show "View more" if there are more than 5 actions
+                if (details.actions.length > 5) {
+                    content += `<div class="text-center p-1"><small><a href="#" class="link-secondary">View ${details.actions.length - 5} more...</a></small></div>`;
+                }
+                
+                content += '</ul>';
+                
+                content += '</div>';
+            }
+
+            detailsContent += `</div>`;
+            detailsPanel.innerHTML = detailsContent;
+        }
+
+        // Function to open the task edit modal and populate it with task data
+        async function openTaskEditModal(taskId, agentId) {
+            // First check if the modal and required elements exist
+            const taskEditModal = document.getElementById('editTaskModal');
+            if (!taskEditModal) {
+                console.error('Task edit modal element not found');
+                return;
+            }
+            
+            try {
+                // Fetch the task details
+                const response = await fetch(`/api/details?node_id=task_${taskId}`);
+                const data = await response.json();
+                
+                if (!data || !data.data) {
+                    console.error('Failed to fetch task details:', data);
+                    return;
+                }
+                
+                const task = data.data;
+                
+                // Check if all required form elements exist before trying to set values
+                const elements = {
+                    id: document.getElementById('editTaskId'),
+                    agent: document.getElementById('editAgentId'),
+                    title: document.getElementById('editTaskTitle'),
+                    description: document.getElementById('editTaskDesc'),
+                    priority: document.getElementById('editTaskPriority'),
+                    status: document.getElementById('editTaskStatus'),
+                    notes: document.getElementById('editTaskNotes'),
+                    notesDisplay: document.getElementById('existingNotes')
+                };
+                
+                // If any required element is missing, log error and return
+                for (const [key, element] of Object.entries(elements)) {
+                    if (!element) {
+                        console.error(`Required form element missing: ${key}`);
+                        return;
+                    }
+                }
+                
+                // Populate the modal fields
+                elements.id.value = task.task_id;
+                elements.agent.value = agentId;
+                elements.title.value = task.title || '';
+                elements.description.value = task.description || '';
+                
+                // Set the priority dropdown
+                if (elements.priority) {
+                    const options = elements.priority.options;
+                    for (let i = 0; i < options.length; i++) {
+                        if (options[i].value === task.priority) {
+                            elements.priority.selectedIndex = i;
+                            break;
+                        }
+                    }
+                }
+                
+                // Set the status dropdown
+                if (elements.status) {
+                    const options = elements.status.options;
+                    for (let i = 0; i < options.length; i++) {
+                        if (options[i].value === task.status) {
+                            elements.status.selectedIndex = i;
+                            break;
+                        }
+                    }
+                }
+                
+                // Clear notes
+                elements.notes.value = '';
+                
+                // Show existing notes
+                if (elements.notesDisplay) {
+                    elements.notesDisplay.innerHTML = task.notes ? 
+                        `<div class="text-sm whitespace-pre-line bg-gray-50 p-2 rounded mb-2">${task.notes}</div>` : 
+                        '<p class="text-sm text-gray-500">No notes</p>';
+                }
+                
+                // Show the modal using Bootstrap
+                new bootstrap.Modal(taskEditModal).show();
+            } catch (error) {
+                console.error('Error fetching task details:', error);
+            }
+        }
+
+        // Function to save task changes
+        async function saveTaskChanges() {
+            // First check if all required elements exist
+            const elements = {
+                id: document.getElementById('editTaskId'),
+                status: document.getElementById('editTaskStatus'),
+                title: document.getElementById('editTaskTitle'),
+                description: document.getElementById('editTaskDesc'),
+                priority: document.getElementById('editTaskPriority'),
+                notes: document.getElementById('editTaskNotes')
+            };
+            
+            // Check if any required element is missing
+            for (const [key, element] of Object.entries(elements)) {
+                if (!element) {
+                    console.error(`Required form element missing: ${key}`);
+                    return;
+                }
+            }
+            
+            const taskId = elements.id.value;
+            const status = elements.status.value;
+            const title = elements.title.value;
+            const description = elements.description.value;
+            const priority = elements.priority.value;
+            const notes = elements.notes.value;
+            
+            if (!taskId || !status) {
+                alert('Task ID and status are required');
+                return;
+            }
+            
+            const adminToken = prompt('Enter admin token to update task:');
+            if (!adminToken) {
+                return; // User cancelled
+            }
+            
+            // Prepare the data
+            const data = {
+                token: adminToken,
+                task_id: taskId,
+                status: status,
+                title: title,
+                description: description,
+                priority: priority
+            };
+            
+            // Only include notes if there's content
+            if (notes && notes.trim()) {
+                data.notes = notes.trim();
+            }
+            
+            try {
+                // Send the update request
+                const response = await fetch('/api/update-task-details', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    // Close the modal
+                    const taskEditModal = document.getElementById('editTaskModal');
+                    if (taskEditModal) {
+                        const modalInstance = bootstrap.Modal.getInstance(taskEditModal);
+                        if (modalInstance) {
+                            modalInstance.hide();
+                        }
+                    }
+                    
+                    // Refresh data
+                    if (currentView === 'graph-view') {
+                        fetchGraphData();
+                    } else if (currentView === 'agent-explorer-view') {
+                        fetchAgentList();
+                    } else if (currentView === 'task-tree-view') {
+                        fetchTaskTreeData();
+                    }
+                    
+                    alert('Task updated successfully!');
+                } else {
+                    alert(`Failed to update task: ${result.error || 'Unknown error'}`);
+                }
+            } catch (error) {
+                console.error('Error updating task:', error);
+                alert(`Error updating task: ${error.message}`);
+            }
+        }
+
+        // --- Task Tree View Specific Functions ---
+        function initializeTaskTreeGraph() {
+            const container = document.getElementById('task-network-visualization');
+            if (!container) return;
+            const data = { nodes: taskNodesDataSet, edges: taskEdgesDataSet };
+            
+            // Use enhanced hierarchical options for task tree
+            const options = enhancedHierarchicalOptions;
+            
+            if (taskNetwork) {
+                taskNetwork.destroy(); 
+            }
+            
+            taskNetwork = new vis.Network(container, data, options);
+            taskNetwork.isHierarchical = true;
+            taskNetwork.hierarchicalLevelSeparation = enhancedHierarchicalOptions.layout.hierarchical.levelSeparation;
+            
+            console.log("Task Tree Graph Initialized");
+            
+            // Add custom controls
+            addCustomGraphControls('task-network-visualization', taskNetwork);
+
+            // Task Tree Click Listener
+            taskNetwork.on("click", function(params) {
+                console.log("Task Tree Click event:", params);
+                const detailsDiv = document.getElementById('graph-node-details');
+                if (!detailsDiv || currentView !== 'task-tree-view') return;
+
+                if (params.nodes.length > 0) {
+                    const nodeId = params.nodes[0];
+                    fetchAndDisplayGraphNodeDetails(nodeId);
+                    
+                    // Highlight the selected node and its connections
+                    highlightNode(nodeId, taskNetwork);
+                } else {
+                    clearGraphDetailsPanel();
+                    clearHighlights(taskNetwork);
+                }
+            });
+            
+            // Stabilized event
+            taskNetwork.on("stabilized", function() {
+                console.log("Task tree stabilized");
+                
+                // Apply level styling
+                const nodes = taskNodesDataSet.get();
+                const enhancedNodes = enhanceNodesWithLevelStyling(nodes, taskNetwork);
+                if (enhancedNodes) taskNodesDataSet.update(enhancedNodes);
+            });
+        }
+
+        function fetchTaskTreeData() {
+            console.log("Fetching task tree data...");
+            const container = document.getElementById('task-network-visualization');
+            if (!container) return; // Don't fetch if container not ready
+            
+            showSpinner('task-spinner');
+            fetch('/api/task-tree-data')
+                .then(response => response.ok ? response.json() : Promise.reject('Failed to fetch task tree'))
+                .then(data => {
+                    console.log("Task tree data received:", data);
+                    // Ensure graph is initialized before loading data
+                    if (!taskNetwork) {
+                        initializeTaskTreeGraph();
+                        if (!taskNetwork) { // Check again if init failed
+                           hideSpinner('task-spinner');
+                           return;
+                        }
+                    }
+                    
+                    // Update datasets
+                    taskNodesDataSet.clear();
+                    taskEdgesDataSet.clear();
+                    taskNodesDataSet.add(data.nodes);
+                    taskEdgesDataSet.add(data.edges);
+                    
+                    // Give the DOM and Vis.js a moment to process the hierarchical layout
+                    // before fitting the view.
+                    setTimeout(() => {
+                        if (taskNetwork) {
+                            taskNetwork.fit(); 
+                            console.log("Called taskNetwork.fit()");
+                        }
+                    }, 100); // 100ms delay - adjust if needed
+                    
+                    hideSpinner('task-spinner');
+                })
+                .catch(error => {
+                    console.error('Error fetching task tree data:', error);
+                    if(container) container.innerHTML = '<p class="text-danger p-3">Error loading task tree.</p>';
+                    hideSpinner('task-spinner');
+                });
+        }
+
+        // Event listeners for filter controls
+        document.querySelectorAll('.node-filter').forEach(button => {
+            button.addEventListener('click', function() {
+                // Remove active class from all buttons
+                document.querySelectorAll('.node-filter').forEach(btn => {
+                    btn.classList.remove('active');
+                    if (btn.dataset.group !== 'all') {
+                        btn.classList.remove('btn-primary', 'btn-success', 'btn-warning', 'btn-info');
+                        btn.classList.add('btn-outline-' + getBtnClassForGroup(btn.dataset.group));
+                    }
+                });
+                
+                // Add active class to clicked button
+                this.classList.add('active');
+                if (this.dataset.group !== 'all') {
+                    this.classList.remove('btn-outline-' + getBtnClassForGroup(this.dataset.group));
+                    this.classList.add('btn-' + getBtnClassForGroup(this.dataset.group));
+                } else {
+                    this.classList.remove('btn-secondary');
+                    this.classList.add('btn-dark');
+                }
+                
+                // Update filter and apply
+                activeFilters.nodeGroup = this.dataset.group;
+                applyFilters();
+            });
+        });
+        
+        document.getElementById('relationship-filter').addEventListener('change', function() {
+            activeFilters.relationship = this.value;
+            applyFilters();
+        });
+        
+        document.getElementById('highlight-active').addEventListener('change', function() {
+            activeFilters.highlightActive = this.checked;
+            applyFilters();
+        });
+        
+        document.getElementById('layout-select').addEventListener('change', function() {
+            changeLayout(this.value);
+        });
+        
+        document.getElementById('stabilize-network').addEventListener('click', function() {
+            network.stabilize(100);
+        });
+
+        // Network event handlers
+        network.on('click', function(params) {
+            if (params.nodes.length === 1) {
+                const nodeId = params.nodes[0];
+                fetchAndDisplayGraphNodeDetails(nodeId);
+            } else {
+                // Clear node details panel if no node is selected
+                nodeDetailContainer.innerHTML = '<div class="text-center text-muted p-3">Select a node to view details</div>';
+            }
+        });
+
+        network.on('stabilizationProgress', function(params) {
+            // Show progress during long stabilization
+            const progress = Math.round(params.iterations / params.total * 100);
+            document.getElementById('graph-spinner').classList.remove('d-none');
+            document.getElementById('graph-spinner').innerHTML = `<div class="spinner-border spinner-border-sm"></div> Stabilizing: ${progress}%`;
+        });
+
+        network.on('stabilizationIterationsDone', function() {
+            document.getElementById('graph-spinner').classList.add('d-none');
+        });
+
+        // Format timestamp helper
+        function formatTimestamp(timestamp) {
+            if (!timestamp) return 'N/A';
+            
+            try {
+                const date = new Date(timestamp);
+                return date.toLocaleString();
+            } catch (e) {
+                return timestamp;
+            }
+        }
+
+        // Initial data load on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchGraphData();
+            
+            // Set up refresh interval (every 10 seconds)
+            setInterval(fetchGraphData, 10000);
+        });
+
+        function setupLayoutButtons() {
+            document.querySelectorAll('.layout-btn').forEach(button => {
+                button.addEventListener('click', function() {
+                    const layout = this.getAttribute('data-layout');
+                    switchLayout(layout);
+                    // Update button active state
+                    document.querySelectorAll('.layout-btn.active').forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                });
+            });
+        }
+        
+        function switchLayout(mode) {
+            if (!network || currentLayoutMode === mode) return; // No network or no change
+            console.log(`Switching layout to: ${mode}`);
+            showSpinner('graph-spinner'); // Show spinner during layout change
+            if (mode === 'physics') {
+                network.setOptions(enhancedPhysicsOptions);
+                network.isHierarchical = false;
+                
+                // Stabilize physics initially then allow movement
+                network.once("stabilizationIterationsDone", function () {
+                    console.log("Physics stabilization complete");
+                    hideSpinner('graph-spinner');
+                });
+                
+                network.stabilize(500);
+            } else if (mode === 'hierarchical') {
+                network.setOptions(enhancedHierarchicalOptions);
+                network.isHierarchical = true;
+                network.hierarchicalLevelSeparation = enhancedHierarchicalOptions.layout.hierarchical.levelSeparation;
+                
+                // After layout settles, apply level styling
+                network.once("stabilizationIterationsDone", function() {
+                    const nodes = nodesDataSet.get();
+                    const enhancedNodes = enhanceNodesWithLevelStyling(nodes, network);
+                    if (enhancedNodes) nodesDataSet.update(enhancedNodes);
+                });
+                
+                setTimeout(() => hideSpinner('graph-spinner'), 100);
+                network.fit({ animation: { duration: 800, easingFunction: 'easeInOutQuad' } });
+            }
+            
+            currentLayoutMode = mode;
+        }
+        
+        // Chatbox Functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize existing functions
+            initializeGraph();
+            initializeTaskTreeGraph();
+            fetchGraphData();
+            fetchTaskTreeData();
+            setupResizeHandlers();
+            startAutoRefresh();
+            setupNavigation();
+            setupLayoutButtons();
+            
+            // Initialize chatbox
+            initializeChatbox();
+        });
+        
+        function initializeChatbox() {
+            const chatboxToggle = document.getElementById('chatbox-toggle');
+            const chatboxContainer = document.getElementById('chatbox-container');
+            const minimizeBtn = document.getElementById('minimize-chatbox');
+            const closeBtn = document.getElementById('close-chatbox');
+            const sendBtn = document.getElementById('send-message');
+            const chatInput = document.getElementById('chat-input');
+            const chatMessages = document.getElementById('chatbox-messages');
+            const newChatTab = document.getElementById('new-chat-tab');
+            const chatTabs = document.getElementById('chat-tabs');
+            
+            // Store conversations
+            const conversations = {
+                default: {
+                    agent: "Agent",
+                    messages: [
+                        {
+                            sender: "agent",
+                            text: "Hello! How can I assist you today?",
+                            time: new Date()
+                        }
+                    ]
+                }
+            };
+            
+            let currentChatId = "default";
+            
+            // Toggle chatbox visibility
+            chatboxToggle.addEventListener('click', () => {
+                chatboxContainer.classList.toggle('chatbox-hidden');
+                chatboxContainer.classList.remove('chatbox-minimized');
+            });
+            
+            // Minimize chatbox
+            minimizeBtn.addEventListener('click', () => {
+                chatboxContainer.classList.toggle('chatbox-minimized');
+            });
+            
+            // Close chatbox
+            closeBtn.addEventListener('click', () => {
+                chatboxContainer.classList.add('chatbox-hidden');
+            });
+            
+            // Send message
+            function sendMessage() {
+                const text = chatInput.value.trim();
+                if (text) {
+                    // Add user message to the conversation
+                    addMessageToConversation(currentChatId, "user", text);
+                    
+                    // Clear input
+                    chatInput.value = '';
+                    
+                    // Simulate agent response (replace with actual API call)
+                    setTimeout(() => {
+                        const responses = [
+                            "I understand you're asking about " + text + ". Let me help you with that.",
+                            "Thanks for your message. I'm processing your request.",
+                            "I'm analyzing your query and will provide an answer shortly.",
+                            "That's an interesting question. Here's what I can tell you..."
+                        ];
+                        const randomResponse = responses[Math.floor(Math.random() * responses.length)];
+                        addMessageToConversation(currentChatId, "agent", randomResponse);
+                    }, 1000);
+                }
+            }
+            
+            // Bind send button and Enter key
+            sendBtn.addEventListener('click', sendMessage);
+            chatInput.addEventListener('keypress', (event) => {
+                if (event.key === 'Enter') {
+                    sendMessage();
+                }
+            });
+            
+            // Add message to conversation and display it
+            function addMessageToConversation(chatId, sender, text) {
+                // Get the current time
+                const time = new Date();
+                
+                // Add to conversation storage
+                if (!conversations[chatId]) {
+                    conversations[chatId] = {
+                        agent: "Agent",
+                        messages: []
+                    };
+                }
+                
+                conversations[chatId].messages.push({
+                    sender: sender,
+                    text: text,
+                    time: time
+                });
+                
+                // Create message element
+                const messageEl = document.createElement('div');
+                messageEl.className = `message ${sender}`;
+                
+                const textEl = document.createElement('div');
+                textEl.textContent = text;
+                messageEl.appendChild(textEl);
+                
+                const timeEl = document.createElement('div');
+                timeEl.className = 'message-time';
+                timeEl.textContent = formatChatTime(time);
+                messageEl.appendChild(timeEl);
+                
+                // Only add to DOM if this is the current chat
+                if (chatId === currentChatId) {
+                    chatMessages.appendChild(messageEl);
+                    // Scroll to bottom
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                }
+            }
+            
+            // Format chat time
+            function formatChatTime(date) {
+                return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            }
+            
+            // Create a new chat tab
+            newChatTab.addEventListener('click', () => {
+                // Generate unique ID for this chat
+                const chatId = 'chat_' + Date.now();
+                
+                // Create new chat in conversations
+                const agentOptions = ['Agent', 'Support', 'Assistant', 'Helper'];
+                const randomAgent = agentOptions[Math.floor(Math.random() * agentOptions.length)];
+                
+                conversations[chatId] = {
+                    agent: randomAgent,
+                    messages: [
+                        {
+                            sender: "agent",
+                            text: `Hello! I'm ${randomAgent}. How can I help you?`,
+                            time: new Date()
+                        }
+                    ]
+                };
+                
+                // Create tab element
+                const tabEl = document.createElement('div');
+                tabEl.className = 'chat-tab';
+                tabEl.setAttribute('data-chat-id', chatId);
+                tabEl.textContent = randomAgent;
+                
+                // Insert before the new chat tab button
+                chatTabs.insertBefore(tabEl, newChatTab);
+                
+                // Switch to this tab
+                switchChat(chatId);
+            });
+            
+            // Tab click handler (using event delegation)
+            chatTabs.addEventListener('click', (event) => {
+                const tab = event.target.closest('.chat-tab');
+                if (tab) {
+                    const chatId = tab.getAttribute('data-chat-id');
+                    switchChat(chatId);
+                }
+            });
+            
+            // Switch between chats
+            function switchChat(chatId) {
+                if (!conversations[chatId]) return;
+                
+                // Update current chat ID
+                currentChatId = chatId;
+                
+                // Update active tab
+                document.querySelectorAll('.chat-tab').forEach(tab => {
+                    tab.classList.toggle('active', tab.getAttribute('data-chat-id') === chatId);
+                });
+                
+                // Update chat header
+                document.getElementById('current-chat-agent').textContent = 
+                    conversations[chatId].agent + ' Chat';
+                
+                // Clear and repopulate messages
+                chatMessages.innerHTML = '';
+                conversations[chatId].messages.forEach(msg => {
+                    const messageEl = document.createElement('div');
+                    messageEl.className = `message ${msg.sender}`;
+                    
+                    const textEl = document.createElement('div');
+                    textEl.textContent = msg.text;
+                    messageEl.appendChild(textEl);
+                    
+                    const timeEl = document.createElement('div');
+                    timeEl.className = 'message-time';
+                    timeEl.textContent = formatChatTime(msg.time);
+                    messageEl.appendChild(timeEl);
+                    
+                    chatMessages.appendChild(messageEl);
+                });
+                
+                // Scroll to bottom
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+        }
+
+        // Add custom graph controls after initialization
+        function addCustomGraphControls(containerId, networkInstance) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+            
+            const controlsDiv = document.createElement('div');
+            controlsDiv.className = 'graph-controls';
+            controlsDiv.innerHTML = `
+                <button class="zoom-in" title="Zoom In"><i class="bi bi-plus-lg"></i></button>
+                <button class="zoom-out" title="Zoom Out"><i class="bi bi-dash-lg"></i></button>
+                <div class="separator"></div>
+                <button class="fit-graph" title="Fit Graph"><i class="bi bi-arrows-fullscreen"></i></button>
+                <button class="toggle-physics" title="Toggle Physics"><i class="bi bi-gear"></i></button>
+            `;
+            
+            container.appendChild(controlsDiv);
+            
+            // Event listeners
+            controlsDiv.querySelector('.zoom-in').addEventListener('click', () => {
+                const currentScale = networkInstance.getScale();
+                networkInstance.moveTo({ scale: currentScale * 1.2 });
+            });
+            
+            controlsDiv.querySelector('.zoom-out').addEventListener('click', () => {
+                const currentScale = networkInstance.getScale();
+                networkInstance.moveTo({ scale: currentScale * 0.8 });
+            });
+            
+            controlsDiv.querySelector('.fit-graph').addEventListener('click', () => {
+                networkInstance.fit({ animation: { duration: 800, easingFunction: 'easeInOutQuad' } });
+            });
+            
+            controlsDiv.querySelector('.toggle-physics').addEventListener('click', () => {
+                const physicsEnabled = networkInstance.physics.options.enabled;
+                networkInstance.setOptions({ physics: { enabled: !physicsEnabled } });
+                
+                // Update button appearance
+                controlsDiv.querySelector('.toggle-physics i').className = 
+                    !physicsEnabled ? 'bi bi-gear-fill' : 'bi bi-gear';
+            });
+        }
+
+        // Enhance nodes with hierarchical level styling
+        function enhanceNodesWithLevelStyling(nodes, network) {
+            if (!network.isHierarchical) return;
+            
+            // Get hierarchical levels
+            const positions = network.getPositions();
+            const levels = {};
+            let minLevel = Infinity, maxLevel = -Infinity;
+            
+            // Find min and max levels
+            nodes.forEach(node => {
+                const level = Math.round(positions[node.id].y / network.hierarchicalLevelSeparation);
+                levels[node.id] = level;
+                minLevel = Math.min(minLevel, level);
+                maxLevel = Math.max(maxLevel, level);
+            });
+            
+            // Normalize levels
+            const levelRange = maxLevel - minLevel;
+            nodes.forEach(node => {
+                const normalizedLevel = levelRange > 0 ? 
+                    Math.floor(((levels[node.id] - minLevel) / levelRange) * 5) : 0;
+                node.className = `hierarchical-level-${normalizedLevel}`;
+            });
+            
+            return nodes;
+        }
+
+        // Function to highlight a node and its connections
+        function highlightNode(nodeId, networkInstance) {
+            // Clear previous highlights
+            clearHighlights(networkInstance);
+            
+            // Get connected edges
+            const connectedEdges = networkInstance.getConnectedEdges(nodeId);
+            
+            // Highlight the selected node
+            const selectedNode = networkInstance.body.data.nodes.get(nodeId);
+            if (selectedNode) {
+                selectedNode.className = 'highlight';
+                networkInstance.body.data.nodes.update(selectedNode);
+            }
+            
+            // Highlight connected edges
+            connectedEdges.forEach(edgeId => {
+                const edge = networkInstance.body.data.edges.get(edgeId);
+                if (edge) {
+                    edge.className = 'highlight';
+                    networkInstance.body.data.edges.update(edge);
+                }
+            });
+            
+            // Dim other nodes and edges
+            networkInstance.body.data.nodes.forEach((node) => {
+                if (node.id !== nodeId) {
+                    node.opacity = 0.5;
+                    networkInstance.body.data.nodes.update(node);
+                }
+            });
+            
+            networkInstance.body.data.edges.forEach((edge) => {
+                if (!connectedEdges.includes(edge.id)) {
+                    edge.opacity = 0.2;
+                    networkInstance.body.data.edges.update(edge);
+                }
+            });
+        }
+
+        // Function to clear highlights
+        function clearHighlights(networkInstance) {
+            // Reset node styling
+            networkInstance.body.data.nodes.forEach((node) => {
+                delete node.className;
+                delete node.opacity;
+                networkInstance.body.data.nodes.update(node);
+            });
+            
+            // Reset edge styling
+            networkInstance.body.data.edges.forEach((edge) => {
+                delete edge.className;
+                delete edge.opacity;
+                networkInstance.body.data.edges.update(edge);
+            });
+        }
+    </script>
+</body>
+</html> 

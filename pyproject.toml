@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mcp_template"
+version = "0.1.0"
+description = "Agent MCP Template for creating multi-agent systems"
+authors = [{name = "Agent MCP Team"}]
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "anyio",
+    "click",
+    "openai",
+    "starlette",
+    "uvicorn",
+    "jinja2",
+    "python-dotenv",
+    "sqlite-vec",
+    "httpx",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "black",
+    "isort",
+]
+
+[tool.setuptools]
+packages = ["mcp_template"]
+
+[tool.black]
+line-length = 88
+target-version = ["py38"]
+
+[tool.isort]
+profile = "black"
+line_length = 88

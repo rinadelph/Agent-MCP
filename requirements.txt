@@ -1,0 +1,10 @@
+anyio
+click
+openai>=1.0.0
+starlette
+uvicorn
+jinja2
+python-dotenv
+sqlite-vec
+httpx
+mcp
