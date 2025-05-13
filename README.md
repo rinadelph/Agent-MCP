@@ -2,7 +2,34 @@
 
 ![Agent Workflow](agent-workflow_resized.png)
 
-A MCP for creating multi-agent systems using the MCP (Multi-Agent Collaboration Protocol) for coordinated, efficient AI collaboration.
+A framework for creating multi-agent systems using the MCP (Multi-Agent Collaboration Protocol) for coordinated, efficient AI collaboration.
+
+## Quick Start Guide
+
+1. **Setup Environment**:
+   - Clone repo & copy `.env.example` to `.env`
+   - Add your OpenAI API key to `.env`
+   - Install with `uv venv && uv pip install -e .`
+
+2. **Start MCP Server**:
+   ```bash
+   uv run -m mcp_template.main --port 8080 --project-dir /path/to/your/project
+   ```
+   **Important**: Save the admin token displayed when server starts
+
+3. **Create Main Context Document (MCD)**:
+   - Create detailed `MCD.md` with system architecture, API routes, data models, etc.
+
+4. **Launch Admin Agent**: 
+   - Start in one window/session
+   - Give it the admin token
+
+5. **Initialize Worker Agents**:
+   - Open new window/session for each worker
+   - Copy worker prompt with auto mode from section 4 below
+   - Replace with correct agent ID & admin token
+
+Follow the detailed instructions below for more information.
 
 ## Features
 
@@ -115,21 +142,21 @@ If not set, a random token will be generated at server startup and printed to th
    ```
    The server will generate an admin token on startup - save this token as you'll need it for agent authentication.
 
-2. **Admin Agent**: Start the admin agent using:
+2. **Admin Agent**: Start a single admin agent using:
    ```bash
    uv run -m mcp_template.mcp_client_runner --admin
    ```
    If you encounter import errors like `ModuleNotFoundError: No module named 'mcp_client'`, make sure you're running from the project root and your Python package is properly installed.
 
-3. **Worker Agents**: Start worker agents using:
-   ```bash
-   uv run -m mcp_template.mcp_client_runner --agent-id worker1 --capabilities "frontend,react"
-   uv run -m mcp_template.mcp_client_runner --agent-id worker2 --capabilities "backend,api"
+3. **Worker Agents**: Instead of launching worker agents directly, instruct your admin agent to create and manage them. This is done by telling the admin agent:
    ```
+   "Create a new agent with ID 'frontend-worker' and assign it to implement the login page based on the MCD."
+   ```
+   The admin agent will handle the creation and assignment of tasks to worker agents.
 
 #### 4. Using AUTO Mode with Worker Agents
 
-Once your environment is set up and agents are connected, you can activate AUTO mode with specialized worker capabilities. Here's a sample worker initialization prompt:
+The recommended way to initialize worker agents is through your admin agent. When an agent is created, use this exact worker initialization prompt (copy and paste this to your worker agent):
 
 ```
 You are [agent_id] agent, your Admin Token: "your_admin_token_here"
@@ -139,13 +166,15 @@ Look at your tasks and ask the project RAG agent at least 5-7 questions to under
 AUTO --worker --memory
 ```
 
+Replace `[agent_id]` with the actual worker ID (e.g., "frontend-worker") and `your_admin_token_here` with the token generated when starting the MCP server.
+
 This commands the agent to:
 - Operate autonomously without user intervention
 - Follow the worker protocol with task status tracking
 - Utilize memory for context retention across interactions
 - Proactively query the RAG system to understand the task context
 
-For best results, include the instructions from INSTRUCTIONS.md when initializing your agents.
+For best results, attach the instructions from INSTRUCTIONS.md when initializing your agents by copy-pasting them before the AUTO command.
 
 ### Dashboard
 
@@ -155,11 +184,22 @@ Access the dashboard at `http://localhost:8080` to:
 - Observe agent relationships and coordination
 - Track file operations and context sharing
 
-**Note on Agent Creation:** Currently, the most reliable way to create and manage agents is through the admin agent in your development environment. You can instruct the admin agent to launch new agents and assign tasks to them rather than using the dashboard interface.
+### Alternative Development: Multiple Agent Sessions
 
-### Alternative Development Approach
+The recommended approach for complex projects is to:
 
-For complex projects, consider using multiple Claude Code or Cursor instances to manage different agents working on the same codebase. This allows you to maintain separate conversations with each agent while they collaborate through the MCP system.
+1. Use one conversation for your admin agent
+2. Start separate conversations/sessions for each worker agent
+3. Share the same admin token with all agents
+4. Use Claude Code, RooCode, or Cursor with multiple windows/sessions
+
+This approach gives each agent its own conversation context while they collaborate through the shared MCP system.
+
+**Example workflow:**
+1. Start MCP server and note the admin token
+2. Create admin agent in one window
+3. For each worker agent, open a new window and initialize with the worker prompt above
+4. Give each worker its own agent ID but the same admin token
 
 ## Token System and Resource Management
 
@@ -236,10 +276,12 @@ Example task assignment from admin to worker:
 Dependencies: None
 Artifacts: src/components/LoginForm.tsx
 Context: Uses FormKit, requires email validation
-Admin Token: "your_admin_token_here"
 ```
 
-You can instruct your admin agent to create new worker agents by providing a prompt like: "Create a new agent with ID 'frontend-worker' and assign it to implement the login page based on the MCD."
+When creating a new worker agent:
+1. Tell your admin agent: "Create a new agent with ID 'frontend-worker' and assign it to implement the login page based on the MCD."
+2. Open a new window/session and initialize the worker agent with the AUTO prompt described earlier
+3. Make sure to include the admin token so the worker can access its assigned tasks
 
 ## Components
 
