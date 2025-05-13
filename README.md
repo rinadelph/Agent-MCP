@@ -109,22 +109,33 @@ If not set, a random token will be generated at server startup and printed to th
 
 #### 3. Launching Agents
 
-1. **Admin Agent**: Start the admin agent using:
+1. **Start the MCP Server first**:
    ```bash
-   python -m mcp_template.mcp_client_runner --admin
+   uv run -m mcp_template.main --port 8080 --project-dir /path/to/your/project
    ```
+   The server will generate an admin token on startup - save this token as you'll need it for agent authentication.
 
-2. **Worker Agents**: Start worker agents using:
+2. **Admin Agent**: Start the admin agent using:
    ```bash
-   python -m mcp_template.mcp_client_runner --agent-id worker1 --capabilities "frontend,react"
-   python -m mcp_template.mcp_client_runner --agent-id worker2 --capabilities "backend,api"
+   uv run -m mcp_template.mcp_client_runner --admin
+   ```
+   If you encounter import errors like `ModuleNotFoundError: No module named 'mcp_client'`, make sure you're running from the project root and your Python package is properly installed.
+
+3. **Worker Agents**: Start worker agents using:
+   ```bash
+   uv run -m mcp_template.mcp_client_runner --agent-id worker1 --capabilities "frontend,react"
+   uv run -m mcp_template.mcp_client_runner --agent-id worker2 --capabilities "backend,api"
    ```
 
 #### 4. Using AUTO Mode with Worker Agents
 
-Once your environment is set up and agents are connected, you can activate AUTO mode with specialized worker capabilities:
+Once your environment is set up and agents are connected, you can activate AUTO mode with specialized worker capabilities. Here's a sample worker initialization prompt:
 
 ```
+You are [agent_id] agent, your Admin Token: "your_admin_token_here"
+
+Look at your tasks and ask the project RAG agent at least 5-7 questions to understand what you need to do. I want you to critically think when asking a question, then criticize yourself before asking that question. How you criticize yourself is by proposing an idea, criticizing it, and based on that criticism you pull through with that idea.
+
 AUTO --worker --memory
 ```
 
@@ -132,6 +143,9 @@ This commands the agent to:
 - Operate autonomously without user intervention
 - Follow the worker protocol with task status tracking
 - Utilize memory for context retention across interactions
+- Proactively query the RAG system to understand the task context
+
+For best results, include the instructions from INSTRUCTIONS.md when initializing your agents.
 
 ### Dashboard
 
@@ -140,6 +154,12 @@ Access the dashboard at `http://localhost:8080` to:
 - View task status and dependencies
 - Observe agent relationships and coordination
 - Track file operations and context sharing
+
+**Note on Agent Creation:** Currently, the most reliable way to create and manage agents is through the admin agent in your development environment. You can instruct the admin agent to launch new agents and assign tasks to them rather than using the dashboard interface.
+
+### Alternative Development Approach
+
+For complex projects, consider using multiple Claude Code or Cursor instances to manage different agents working on the same codebase. This allows you to maintain separate conversations with each agent while they collaborate through the MCP system.
 
 ## Token System and Resource Management
 
@@ -216,7 +236,10 @@ Example task assignment from admin to worker:
 Dependencies: None
 Artifacts: src/components/LoginForm.tsx
 Context: Uses FormKit, requires email validation
+Admin Token: "your_admin_token_here"
 ```
+
+You can instruct your admin agent to create new worker agents by providing a prompt like: "Create a new agent with ID 'frontend-worker' and assign it to implement the login page based on the MCD."
 
 ## Components
 
