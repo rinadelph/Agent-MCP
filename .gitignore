@@ -10,3 +10,6 @@ ENV/
 env.bak/
 venv.bak/
 .env.local
+# Cleanup scripts
+cleanup.sh
+cleanup_unix.sh
