@@ -1,6 +1,6 @@
 # Agent MCP
 
-![Agent MCP Dashboard](dashboard_resized.png)
+![Agent Workflow](agent-workflow_resized.png)
 
 A MCP for creating multi-agent systems using the MCP (Multi-Agent Collaboration Protocol) for coordinated, efficient AI collaboration.
 
@@ -200,7 +200,7 @@ This returns relevant context without loading entire files, saving tokens and im
 
 ## Agent Task Assignment Strategy
 
-![Agent Workflow](agent-workflow_resized.png)
+![Agent MCP Dashboard](dashboard_resized.png)
 
 For optimal performance, follow these guidelines:
 
