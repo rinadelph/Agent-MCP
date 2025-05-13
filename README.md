@@ -1,5 +1,7 @@
 # Agent MCP
 
+![Agent MCP Dashboard](dashboard.png)
+
 A MCP for creating multi-agent systems using the MCP (Multi-Agent Collaboration Protocol) for coordinated, efficient AI collaboration.
 
 ## Features
@@ -197,6 +199,8 @@ response = await client.ask_project_rag("How does the authentication system work
 This returns relevant context without loading entire files, saving tokens and improving response quality.
 
 ## Agent Task Assignment Strategy
+
+![Agent Workflow](agent-workflow.png)
 
 For optimal performance, follow these guidelines:
 
