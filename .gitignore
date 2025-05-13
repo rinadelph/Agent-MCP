@@ -13,3 +13,4 @@ venv.bak/
 # Cleanup scripts
 cleanup.sh
 cleanup_unix.sh
+resize_images.py
