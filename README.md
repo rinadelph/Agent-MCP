@@ -1,4 +1,4 @@
-# Agent MCP Template
+# Agent MCP
 
 A MCP for creating multi-agent systems using the MCP (Multi-Agent Collaboration Protocol) for coordinated, efficient AI collaboration.
 
