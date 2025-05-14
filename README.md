@@ -1,6 +1,6 @@
 # Agent MCP
 
-![Agent Workflow](agent-workflow_resized.png)
+![Agent Workflow](assets/images/agent-workflow_resized.png)
 
 A framework for creating multi-agent systems using the MCP (Model Context Protocol) for coordinated, efficient AI collaboration.
 
@@ -136,7 +136,7 @@ With a comprehensive MCD, agents can implement your application part-by-part wit
 
 1. **Begin with Deep Research**: Before coding, use AI to help create a comprehensive Main Context Document (MCD)
 2. **Start the Infrastructure**: Launch the MCP server and locate your admin token in the database
-3. **Admin Agent Setup**: Initialize your admin agent with the token and INSTRUCTIONS.md
+3. **Admin Agent Setup**: Initialize your admin agent with the token and [docs/INSTRUCTIONS.md](docs/INSTRUCTIONS.md)
 4. **Worker Creation**: Admin creates specialized workers for different aspects of your project
 5. **Task Assignment**: Admin breaks down the MCD into discrete tasks and assigns to workers
 6. **Parallel Development**: Workers execute tasks while sharing context through the MCP
@@ -241,7 +241,7 @@ After initialization, the worker will:
 3. Start working on its tasks autonomously
 4. Store implementation details in the shared memory system
 
-For best results, also copy the content of INSTRUCTIONS.md and paste it before the AUTO command.
+For best results, also copy the content of [docs/INSTRUCTIONS.md](docs/INSTRUCTIONS.md) and paste it before the AUTO command.
 
 ### Dashboard (Visualization Only)
 
@@ -411,7 +411,7 @@ This returns relevant context without loading entire files, saving tokens and im
 
 ## Agent Task Assignment Strategy
 
-![Agent MCP Dashboard](dashboard_resized.png)
+![Agent MCP Dashboard](assets/images/dashboard_resized.png)
 
 For optimal performance, follow these guidelines:
 
@@ -440,7 +440,7 @@ When creating a new worker agent:
 - `mcp_client.py`: Client library for connecting agents to MCP
 - `dashboard_api.py`: API endpoints for visualization
 - `rag_agent_test.py`: Example of a RAG-capable agent
-- `INSTRUCTIONS.md`: Operational guidelines for agents
+- `docs/INSTRUCTIONS.md`: Operational guidelines for agents
 
 ## Environment Variables
 
