@@ -262,6 +262,13 @@ For large projects:
 
 ## Project RAG and Knowledge Base
 
+<div align="center">
+  <a href="https://www.loom.com/share/16407661b19b477185fe9570c3a6aa3b" target="_blank">
+    <img src="https://cdn.loom.com/sessions/thumbnails/16407661b19b477185fe9570c3a6aa3b-with-play.gif" alt="Adding Context to Agent MCP Memory" style="max-width: 600px;">
+  </a>
+  <p><strong>Watch the tutorial:</strong> How to add and manage context in the Agent MCP memory system</p>
+</div>
+
 ### Setting Up the Project RAG
 
 The Retrieval-Augmented Generation (RAG) system allows agents to access relevant project knowledge efficiently:
