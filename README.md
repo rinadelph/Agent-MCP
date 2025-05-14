@@ -5,7 +5,7 @@
 A framework for creating multi-agent systems using the MCP (Model Context Protocol) for coordinated, efficient AI collaboration.
 
 ## Quick Start Guide
-
+Note: I recommend using https://github.com/rinadelph/MultipleCursor in order to launch different Cursor windows on the same codebase like the screenshot above.
 1. **Setup Environment**:
    - Clone repo & copy `.env.example` to `.env`
    - Add your OpenAI API key to `.env`
