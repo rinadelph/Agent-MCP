@@ -333,10 +333,12 @@ MIT License
 
 <div align="center">
   <a href="https://discord.gg/7Jm7nrhjGn">
-    <img src="https://img.shields.io/discord/1096789251687370823?color=5865F2&logo=discord&logoColor=white&label=AI%20Tools%20Community" alt="Join our Discord community" width="250"/>
+    <img src="https://img.shields.io/badge/Discord-Join%20Our%20Community-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Join our Discord community" width="300"/>
   </a>
 </div>
 
 Join our Discord community to discuss Agent MCP, share your projects, get help, and connect with other developers building with AI tools. We're a growing community focused on pushing the boundaries of what's possible with multi-agent systems and AI collaboration.
 
-[Join the Discord →](https://discord.gg/7Jm7nrhjGn)
+<div align="center">
+  <h3><a href="https://discord.gg/7Jm7nrhjGn">👉 Join the Discord Server 👈</a></h3>
+</div>
