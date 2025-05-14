@@ -2,7 +2,7 @@
 
 ![Agent Workflow](agent-workflow_resized.png)
 
-A framework for creating multi-agent systems using the MCP (Multi-Agent Collaboration Protocol) for coordinated, efficient AI collaboration.
+A framework for creating multi-agent systems using the MCP (Model Context Protocol) for coordinated, efficient AI collaboration.
 
 ## Quick Start Guide
 
