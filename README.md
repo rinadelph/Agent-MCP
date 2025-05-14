@@ -5,29 +5,53 @@
 A framework for creating multi-agent systems using the MCP (Model Context Protocol) for coordinated, efficient AI collaboration.
 
 ## Quick Start Guide
-Note: I recommend using https://github.com/rinadelph/MultipleCursor in order to launch different Cursor windows on the same codebase like the screenshot above.
-1. **Setup Environment**:
-   - Clone repo & copy `.env.example` to `.env`
-   - Add your OpenAI API key to `.env`
-   - Install with `uv venv && uv pip install -e .`
 
-2. **Start MCP Server**:
-   ```bash
-   uv run -m mcp_template.main --port 8080 --project-dir /path/to/your/project
+> **Note**: I recommend using [MultipleCursor](https://github.com/rinadelph/MultipleCursor) to launch different chat windows on the same codebase as shown in the screenshot above.
+
+### 1. Setup Environment
+- Clone repo & copy `.env.example` to `.env`
+- Add your OpenAI API key to `.env`
+- Install with `uv venv && uv pip install -e .`
+
+### 2. Start MCP Server
+```bash
+uv run -m mcp_template.main --port 8080 --project-dir /path/to/your/project
+```
+
+**IMPORTANT**: When the server starts, it will create a database in your project's `.agent` folder. Your admin token is stored in this database. To find it:
+1. Install a SQLite viewer extension in your code editor
+2. Open the database at `/path/to/your/project/.agent/mcp_state.db`
+3. Check the `project_context` table for the admin token
+
+### 3. Create Main Context Document (MCD)
+- Create a detailed `MCD.md` file in your project with architecture, API routes, data models, etc.
+- This can be a single file or multiple files (for complex projects)
+- See the [MCD-EXAMPLE](./MCD-EXAMPLE) folder for templates
+
+### 4. Launch Admin Agent
+1. Open your AI coding assistant (Claude Code, Cursor, etc.) in your project folder
+2. Copy the admin token you found in step 2
+3. Ask the AI to "Initialize as an admin agent with this token: [your-token]"
+4. Tell the admin agent to add your MCD to the project context with:
    ```
-   **Important**: The admin token is stored in the `.agent/mcp_state.db` SQLite database under project context. Install a SQLite viewer extension to access it.
+   Please add the MCD.md file to the project context. Don't summarize it.
+   ```
 
-3. **Create Main Context Document (MCD)**:
-   - Create detailed `MCD.md` with system architecture, API routes, data models, etc.
+### 5. Create and Manage Worker Agents Through Admin
+1. Ask your admin agent to create a worker agent:
+   ```
+   Create a worker agent with ID "frontend-worker" to implement the login page.
+   ```
+2. Open a new window/session in your AI assistant (same codebase)
+3. Initialize the worker with this exact prompt:
+   ```
+   You are [worker-id] agent, your Admin Token: "[admin-token]"
 
-4. **Launch Admin Agent**: 
-   - Start in one window/session
-   - Give it the admin token
+   Look at your tasks and ask the project RAG agent at least 5-7 questions to understand what you need to do. I want you to critically think when asking a question, then criticize yourself before asking that question. How you criticize yourself is by proposing an idea, criticizing it, and based on that criticism you pull through with that idea.
 
-5. **Initialize Worker Agents**:
-   - Open new window/session for each worker
-   - Copy worker prompt with auto mode from section 4 below
-   - Replace with correct agent ID & admin token
+   AUTO --worker --memory
+   ```
+4. The worker will automatically find its assigned tasks and start working
 
 Follow the detailed instructions below for more information.
 
@@ -41,6 +65,8 @@ Follow the detailed instructions below for more information.
 - Interactive dashboard for visualizing tasks, agents and context.
 
 ## Project Planning with the Main Context Document (MCD)
+
+> **Watch the video tutorial:** [How to add MCD context to Agent MCP](https://www.loom.com/share/16407661b19b477185fe9570c3a6aa3b)
 
 Before starting development, it's essential to use deep research to create a **Main Context Document (MCD)** - the single source of truth for your application. This document provides a granular plan detailing:
 
@@ -147,9 +173,9 @@ Options:
 - `--port`: Port to run the server on (default: 8080)
 - `--project-dir`: Base directory for the project
 
-#### 2. Access Admin Token
+#### 2. Access and Use the Admin Token
 
-The admin token provides privileged access to the MCP server and is required for all agent operations.
+The admin token is the key to the entire MCP system. All agents use it to access the central memory and coordination system.
 
 **Finding the Admin Token**:
 1. After starting the server, a token is automatically generated
@@ -158,32 +184,41 @@ The admin token provides privileged access to the MCP server and is required for
 4. Open the database and check the `project_context` table
 5. Look for the admin token entry
 
-**Agent Tokens**:
-Agent-specific tokens are also stored in the `.agent` folder. These tokens give each agent its specific permissions and identity within the MCP system.
+**How to Use the Admin Token**:
+1. Copy the token to your clipboard
+2. Paste it when initializing both admin and worker agents
+3. All agents must use the same admin token to access the shared project context
 
-#### 3. Launching Agents
+**IMPORTANT**: You don't need to create separate tokens for different agents. The same admin token is used for all agents, but each agent has a different ID (e.g., "admin", "frontend-worker", etc.).
 
-1. **Start the MCP Server first**:
-   ```bash
-   uv run -m mcp_template.main --port 8080 --project-dir /path/to/your/project
-   ```
-   The server will generate an admin token on startup - save this token as you'll need it for agent authentication.
+#### 3. Agent Workflow (IMPORTANT)
 
-2. **Admin Agent**: Start a single admin agent using:
-   ```bash
-   uv run -m mcp_template.mcp_client_runner --admin
-   ```
-   If you encounter import errors like `ModuleNotFoundError: No module named 'mcp_client'`, make sure you're running from the project root and your Python package is properly installed.
+> **Note**: All agents are created and managed through chat with your AI assistant - you do NOT use command line tools to create agents.
 
-3. **Worker Agents**: Instead of launching worker agents directly, instruct your admin agent to create and manage them. This is done by telling the admin agent:
-   ```
-   "Create a new agent with ID 'frontend-worker' and assign it to implement the login page based on the MCD."
-   ```
-   The admin agent will handle the creation and assignment of tasks to worker agents.
+**MCP Server** - This is the ONLY component you start with a command:
+```bash
+uv run -m mcp_template.main --port 8080 --project-dir /path/to/your/project
+```
 
-#### 4. Using AUTO Mode with Worker Agents
+**Admin Agent** - Create by telling your AI assistant:
+```
+Initialize as an admin agent with this token: [paste-admin-token-here]
+Please add the MCD.md file to the project context. Don't summarize it.
+```
 
-The recommended way to initialize worker agents is through your admin agent. When an agent is created, use this exact worker initialization prompt (copy and paste this to your worker agent):
+**Worker Agents** - Create through the admin agent with:
+1. Tell the admin agent: "Create a worker agent with ID 'frontend-worker' to implement the login page"
+2. Open a new AI assistant window/session
+3. Initialize with the worker prompt from section 4 below
+
+**The Dashboard** (http://localhost:8080):
+- This is just for visualization - you don't create agents here
+- All actual work happens through your AI assistant chat windows
+- The dashboard shows relationships between agents and tasks
+
+#### 4. Initializing Worker Agents (Copy/Paste This)
+
+After your admin agent creates a worker, open a new AI assistant window and initialize the worker with this EXACT prompt:
 
 ```
 You are [agent_id] agent, your Admin Token: "your_admin_token_here"
@@ -193,40 +228,113 @@ Look at your tasks and ask the project RAG agent at least 5-7 questions to under
 AUTO --worker --memory
 ```
 
-Replace `[agent_id]` with the actual worker ID (e.g., "frontend-worker") and `your_admin_token_here` with the token generated when starting the MCP server.
+Make these two replacements:
+1. Replace `[agent_id]` with the worker ID you told the admin to create (e.g., "frontend-worker")
+2. Replace `your_admin_token_here` with the SAME admin token you used for the admin agent
 
-This commands the agent to:
-- Operate autonomously without user intervention
-- Follow the worker protocol with task status tracking
-- Utilize memory for context retention across interactions
-- Proactively query the RAG system to understand the task context
+After initialization, the worker will:
+1. Check for tasks assigned to its ID
+2. Ask the RAG system about the project context
+3. Start working on its tasks autonomously
+4. Store implementation details in the shared memory system
 
-For best results, attach the instructions from INSTRUCTIONS.md when initializing your agents by copy-pasting them before the AUTO command.
+For best results, also copy the content of INSTRUCTIONS.md and paste it before the AUTO command.
 
-### Dashboard
+### Dashboard (Visualization Only)
 
-Access the dashboard at `http://localhost:8080` to:
+Access the dashboard at `http://localhost:8080` to visualize what's happening in your multi-agent system:
 - Monitor agent activities in real-time
 - View task status and dependencies
 - Observe agent relationships and coordination
 - Track file operations and context sharing
 
-### Alternative Development: Multiple Agent Sessions
+**Important:** The dashboard is only for visualization - you don't create or manage agents here. All agent creation and task assignment happens through your AI assistant chat.
 
-The recommended approach for complex projects is to:
+### Multiple Agent Sessions: Visual Guide
 
-1. Use one conversation for your admin agent
-2. Start separate conversations/sessions for each worker agent
-3. Share the same admin token with all agents
-4. Use Claude Code, RooCode, or Cursor with multiple windows/sessions
+For complex projects, you'll have multiple chat sessions open at once:
 
-This approach gives each agent its own conversation context while they collaborate through the shared MCP system.
+![Multiple Agent Setup](agent-workflow_resized.png)
 
-**Example workflow:**
-1. Start MCP server and note the admin token
-2. Create admin agent in one window
-3. For each worker agent, open a new window and initialize with the worker prompt above
-4. Give each worker its own agent ID but the same admin token
+**How this works:**
+1. One window/session for your admin agent
+2. Separate windows/sessions for each worker agent
+3. ALL agents use the SAME admin token (not different tokens)
+4. Each worker has a UNIQUE agent ID
+
+**Example setup with 3 agents:**
+
+| Window | Agent Type | Agent ID | Token |
+|--------|-----------|----------|-------|
+| 1 | Admin | "admin" | admin-token |
+| 2 | Worker | "frontend-worker" | Same admin-token |
+| 3 | Worker | "backend-worker" | Same admin-token |
+
+You can use Claude Code, RooCode, or [MultipleCursor](https://github.com/rinadelph/MultipleCursor) to manage multiple windows/sessions working on the same codebase.
+
+## Complete Example Workflow
+
+Here's a step-by-step example of how to use Agent MCP from start to finish:
+
+### Step 1: Create Your Project
+```bash
+mkdir -p my-project
+cd my-project
+git init
+# Create initial project files
+```
+
+### Step 2: Install Agent MCP
+```bash
+git clone https://github.com/rinadelph/Agent-MCP.git mcp
+cd mcp
+uv venv
+uv pip install -e .
+cd ..
+```
+
+### Step 3: Create Your MCD
+```bash
+# Create your MCD file (with help from your AI assistant)
+touch MCD.md
+```
+
+### Step 4: Start MCP Server
+```bash
+uv run -m mcp_template.main --port 8080 --project-dir $(pwd)
+```
+
+### Step 5: Find Admin Token
+1. Install SQLite Viewer in your code editor
+2. Open `.agent/mcp_state.db`
+3. Look for the token in `project_context` table
+
+### Step 6: Initialize Admin Agent
+1. Open your AI assistant (Claude Code, Cursor, etc.)
+2. Tell it:
+```
+Initialize as an admin agent with this token: [paste-token-here]
+Please add the MCD.md file to the project context. Don't summarize it.
+```
+
+### Step 7: Create Worker Agent
+1. Tell the admin agent:
+```
+Create a worker agent with ID "frontend-worker" to implement the login page component.
+```
+
+### Step 8: Initialize Worker Agent
+1. Open a new AI assistant window
+2. Tell it:
+```
+You are frontend-worker agent, your Admin Token: "[paste-same-admin-token]"
+
+Look at your tasks and ask the project RAG agent at least 5-7 questions to understand what you need to do. I want you to critically think when asking a question, then criticize yourself before asking that question. How you criticize yourself is by proposing an idea, criticizing it, and based on that criticism you pull through with that idea.
+
+AUTO --worker --memory
+```
+
+The worker will now automatically start working on its assigned tasks!
 
 ## Token System and Resource Management
 
@@ -260,11 +368,19 @@ For large projects:
 3. Utilize the RAG system for efficient context retrieval
 4. Store shared information in the project context rather than repeating in messages
 
-## Project RAG and Knowledge Base
+## Project RAG and Knowledge Base (Central Memory System)
 
-[![Watch the tutorial: How to add and manage context in Agent MCP Memory](https://cdn.loom.com/sessions/thumbnails/16407661b19b477185fe9570c3a6aa3b-with-play.gif)](https://www.loom.com/share/16407661b19b477185fe9570c3a6aa3b)
+[![Watch the tutorial: How to add context to Agent MCP Memory](https://cdn.loom.com/sessions/thumbnails/16407661b19b477185fe9570c3a6aa3b-with-play.gif)](https://www.loom.com/share/16407661b19b477185fe9570c3a6aa3b)
 
-**Watch the tutorial above:** Learn how to add and manage context in the Agent MCP memory system
+**Watch the tutorial above:** See exactly how to add your MCD to the central memory system
+
+### How the Memory System Works
+
+1. The MCP server maintains a central database for all project context
+2. When you start the server, it creates a `.agent` folder in your project directory
+3. Your admin agent adds your MCD to this database when you initialize it
+4. Worker agents automatically query this database to understand their tasks
+5. All implementation details are stored back in this database for other agents to access
 
 ### Setting Up the Project RAG
 
