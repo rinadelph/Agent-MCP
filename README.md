@@ -173,23 +173,25 @@ Options:
 - `--port`: Port to run the server on (default: 8080)
 - `--project-dir`: Base directory for the project
 
-#### 2. Access and Use the Admin Token
+#### 2. Understanding MCP Tokens
 
-The admin token is the key to the entire MCP system. All agents use it to access the central memory and coordination system.
+The MCP system uses two types of tokens for authentication:
 
-**Finding the Admin Token**:
-1. After starting the server, a token is automatically generated
+**Admin Token**:
+1. After starting the server, an admin token is automatically generated
 2. This token is stored in the `.agent/mcp_state.db` SQLite database
 3. Install a SQLite viewer extension for VS Code or another SQLite tool
 4. Open the database and check the `project_context` table
 5. Look for the admin token entry
+6. The admin token should ONLY be used with the admin agent
 
-**How to Use the Admin Token**:
-1. Copy the token to your clipboard
-2. Paste it when initializing both admin and worker agents
-3. All agents must use the same admin token to access the shared project context
+**Worker Tokens**:
+1. When the admin agent creates a worker agent, a specific worker token is generated
+2. The admin agent will provide this worker token when asked to create a worker
+3. Each worker has its own unique token with specific permissions
+4. Worker tokens are also stored in the `.agent/mcp_state.db` database
 
-**IMPORTANT**: You don't need to create separate tokens for different agents. The same admin token is used for all agents, but each agent has a different ID (e.g., "admin", "frontend-worker", etc.).
+**IMPORTANT**: Do NOT use the admin token for worker agents. Always use the specific worker token provided by the admin agent when it creates the worker.
 
 #### 3. Agent Workflow (IMPORTANT)
 
@@ -208,8 +210,9 @@ Please add the MCD.md file to the project context. Don't summarize it.
 
 **Worker Agents** - Create through the admin agent with:
 1. Tell the admin agent: "Create a worker agent with ID 'frontend-worker' to implement the login page"
-2. Open a new AI assistant window/session
-3. Initialize with the worker prompt from section 4 below
+2. The admin will provide a specific worker token for this agent
+3. Open a new AI assistant window/session
+4. Initialize with the worker token and the worker prompt from section 4 below
 
 **The Dashboard** (http://localhost:8080):
 - This is just for visualization - you don't create agents here
@@ -221,7 +224,7 @@ Please add the MCD.md file to the project context. Don't summarize it.
 After your admin agent creates a worker, open a new AI assistant window and initialize the worker with this EXACT prompt:
 
 ```
-You are [agent_id] agent, your Admin Token: "your_admin_token_here"
+You are [agent_id] agent, your Worker Token: "your_worker_token_here"
 
 Look at your tasks and ask the project RAG agent at least 5-7 questions to understand what you need to do. I want you to critically think when asking a question, then criticize yourself before asking that question. How you criticize yourself is by proposing an idea, criticizing it, and based on that criticism you pull through with that idea.
 
@@ -230,7 +233,7 @@ AUTO --worker --memory
 
 Make these two replacements:
 1. Replace `[agent_id]` with the worker ID you told the admin to create (e.g., "frontend-worker")
-2. Replace `your_admin_token_here` with the SAME admin token you used for the admin agent
+2. Replace `your_worker_token_here` with the specific worker token that the admin agent provided when creating this worker (NOT the admin token)
 
 After initialization, the worker will:
 1. Check for tasks assigned to its ID
@@ -259,16 +262,16 @@ For complex projects, you'll have multiple chat sessions open at once:
 **How this works:**
 1. One window/session for your admin agent
 2. Separate windows/sessions for each worker agent
-3. ALL agents use the SAME admin token (not different tokens)
-4. Each worker has a UNIQUE agent ID
+3. Admin uses admin token, workers use their specific worker tokens
+4. Each worker has a UNIQUE agent ID and token
 
 **Example setup with 3 agents:**
 
-| Window | Agent Type | Agent ID | Token |
-|--------|-----------|----------|-------|
-| 1 | Admin | "admin" | admin-token |
-| 2 | Worker | "frontend-worker" | Same admin-token |
-| 3 | Worker | "backend-worker" | Same admin-token |
+| Window | Agent Type | Agent ID | Token Type |
+|--------|-----------|----------|------------|
+| 1 | Admin | "admin" | Admin token |
+| 2 | Worker | "frontend-worker" | Frontend worker token |
+| 3 | Worker | "backend-worker" | Backend worker token |
 
 You can use Claude Code, RooCode, or [MultipleCursor](https://github.com/rinadelph/MultipleCursor) to manage multiple windows/sessions working on the same codebase.
 
@@ -322,12 +325,13 @@ Please add the MCD.md file to the project context. Don't summarize it.
 ```
 Create a worker agent with ID "frontend-worker" to implement the login page component.
 ```
+2. The admin agent will provide you with a worker token for this new agent
 
 ### Step 8: Initialize Worker Agent
 1. Open a new AI assistant window
 2. Tell it:
 ```
-You are frontend-worker agent, your Admin Token: "[paste-same-admin-token]"
+You are frontend-worker agent, your Worker Token: "[paste-worker-token-here]"
 
 Look at your tasks and ask the project RAG agent at least 5-7 questions to understand what you need to do. I want you to critically think when asking a question, then criticize yourself before asking that question. How you criticize yourself is by proposing an idea, criticizing it, and based on that criticism you pull through with that idea.
 
