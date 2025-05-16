@@ -215,28 +215,83 @@
             height: 100%;
         }
         #agent-master-list {
-            flex: 0 0 250px; /* Fixed width for list */
+            flex: 0 0 300px; /* Slightly wider list for the enhanced agent cards */
             overflow-y: auto;
-            border-right: 1px solid #eee;
-            padding-right: 10px;
+            border-right: 1px solid #444;
+            padding: 15px;
+            background-color: rgba(40, 44, 52, 0.5); /* Slightly different background */
         }
         #agent-detail-panel {
             flex-grow: 1;
             overflow-y: auto;
-            padding-left: 15px;
+            padding: 0;
+            background-color: #282c34;
+        }
+        .agent-list-header {
+            margin-bottom: 12px;
+            padding-bottom: 8px;
         }
         .agent-list-item {
-            padding: 8px;
             cursor: pointer;
-            border-radius: 4px;
-            margin-bottom: 5px;
-            border-left: 4px solid transparent;
+            transition: all 0.2s ease;
+            border: 1px solid #444;
         }
         .agent-list-item:hover {
-            background-color: #444a57;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
         }
         .agent-list-item.selected {
-            background-color: #555c68;
+            border-color: #3498db;
+            box-shadow: 0 0 0 1px #3498db; /* Highlight with primary color */
+        }
+        
+        /* Task Explorer Styles */
+        #task-explorer-view {
+            display: grid;
+            grid-template-columns: 250px 350px 1fr;
+            grid-template-areas: "filters list details";
+            height: 100%;
+            grid-gap: 15px;
+            padding: 15px;
+        }
+        #task-filters-panel {
+            grid-area: filters;
+            overflow-y: auto;
+        }
+        #task-list-panel {
+            grid-area: list;
+            overflow-y: auto;
+        }
+        #task-detail-panel {
+            grid-area: details;
+            overflow-y: auto;
+            background-color: #282c34;
+            border-radius: 8px;
+            border: 1px solid #444;
+        }
+        .task-item {
+            cursor: pointer;
+            border-left: 4px solid #666;
+            transition: all 0.2s ease;
+            margin-bottom: 8px;
+        }
+        .task-item.status-pending { border-left-color: #f39c12; }
+        .task-item.status-in_progress { border-left-color: #3498db; }
+        .task-item.status-completed { border-left-color: #2ecc71; }
+        .task-item.status-cancelled { border-left-color: #95a5a6; }
+        
+        .task-item.priority-high { 
+            background-color: rgba(231, 76, 60, 0.1);
+        }
+        .task-item:hover {
+            transform: translateX(3px);
+        }
+        .task-item.selected {
+            background-color: #3a3f48;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+        .task-filter-btn.active {
+            color: #fff;
             font-weight: bold;
         }
         .nav-pills .nav-link {
@@ -701,6 +756,11 @@
                   <i class="bi bi-people me-2"></i>Agent Explorer
                 </a>
               </li>
+              <li>
+                <a href="#" class="nav-link" data-view="task-explorer">
+                  <i class="bi bi-kanban me-2"></i>Task Explorer
+                </a>
+              </li>
               <!-- Add other views later -->
             </ul>
             <hr>
@@ -818,6 +878,63 @@
                     </div>
                     <div id="agent-detail-panel">
                         <h5 class="text-muted p-3">Select an agent from the list to see details.</h5>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Hidden Task Explorer (will be shown/hidden via JavaScript) -->
+            <div id="task-explorer-container" style="display: none; width: 100%; height: 100%;">
+                <div id="task-explorer-view">
+                    <div id="task-filters-panel">
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h6 class="m-0"><i class="bi bi-funnel"></i> Filters</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <label class="form-label small">Status</label>
+                                    <div class="d-flex flex-wrap gap-2">
+                                        <button class="btn btn-sm btn-outline-light task-filter-btn active" data-filter="status" data-value="all">All</button>
+                                        <button class="btn btn-sm btn-outline-warning task-filter-btn" data-filter="status" data-value="pending">Pending</button>
+                                        <button class="btn btn-sm btn-outline-info task-filter-btn" data-filter="status" data-value="in_progress">In Progress</button>
+                                        <button class="btn btn-sm btn-outline-success task-filter-btn" data-filter="status" data-value="completed">Completed</button>
+                                        <button class="btn btn-sm btn-outline-secondary task-filter-btn" data-filter="status" data-value="cancelled">Cancelled</button>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label small">Priority</label>
+                                    <div class="d-flex flex-wrap gap-2">
+                                        <button class="btn btn-sm btn-outline-light task-filter-btn active" data-filter="priority" data-value="all">All</button>
+                                        <button class="btn btn-sm btn-outline-secondary task-filter-btn" data-filter="priority" data-value="low">Low</button>
+                                        <button class="btn btn-sm btn-outline-primary task-filter-btn" data-filter="priority" data-value="medium">Medium</button>
+                                        <button class="btn btn-sm btn-outline-danger task-filter-btn" data-filter="priority" data-value="high">High</button>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="agent-filter" class="form-label small">Assigned To</label>
+                                    <select id="agent-filter" class="form-select form-select-sm">
+                                        <option value="all" selected>All Agents</option>
+                                        <!-- Agents will be populated via JavaScript -->
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="task-list-panel">
+                        <div class="card mb-3">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h6 class="m-0"><i class="bi bi-list-task"></i> Tasks</h6>
+                                <span class="badge bg-primary" id="task-count">0</span>
+                            </div>
+                            <div class="card-body p-0">
+                                <div id="tasks-container">
+                                    <div class="text-center p-3"><div class="spinner-border spinner-border-sm" role="status"></div> Loading Tasks...</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="task-detail-panel">
+                        <h5 class="text-muted p-3">Select a task from the list to see details.</h5>
                     </div>
                 </div>
             </div>
@@ -1372,6 +1489,27 @@
             setupNavigation();
             setupLayoutButtons();
             
+            // Set up task filter buttons
+            document.querySelectorAll('.task-filter-btn').forEach(button => {
+                button.addEventListener('click', function() {
+                    // Update active state for buttons with the same filter type
+                    const filterType = this.getAttribute('data-filter');
+                    document.querySelectorAll(`.task-filter-btn[data-filter="${filterType}"]`).forEach(btn => {
+                        btn.classList.remove('active');
+                    });
+                    this.classList.add('active');
+                    
+                    // Re-fetch tasks with the new filters
+                    fetchAllTasks();
+                });
+            });
+            
+            // Set up agent filter change
+            const agentFilter = document.getElementById('agent-filter');
+            if (agentFilter) {
+                agentFilter.addEventListener('change', fetchAllTasks);
+            }
+            
             // Load tokens
             loadTokens();
             
@@ -1469,6 +1607,7 @@
         function setupNavigation() {
             const navLinks = document.querySelectorAll('#dashboard-nav .nav-link');
             const agentExplorerContainer = document.getElementById('agent-explorer-container');
+            const taskExplorerContainer = document.getElementById('task-explorer-container');
             const splitViewContainer = document.querySelector('.split-view-container');
             
             navLinks.forEach(link => {
@@ -1481,18 +1620,30 @@
                     
                     const targetView = this.getAttribute('data-view');
                     
-                    // Handle different views
+                    // Hide all containers first
+                    if (agentExplorerContainer) agentExplorerContainer.style.display = 'none';
+                    if (taskExplorerContainer) taskExplorerContainer.style.display = 'none';
+                    if (splitViewContainer) splitViewContainer.style.display = 'none';
+                    
+                    // Show the selected view
                     if (targetView === 'agent-explorer') {
-                        // Show agent explorer, hide split view
+                        // Show agent explorer
                         if (agentExplorerContainer) agentExplorerContainer.style.display = 'block';
-                        if (splitViewContainer) splitViewContainer.style.display = 'none';
                         
                         // Load agent data
                         fetchAgentList();
                         currentView = 'agent-explorer-view';
-                    } else {
-                        // Show split view, hide agent explorer
-                        if (agentExplorerContainer) agentExplorerContainer.style.display = 'none';
+                    } 
+                    else if (targetView === 'task-explorer') {
+                        // Show task explorer
+                        if (taskExplorerContainer) taskExplorerContainer.style.display = 'block';
+                        
+                        // Load task data
+                        fetchAllTasks();
+                        currentView = 'task-explorer-view';
+                    }
+                    else {
+                        // Show split view
                         if (splitViewContainer) splitViewContainer.style.display = 'flex';
                         
                         // Set current view based on the active tab
@@ -1514,16 +1665,32 @@
             fetchGraphData(); 
             fetchTaskTreeData();
             
-            if (document.getElementById('agent-explorer-container').style.display !== 'none') {
+            // Check which view is currently visible
+            const agentExplorerVisible = document.getElementById('agent-explorer-container').style.display !== 'none';
+            const taskExplorerVisible = document.getElementById('task-explorer-container').style.display !== 'none';
+            
+            if (agentExplorerVisible) {
                 fetchAgentList();
+            }
+            
+            if (taskExplorerVisible) {
+                fetchAllTasks();
             }
             
             autoRefreshInterval = setInterval(() => {
                 fetchGraphData();
                 fetchTaskTreeData();
                 
-                if (document.getElementById('agent-explorer-container').style.display !== 'none') {
+                // Refresh data based on visible view
+                const agentExplorerVisible = document.getElementById('agent-explorer-container').style.display !== 'none';
+                const taskExplorerVisible = document.getElementById('task-explorer-container').style.display !== 'none';
+                
+                if (agentExplorerVisible) {
                     fetchAgentList();
+                }
+                
+                if (taskExplorerVisible) {
+                    fetchAllTasks();
                 }
             }, REFRESH_INTERVAL_MS);
             console.log("Auto-refresh started for all views");
@@ -1535,6 +1702,320 @@
                 autoRefreshInterval = null;
                 console.log("Auto-refresh stopped.");
             }
+        }
+        
+        // Task Explorer Functions
+        function fetchAllTasks() {
+            const tasksContainer = document.getElementById('tasks-container');
+            const taskCountElement = document.getElementById('task-count');
+            
+            if (!tasksContainer || !taskCountElement) {
+                console.error('Task container elements not found');
+                return;
+            }
+            
+            tasksContainer.innerHTML = '<div class="text-center p-3"><div class="spinner-border spinner-border-sm" role="status"></div> Loading Tasks...</div>';
+            
+            // Also populate agent filter dropdown
+            populateAgentFilter();
+            
+            // Fetch tasks from the server
+            fetch('/api/view-tasks')
+                .then(response => response.ok ? response.json() : Promise.reject('Failed to fetch tasks'))
+                .then(data => {
+                    // Get the tasks array
+                    let tasks = [];
+                    if (Array.isArray(data)) {
+                        tasks = data;
+                    } else if (data.tasks && Array.isArray(data.tasks)) {
+                        tasks = data.tasks;
+                    } else {
+                        console.error('Unexpected task data format:', data);
+                        tasksContainer.innerHTML = '<p class="text-danger p-3">Error: Unexpected data format</p>';
+                        return;
+                    }
+                    
+                    // Filter tasks based on current filter settings
+                    const statusFilterEl = document.querySelector('.task-filter-btn[data-filter="status"].active');
+                    const priorityFilterEl = document.querySelector('.task-filter-btn[data-filter="priority"].active');
+                    const agentFilterEl = document.getElementById('agent-filter');
+                    
+                    const statusFilter = statusFilterEl ? statusFilterEl.getAttribute('data-value') : 'all';
+                    const priorityFilter = priorityFilterEl ? priorityFilterEl.getAttribute('data-value') : 'all';
+                    const agentFilter = agentFilterEl ? agentFilterEl.value : 'all';
+                    
+                    // Apply filters
+                    const filteredTasks = tasks.filter(task => {
+                        const statusMatch = statusFilter === 'all' || task.status === statusFilter;
+                        const priorityMatch = priorityFilter === 'all' || task.priority === priorityFilter;
+                        const agentMatch = agentFilter === 'all' || task.assigned_to === agentFilter;
+                        return statusMatch && priorityMatch && agentMatch;
+                    });
+                    
+                    // Update the task count
+                    taskCountElement.textContent = filteredTasks.length;
+                    
+                    // Render tasks
+                    renderTaskList(filteredTasks);
+                })
+                .catch(error => {
+                    console.error('Error fetching tasks:', error);
+                    tasksContainer.innerHTML = '<p class="text-danger p-3">Error loading tasks. See console for details.</p>';
+                });
+        }
+        
+        function renderTaskList(tasks) {
+            const tasksContainer = document.getElementById('tasks-container');
+            if (!tasksContainer) return;
+            
+            tasksContainer.innerHTML = '';
+            
+            if (!tasks || tasks.length === 0) {
+                tasksContainer.innerHTML = '<p class="text-muted p-3">No tasks found matching your filters.</p>';
+                return;
+            }
+            
+            // Create a list group for tasks
+            const listGroup = document.createElement('div');
+            listGroup.className = 'list-group list-group-flush';
+            
+            // Sort tasks by creation date (newest first)
+            tasks.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+            
+            // Add each task to the list
+            tasks.forEach(task => {
+                const item = document.createElement('div');
+                item.className = `list-group-item task-item status-${task.status || 'pending'} priority-${task.priority || 'low'}`;
+                item.dataset.taskId = task.task_id;
+                
+                // Determine badge class based on status
+                let statusBadgeClass = 'bg-warning'; // default for pending
+                if (task.status === 'completed') statusBadgeClass = 'bg-success';
+                else if (task.status === 'in_progress') statusBadgeClass = 'bg-info';
+                else if (task.status === 'cancelled') statusBadgeClass = 'bg-secondary';
+                
+                // Create priority indicator
+                let priorityIndicator = '';
+                if (task.priority === 'high') {
+                    priorityIndicator = '<span class="badge bg-danger me-1">High</span>';
+                } else if (task.priority === 'medium') {
+                    priorityIndicator = '<span class="badge bg-primary me-1">Medium</span>';
+                }
+                
+                item.innerHTML = `
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div class="text-truncate" style="max-width: 60%;">
+                            <strong>${task.title || 'Unnamed Task'}</strong>
+                        </div>
+                        <div>
+                            ${priorityIndicator}
+                            <span class="badge ${statusBadgeClass}">${task.status || 'pending'}</span>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mt-2">
+                        <small class="text-muted">
+                            <span class="me-2">ID: ${(task.task_id || '').substring(0, 8)}...</span>
+                            <span>Assigned: ${task.assigned_to || 'None'}</span>
+                        </small>
+                        <small class="text-muted">${formatDate(task.created_at)}</small>
+                    </div>
+                `;
+                
+                // Add click handler to show task details
+                item.addEventListener('click', () => {
+                    // Highlight the selected task
+                    document.querySelectorAll('.task-item.selected').forEach(el => el.classList.remove('selected'));
+                    item.classList.add('selected');
+                    
+                    // Fetch and display task details
+                    fetchTaskDetails(task.task_id);
+                });
+                
+                listGroup.appendChild(item);
+            });
+            
+            tasksContainer.appendChild(listGroup);
+        }
+        
+        function fetchTaskDetails(taskId) {
+            const detailPanel = document.getElementById('task-detail-panel');
+            if (!detailPanel) return;
+            
+            detailPanel.innerHTML = '<div class="text-center p-3"><div class="spinner-border spinner-border-sm" role="status"></div> Loading Task Details...</div>';
+            
+            // Use the node details API to get task details
+            fetch(`/api/details?node_id=task_${taskId}`)
+                .then(response => response.ok ? response.json() : Promise.reject('Failed to fetch task details'))
+                .then(details => {
+                    renderTaskDetails(details);
+                })
+                .catch(error => {
+                    console.error('Error fetching task details:', error);
+                    detailPanel.innerHTML = `<p class="text-danger p-3">Error loading details for task ${taskId}. See console for details.</p>`;
+                });
+        }
+        
+        function renderTaskDetails(details) {
+            const detailPanel = document.getElementById('task-detail-panel');
+            if (!detailPanel) return;
+            
+            const taskData = details.data || {};
+            const actions = details.actions || [];
+            
+            // Status badge class
+            let statusBadgeClass = 'bg-warning'; // Default for pending
+            if (taskData.status === 'completed') statusBadgeClass = 'bg-success';
+            else if (taskData.status === 'in_progress') statusBadgeClass = 'bg-info';
+            else if (taskData.status === 'cancelled') statusBadgeClass = 'bg-secondary';
+            
+            // Get dependencies list
+            let dependenciesHtml = '<p class="text-muted small">None</p>';
+            try {
+                if (taskData.depends_on_tasks) {
+                    const dependencies = JSON.parse(taskData.depends_on_tasks);
+                    if (dependencies && dependencies.length > 0) {
+                        dependenciesHtml = `
+                            <div class="list-group list-group-flush small">
+                                ${dependencies.map(depId => `
+                                    <div class="list-group-item py-2">
+                                        <div class="d-flex align-items-center">
+                                            <span class="text-truncate">${depId}</span>
+                                            <button class="btn btn-sm btn-link ps-2" onclick="fetchTaskDetails('${depId}')" title="View this dependency">
+                                                <i class="bi bi-box-arrow-up-right"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        `;
+                    }
+                }
+            } catch (e) {
+                console.error('Error parsing dependencies:', e);
+            }
+            
+            detailPanel.innerHTML = `
+                <div class="p-3">
+                    <div class="d-flex align-items-center mb-3">
+                        <h5 class="m-0 flex-grow-1">${taskData.title || 'Unnamed Task'}</h5>
+                        <span class="badge ${statusBadgeClass} ms-2">${taskData.status || 'Unknown'}</span>
+                    </div>
+                    
+                    <!-- Task ID and Created Date -->
+                    <div class="mb-3">
+                        <div class="text-muted small">Task ID: ${taskData.task_id}</div>
+                        <div class="text-muted small">Created: ${formatDate(taskData.created_at)}</div>
+                        <div class="text-muted small">Updated: ${formatDate(taskData.updated_at)}</div>
+                    </div>
+                    
+                    <!-- Assignment and Priority -->
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <h6 class="m-0"><i class="bi bi-person"></i> Assignment</h6>
+                        </div>
+                        <div class="card-body p-0">
+                            <ul class="list-group list-group-flush">
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <span class="text-muted">Assigned To</span>
+                                    <span>${taskData.assigned_to || 'Not assigned'}</span>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <span class="text-muted">Created By</span>
+                                    <span>${taskData.created_by || 'Unknown'}</span>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <span class="text-muted">Priority</span>
+                                    <span class="badge ${taskData.priority === 'high' ? 'bg-danger' : taskData.priority === 'medium' ? 'bg-primary' : 'bg-secondary'}">${taskData.priority || 'Unknown'}</span>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <!-- Description -->
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <h6 class="m-0"><i class="bi bi-card-text"></i> Description</h6>
+                        </div>
+                        <div class="card-body p-3">
+                            <p class="mb-0">${taskData.description || 'No description provided.'}</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Dependencies -->
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <h6 class="m-0"><i class="bi bi-diagram-3"></i> Dependencies</h6>
+                        </div>
+                        <div class="card-body p-0">
+                            ${dependenciesHtml}
+                        </div>
+                    </div>
+                    
+                    <!-- Recent Activity -->
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <h6 class="m-0"><i class="bi bi-activity"></i> Recent Activity</h6>
+                        </div>
+                        <div class="card-body p-0">
+                            ${actions.length > 0 ? `
+                                <ul class="list-group list-group-flush">
+                                    ${actions.slice(0, 5).map(action => `
+                                        <li class="list-group-item p-2">
+                                            <div class="small d-flex align-items-center">
+                                                <span class="text-primary me-2">${action.action_type}</span>
+                                                <span class="text-muted ms-auto">${formatDate(action.timestamp)}</span>
+                                            </div>
+                                            <div class="text-muted small">
+                                                By: ${action.agent_id || 'Unknown'}
+                                            </div>
+                                        </li>
+                                    `).join('')}
+                                </ul>
+                            ` : `<p class="text-muted p-3 m-0">No recent activity</p>`}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        function populateAgentFilter() {
+            const agentFilter = document.getElementById('agent-filter');
+            if (!agentFilter) return;
+            
+            // Keep the "All Agents" option
+            agentFilter.innerHTML = '<option value="all" selected>All Agents</option>';
+            
+            // Fetch agents
+            fetch('/api/agents')
+                .then(response => response.ok ? response.json() : Promise.reject('Failed to fetch agents'))
+                .then(agents => {
+                    // Add each agent to the dropdown
+                    agents.forEach(agent => {
+                        if (agent.agent_id !== 'Admin') {
+                            const option = document.createElement('option');
+                            option.value = agent.agent_id;
+                            option.textContent = agent.agent_id;
+                            agentFilter.appendChild(option);
+                        }
+                    });
+                })
+                .catch(error => {
+                    console.error('Error populating agent filter:', error);
+                });
+        }
+        
+        // Helper function to format dates
+        function formatDate(dateString) {
+            if (!dateString) return 'Unknown';
+            
+            try {
+                const date = new Date(dateString);
+                return date.toLocaleString();
+            } catch (e) {
+                console.error('Error formatting date:', e);
+                return dateString;
+            }
+        }
         }
 
         function initializeGraph() {
@@ -2146,15 +2627,37 @@ ${JSON.stringify(data, null, 2)}
                 return;
             }
 
+            // Create a header
+            const header = document.createElement('div');
+            header.className = 'agent-list-header p-2 mb-2 border-bottom';
+            header.innerHTML = `
+                <h6 class="m-0 text-uppercase text-muted small">Agents (${agents.length})</h6>
+            `;
+            agentListDiv.appendChild(header);
+
             agents.forEach(agent => {
                 const item = document.createElement('div');
-                item.className = 'agent-list-item';
+                item.className = 'agent-list-item card mb-2';
                 item.dataset.agentId = agent.agent_id;
+                
+                // Format status badge based on agent status
+                let statusBadgeClass = 'bg-primary';
+                if (agent.status === 'terminated') statusBadgeClass = 'bg-danger';
+                else if (agent.status === 'system') statusBadgeClass = 'bg-secondary';
+                
                 item.innerHTML = `
-                    <span style="display: inline-block; width: 10px; height: 10px; background-color: ${agent.color || '#ccc'}; border-radius: 50%; margin-right: 5px;"></span>
-                    ${agent.agent_id} 
-                    <small class="text-muted">(${agent.status})</small>
+                    <div class="card-body p-2">
+                        <div class="d-flex align-items-center mb-1">
+                            <span style="display: inline-block; width: 12px; height: 12px; background-color: ${agent.color || '#ccc'}; border-radius: 50%; margin-right: 8px;"></span>
+                            <h6 class="m-0 flex-grow-1">${agent.agent_id}</h6>
+                            <span class="badge ${statusBadgeClass} badge-pill">${agent.status}</span>
+                        </div>
+                        <div class="small text-muted mt-1">
+                            ${agent.current_task ? `Task: ${agent.current_task.substring(0, 15)}...` : 'No active task'}
+                        </div>
+                    </div>
                 `;
+                
                 item.onclick = () => {
                     // Highlight selection
                     document.querySelectorAll('.agent-list-item.selected').forEach(el => el.classList.remove('selected'));
@@ -2172,26 +2675,70 @@ ${JSON.stringify(data, null, 2)}
             
             // Special handling for Admin (which isn't a real agent in the database)
             if (agentId === 'Admin') {
-                content = `
-                    <div class="p-4">
-                        <div class="flex items-center mb-4">
-                            <div class="bg-blue-100 rounded-full p-2 mr-3">
-                                <i class="fas fa-user-shield text-lg text-blue-500"></i>
+                // Fetch admin token first
+                fetch('/api/tokens')
+                    .then(response => response.ok ? response.json() : Promise.reject('Failed to fetch tokens'))
+                    .then(tokenData => {
+                        const adminToken = tokenData.admin_token || 'Not available';
+                        content = `
+                            <div class="p-3">
+                                <div class="d-flex align-items-center mb-3">
+                                    <div class="bg-secondary rounded-circle p-2 me-2">
+                                        <i class="bi bi-shield-lock text-white"></i>
+                                    </div>
+                                    <h5 class="m-0">Admin</h5>
+                                    <span class="badge bg-secondary ms-2">System</span>
+                                </div>
+                                
+                                <div class="card mb-3">
+                                    <div class="card-header d-flex align-items-center">
+                                        <h6 class="m-0 flex-grow-1">Admin Token</h6>
+                                        <button class="btn btn-sm btn-outline-secondary copy-token-btn" data-token="${adminToken}">
+                                            <i class="bi bi-clipboard"></i>
+                                        </button>
+                                    </div>
+                                    <div class="card-body">
+                                        <input type="text" class="form-control form-control-sm token-input" value="${adminToken}" readonly>
+                                    </div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <h6>Description</h6>
+                                    <p class="small">The Admin user has full control over the MCP system and can manage agents and tasks.</p>
+                                </div>
+                                
+                                <button class="btn btn-primary btn-sm" onclick="createAgent()">
+                                    <i class="bi bi-plus-circle"></i> Create New Agent
+                                </button>
                             </div>
-                            <h2 class="text-xl font-semibold">Admin</h2>
-                        </div>
-                        <div class="mb-4">
-                            <span class="bg-green-100 text-green-800 text-xs font-medium px-2.5 py-0.5 rounded">
-                                system
-                            </span>
-                        </div>
-                        <div class="mb-4">
-                            <h3 class="text-sm font-semibold text-gray-500 mb-1">Description</h3>
-                            <p class="text-sm">The Admin user has full control over the MCP system and can manage agents and tasks.</p>
-                        </div>
-                    </div>
-                `;
-                detailPanel.innerHTML = content;
+                        `;
+                        detailPanel.innerHTML = content;
+                        
+                        // Set up clipboard copy
+                        document.querySelectorAll('.copy-token-btn').forEach(btn => {
+                            btn.addEventListener('click', function() {
+                                const token = this.getAttribute('data-token');
+                                navigator.clipboard.writeText(token)
+                                    .then(() => {
+                                        const originalHtml = this.innerHTML;
+                                        this.innerHTML = '<i class="bi bi-check"></i>';
+                                        setTimeout(() => {
+                                            this.innerHTML = originalHtml;
+                                        }, 2000);
+                                    })
+                                    .catch(err => console.error('Failed to copy: ', err));
+                            });
+                        });
+                    })
+                    .catch(error => {
+                        console.error('Error fetching admin token:', error);
+                        detailPanel.innerHTML = `
+                            <div class="p-3">
+                                <h5>Admin</h5>
+                                <div class="alert alert-danger">Failed to load admin token</div>
+                            </div>
+                        `;
+                    });
                 return;
             }
             
@@ -2199,21 +2746,177 @@ ${JSON.stringify(data, null, 2)}
             const nodeId = `agent_${agentId}`;
             detailPanel.innerHTML = '<div class="text-center p-3"><div class="spinner-border spinner-border-sm" role="status"></div> Loading Details...</div>'; // Show loading state
 
-            fetch(`/api/details?node_id=${encodeURIComponent(nodeId)}`)
-                .then(response => {
+            // We need both the agent details and the tokens
+            Promise.all([
+                fetch(`/api/details?node_id=${encodeURIComponent(nodeId)}`).then(response => {
                     if (!response.ok) {
                         console.error(`Error response: ${response.status} ${response.statusText}`);
                         return Promise.reject(`Failed to fetch details: ${response.status} ${response.statusText}`);
                     }
                     return response.json();
-                })
-                .then(details => {
-                    console.log('Agent details received:', details);
-                    renderAgentDetailsPanel(details); // Re-use panel rendering logic
+                }),
+                fetch('/api/tokens').then(response => response.ok ? response.json() : Promise.reject('Failed to fetch tokens'))
+            ])
+                .then(results => {
+                    const details = results[0];
+                    const tokens = results[1];
+                    
+                    // Find token for this agent
+                    let agentToken = "Not available";
+                    if (tokens && tokens.agent_tokens) {
+                        const tokenInfo = tokens.agent_tokens.find(t => t.agent_id === agentId);
+                        if (tokenInfo) {
+                            agentToken = tokenInfo.token;
+                        }
+                    }
+                    
+                    // Get agent data and assigned tasks
+                    const agentData = details.data || {};
+                    const assignedTasks = details.assigned_tasks || [];
+                    const recentActions = details.actions || [];
+                    
+                    // Create status badge
+                    let statusBadgeClass = 'bg-primary';
+                    if (agentData.status === 'terminated') statusBadgeClass = 'bg-danger';
+                    
+                    content = `
+                        <div class="p-3">
+                            <div class="d-flex align-items-center mb-3">
+                                <span style="display: inline-block; width: 16px; height: 16px; background-color: ${agentData.color || '#ccc'}; border-radius: 50%; margin-right: 10px;"></span>
+                                <h5 class="m-0 flex-grow-1">${agentId}</h5>
+                                <span class="badge ${statusBadgeClass} ms-2">${agentData.status || 'Unknown'}</span>
+                            </div>
+                            
+                            <!-- Agent Token -->
+                            <div class="card mb-3">
+                                <div class="card-header d-flex align-items-center">
+                                    <h6 class="m-0 flex-grow-1"><i class="bi bi-key"></i> Agent Token</h6>
+                                    <button class="btn btn-sm btn-outline-secondary copy-token-btn" data-token="${agentToken}">
+                                        <i class="bi bi-clipboard"></i>
+                                    </button>
+                                </div>
+                                <div class="card-body pb-2">
+                                    <input type="text" class="form-control form-control-sm token-input" value="${agentToken}" readonly>
+                                </div>
+                            </div>
+                            
+                            <!-- Agent Info -->
+                            <div class="card mb-3">
+                                <div class="card-header">
+                                    <h6 class="m-0"><i class="bi bi-info-circle"></i> Agent Information</h6>
+                                </div>
+                                <div class="card-body p-0">
+                                    <ul class="list-group list-group-flush">
+                                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                                            <span class="text-muted">Created</span>
+                                            <span>${agentData.created_at ? new Date(agentData.created_at).toLocaleString() : 'Unknown'}</span>
+                                        </li>
+                                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                                            <span class="text-muted">Working Directory</span>
+                                            <span>${agentData.working_directory || 'Not set'}</span>
+                                        </li>
+                                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                                            <span class="text-muted">Capabilities</span>
+                                            <span>${agentData.capabilities ? JSON.parse(agentData.capabilities).join(', ') : 'None'}</span>
+                                        </li>
+                                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                                            <span class="text-muted">Current Task</span>
+                                            <span>${agentData.current_task || 'None'}</span>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                            
+                            <!-- Assigned Tasks -->
+                            <div class="card mb-3">
+                                <div class="card-header d-flex justify-content-between align-items-center">
+                                    <h6 class="m-0"><i class="bi bi-list-task"></i> Assigned Tasks</h6>
+                                    <span class="badge bg-primary">${assignedTasks.length}</span>
+                                </div>
+                                <div class="card-body p-0">
+                                    ${assignedTasks.length > 0 ? `
+                                        <div class="list-group list-group-flush">
+                                            ${assignedTasks.map(task => {
+                                                let statusBadge = 'bg-warning';
+                                                if (task.status === 'completed') statusBadge = 'bg-success';
+                                                else if (task.status === 'in_progress') statusBadge = 'bg-info';
+                                                else if (task.status === 'cancelled') statusBadge = 'bg-secondary';
+                                                
+                                                return `
+                                                    <div class="list-group-item p-2">
+                                                        <div class="d-flex justify-content-between align-items-center">
+                                                            <div class="task-title text-truncate" style="max-width: 70%;">${task.title}</div>
+                                                            <span class="badge ${statusBadge}">${task.status}</span>
+                                                        </div>
+                                                        <div class="small text-muted mt-1">
+                                                            ID: ${task.task_id}
+                                                        </div>
+                                                    </div>
+                                                `;
+                                            }).join('')}
+                                        </div>
+                                    ` : `<p class="text-muted p-3 m-0">No tasks assigned</p>`}
+                                </div>
+                            </div>
+                            
+                            <!-- Recent Actions -->
+                            <div class="card mb-3">
+                                <div class="card-header">
+                                    <h6 class="m-0"><i class="bi bi-activity"></i> Recent Activity</h6>
+                                </div>
+                                <div class="card-body p-0">
+                                    ${recentActions.length > 0 ? `
+                                        <ul class="list-group list-group-flush">
+                                            ${recentActions.slice(0, 5).map(action => `
+                                                <li class="list-group-item p-2">
+                                                    <div class="small d-flex align-items-center">
+                                                        <span class="text-primary me-2">${action.action_type}</span>
+                                                        ${action.task_id ? `<span class="text-muted small">Task: ${action.task_id}</span>` : ''}
+                                                    </div>
+                                                    <div class="text-muted small">
+                                                        ${new Date(action.timestamp).toLocaleString()}
+                                                    </div>
+                                                </li>
+                                            `).join('')}
+                                        </ul>
+                                    ` : `<p class="text-muted p-3 m-0">No recent activity</p>`}
+                                </div>
+                            </div>
+                            
+                            ${agentData.status !== 'terminated' ? `
+                                <button class="btn btn-danger btn-sm" onclick="terminateAgent('${agentId}')">
+                                    <i class="bi bi-x-circle"></i> Terminate Agent
+                                </button>
+                            ` : ''}
+                        </div>
+                    `;
+                    
+                    detailPanel.innerHTML = content;
+                    
+                    // Set up clipboard copy
+                    document.querySelectorAll('.copy-token-btn').forEach(btn => {
+                        btn.addEventListener('click', function() {
+                            const token = this.getAttribute('data-token');
+                            navigator.clipboard.writeText(token)
+                                .then(() => {
+                                    const originalHtml = this.innerHTML;
+                                    this.innerHTML = '<i class="bi bi-check"></i>';
+                                    setTimeout(() => {
+                                        this.innerHTML = originalHtml;
+                                    }, 2000);
+                                })
+                                .catch(err => console.error('Failed to copy: ', err));
+                        });
+                    });
                 })
                 .catch(error => {
                     console.error(`Error fetching agent details for ${agentId}:`, error);
-                    detailPanel.innerHTML = `<p class="text-danger p-3">Error loading details for ${agentId}. See console for details.</p>`;
+                    detailPanel.innerHTML = `
+                        <div class="p-3">
+                            <h5>${agentId}</h5>
+                            <div class="alert alert-danger">Failed to load agent details: ${error}</div>
+                        </div>
+                    `;
                 });
         }
         

@@ -7,4 +7,6 @@ jinja2
 python-dotenv
 sqlite-vec
 httpx
+tabulate
+pyperclip
 mcp
