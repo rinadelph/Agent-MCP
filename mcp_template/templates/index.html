@@ -648,6 +648,33 @@
         .hierarchical-level-3 { border-color: #f39c12 !important; }
         .hierarchical-level-4 { border-color: #9b59b6 !important; }
         .hierarchical-level-5 { border-color: #1abc9c !important; }
+        
+        /* Token styling */
+        .token-input {
+            background-color: #222;
+            color: #e2e2e2;
+            border: 1px solid #444;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+        }
+
+        .token-item {
+            padding-bottom: 10px;
+            border-bottom: 1px dotted #444;
+        }
+
+        .token-item:last-child {
+            border-bottom: none;
+        }
+
+        .copy-token:hover {
+            background-color: #375a7f;
+        }
+
+        .copy-token.btn-success {
+            background-color: #00bc8c;
+            border-color: #00bc8c;
+        }
     </style>
 </head>
 <body>
@@ -705,6 +732,32 @@
                     <div class="form-check form-switch mt-2">
                         <input class="form-check-input" type="checkbox" id="auto-refresh-toggle" checked>
                         <label class="form-check-label" for="auto-refresh-toggle">Auto-refresh (10s)</label>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Token Management Section -->
+            <div class="card mb-3">
+                <div class="card-header bg-primary text-white d-flex align-items-center">
+                    <i class="bi bi-key me-1"></i> 
+                    <span class="flex-grow-1">Tokens</span>
+                    <button id="refresh-tokens" class="btn btn-sm btn-outline-light">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
+                </div>
+                <div class="card-body pb-0" id="token-container">
+                    <div class="token-item mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <strong>Admin Token</strong>
+                            <button class="btn btn-sm btn-outline-light copy-token" data-token-id="admin-token">
+                                <i class="bi bi-clipboard"></i>
+                            </button>
+                        </div>
+                        <input type="text" id="admin-token" class="form-control form-control-sm token-input" readonly>
+                    </div>
+                    
+                    <div id="agent-tokens-container">
+                        <!-- Agent tokens will be added here dynamically -->
                     </div>
                 </div>
             </div>
@@ -1224,6 +1277,91 @@
             groups: enhancedPhysicsOptions.groups
         };
 
+        // Token Management
+        function loadTokens() {
+            const tokenContainer = document.getElementById('token-container');
+            const adminToken = document.getElementById('admin-token');
+            const agentTokensContainer = document.getElementById('agent-tokens-container');
+            
+            // Show loading state
+            adminToken.value = "Loading...";
+            agentTokensContainer.innerHTML = '<div class="text-center"><div class="spinner-border spinner-border-sm" role="status"></div></div>';
+            
+            fetch('/api/tokens')
+                .then(response => response.ok ? response.json() : Promise.reject('Failed to fetch tokens'))
+                .then(data => {
+                    // Set admin token
+                    adminToken.value = data.admin_token;
+                    
+                    // Clear and populate agent tokens
+                    agentTokensContainer.innerHTML = '';
+                    
+                    if (data.agent_tokens.length === 0) {
+                        agentTokensContainer.innerHTML = '<p class="text-muted small">No agent tokens found</p>';
+                        return;
+                    }
+                    
+                    // Add each agent token
+                    data.agent_tokens.forEach(agent => {
+                        const tokenItem = document.createElement('div');
+                        tokenItem.className = 'token-item mb-3';
+                        tokenItem.innerHTML = `
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <strong>${agent.agent_id}</strong>
+                                <button class="btn btn-sm btn-outline-light copy-token" data-token-id="token-${agent.agent_id}">
+                                    <i class="bi bi-clipboard"></i>
+                                </button>
+                            </div>
+                            <input type="text" id="token-${agent.agent_id}" class="form-control form-control-sm token-input" value="${agent.token}" readonly>
+                        `;
+                        agentTokensContainer.appendChild(tokenItem);
+                    });
+                    
+                    // Initialize copy buttons
+                    initCopyButtons();
+                })
+                .catch(error => {
+                    console.error('Error loading tokens:', error);
+                    adminToken.value = "Error loading tokens";
+                    agentTokensContainer.innerHTML = '<p class="text-danger">Failed to load tokens</p>';
+                });
+        }
+
+        // Copy token to clipboard
+        function initCopyButtons() {
+            document.querySelectorAll('.copy-token').forEach(button => {
+                button.addEventListener('click', function() {
+                    const tokenId = this.getAttribute('data-token-id');
+                    const tokenInput = document.getElementById(tokenId);
+                    
+                    // Select the text
+                    tokenInput.select();
+                    tokenInput.setSelectionRange(0, 99999);
+                    
+                    // Copy to clipboard
+                    navigator.clipboard.writeText(tokenInput.value)
+                        .then(() => {
+                            // Show success feedback
+                            const originalIcon = this.innerHTML;
+                            this.innerHTML = '<i class="bi bi-check"></i>';
+                            this.classList.add('btn-success');
+                            this.classList.remove('btn-outline-light');
+                            
+                            // Reset after 2 seconds
+                            setTimeout(() => {
+                                this.innerHTML = originalIcon;
+                                this.classList.remove('btn-success');
+                                this.classList.add('btn-outline-light');
+                            }, 2000);
+                        })
+                        .catch(err => {
+                            console.error('Failed to copy:', err);
+                            alert('Failed to copy token to clipboard');
+                        });
+                });
+            });
+        }
+
         document.addEventListener('DOMContentLoaded', function() {
             initializeGraph();
             initializeTaskTreeGraph(); // Initialize task tree immediately
@@ -1233,6 +1371,17 @@
             startAutoRefresh();
             setupNavigation();
             setupLayoutButtons();
+            
+            // Load tokens
+            loadTokens();
+            
+            // Set up token refresh button
+            const refreshTokenBtn = document.getElementById('refresh-tokens');
+            if (refreshTokenBtn) {
+                refreshTokenBtn.addEventListener('click', loadTokens);
+            } else {
+                console.warn('Refresh tokens button not found in DOM');
+            }
             
             // Toggle auto-refresh
             document.getElementById('auto-refresh-toggle').addEventListener('change', function() {

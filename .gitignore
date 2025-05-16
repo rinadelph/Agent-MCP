@@ -2,6 +2,8 @@
 **/__pycache__/
 *.py[cod]
 *$py.class
+
+# Environment
 .env
 .venv
 env/
@@ -10,6 +12,38 @@ ENV/
 env.bak/
 venv.bak/
 .env.local
+
+# Distribution / packaging
+*.egg-info/
+dist/
+build/
+mcp_template.egg-info/
+
+# Local data and logs
+.agent/
+.mcp.json
+*.log
+agent_audit.log
+mcp_server.log
+uv.lock
+
+# Backup files
+*.bak
+*~
+.*.swp
+
+# Documentation drafts
+docs/TERMINAL_UI.md
+
+# Scripts in development
+scripts/
+
+# Development folder
+mcp_template_terminal_ui/
+
+# Claude memory file
+CLAUDE.md
+
 # Cleanup scripts
 cleanup.sh
 cleanup_unix.sh

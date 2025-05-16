@@ -3596,6 +3596,29 @@ def main(port: int, transport: str, project_dir: str = None, admin_token_param: 
                 logger.error(f"Error in dashboard API: {str(e)}")
                 return JSONResponse({"error": f"Dashboard API error: {str(e)}"}, status_code=500)
         
+        async def get_tokens(request):
+            """API endpoint to retrieve admin and agent tokens for the dashboard"""
+            try:
+                # We don't check for token authentication here as this endpoint is only used 
+                # on the client side for displaying tokens in the dashboard
+                
+                # Get agent tokens
+                agent_tokens = []
+                for token, data in active_agents.items():
+                    if data["status"] != "terminated":
+                        agent_tokens.append({
+                            "agent_id": data["agent_id"],
+                            "token": token
+                        })
+                
+                return JSONResponse({
+                    "admin_token": admin_token,
+                    "agent_tokens": agent_tokens
+                })
+            except Exception as e:
+                logger.error(f"Error retrieving tokens: {str(e)}")
+                return JSONResponse({"error": f"Error retrieving tokens: {str(e)}"}, status_code=500)
+        
         async def create_agent_api(request):
             global active_agents
             try:
@@ -3801,6 +3824,7 @@ def main(port: int, transport: str, project_dir: str = None, admin_token_param: 
         web_app.add_route('/api/task-tree-data', task_tree_data_endpoint)
         web_app.add_route('/api/details', get_node_details)
         web_app.add_route('/api/agents', get_agents_list)
+        web_app.add_route('/api/tokens', get_tokens)
         web_app.add_route('/api/update-task-details', update_task_details_api)
         
         # Add the SSE endpoints that Cursor requires
