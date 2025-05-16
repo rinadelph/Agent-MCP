@@ -3815,6 +3815,22 @@ def main(port: int, transport: str, project_dir: str = None, admin_token_param: 
         templates = Jinja2Templates(directory=str(templates_dir))
         web_app = Starlette()
         
+        # Task list endpoint for Task Explorer
+        async def get_all_tasks(request):
+            try:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                
+                # Fetch all tasks
+                cursor.execute("SELECT * FROM tasks ORDER BY created_at DESC")
+                tasks = [dict(row) for row in cursor.fetchall()]
+                
+                conn.close()
+                return JSONResponse(tasks)
+            except Exception as e:
+                logger.error(f"Error fetching all tasks: {e}")
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
         # Register routes on the web app
         web_app.add_route('/', dashboard_home)
         web_app.add_route('/api/dashboard', dashboard_api)
@@ -3825,6 +3841,7 @@ def main(port: int, transport: str, project_dir: str = None, admin_token_param: 
         web_app.add_route('/api/details', get_node_details)
         web_app.add_route('/api/agents', get_agents_list)
         web_app.add_route('/api/tokens', get_tokens)
+        web_app.add_route('/api/view-tasks', get_all_tasks)
         web_app.add_route('/api/update-task-details', update_task_details_api)
         
         # Add the SSE endpoints that Cursor requires

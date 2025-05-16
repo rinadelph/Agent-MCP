@@ -62,7 +62,8 @@ Follow the detailed instructions below for more information.
 - Context and knowledge sharing between agents
 - Graph visualization of agent interactions
 - Support for embedding and RAG capabilities
-- Interactive dashboard for visualizing tasks, agents and context.
+- Interactive dashboard for visualizing tasks, agents and context
+- Terminal UI for managing tokens and tasks via command line
 
 ## Project Planning with the Main Context Document (MCD)
 
@@ -243,8 +244,9 @@ After initialization, the worker will:
 
 For best results, also copy the content of [docs/INSTRUCTIONS.md](docs/INSTRUCTIONS.md) and paste it before the AUTO command.
 
-### Dashboard (Visualization Only)
+### Dashboard and Terminal UI
 
+#### Dashboard (Visualization)
 Access the dashboard at `http://localhost:8080` to visualize what's happening in your multi-agent system:
 - Monitor agent activities in real-time
 - View task status and dependencies
@@ -252,6 +254,35 @@ Access the dashboard at `http://localhost:8080` to visualize what's happening in
 - Track file operations and context sharing
 
 **Important:** The dashboard is only for visualization - you don't create or manage agents here. All agent creation and task assignment happens through your AI assistant chat.
+
+#### Terminal UI (Management)
+Agent MCP now provides two terminal interfaces for management:
+
+1. **Command-Line Interface (CLI)** - Command-based terminal tool:
+```bash
+./scripts/mcp --token your_admin_token task list
+```
+
+2. **Text User Interface (TUI)** - NEW! Interactive terminal interface with navigation:
+```bash
+# Run directly with Python
+python -m mcp_template_terminal_ui.tui
+
+# Or use the provided script
+./scripts/mcptui
+```
+
+Features:
+- Create and manage multiple MCP instances
+- View and copy tokens for easy access
+- Create, list, and manage tasks
+- Update task status and add notes
+- View and update project context
+- Interactive RAG query interface
+- Keyboard navigation and visual layout
+- Persistent instance management
+
+See the [Terminal UI Documentation](docs/TERMINAL_UI.md) for detailed usage instructions.
 
 ### Multiple Agent Sessions: Visual Guide
 
