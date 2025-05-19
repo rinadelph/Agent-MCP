@@ -28,6 +28,7 @@ dependencies = [
     "sqlite-vec",
     "httpx",
     "mcp>=1.8.1",
+    "termios",
 ]
 
 [project.optional-dependencies]
@@ -41,12 +42,12 @@ dev = [
 [tool.setuptools]
 py-modules = []
 
-[tool.setuptools.packages."agent-mcp"]
+[tool.setuptools.packages.find]
 where = ["."]
-include = ["agent-mcp", "agent-mcp.*"]
+include = ["agent_mcp*"]
 
 [tool.setuptools.package-data]
-"agent-mcp" = ["py.typed", "templates/**/*", "static/**/*"]
+"agent_mcp" = ["py.typed", "templates/**/*", "static/**/*"]
 
 [tool.rye]
 managed = true

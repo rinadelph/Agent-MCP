@@ -1,0 +1,32 @@
+{# templates/sidebar_parts/token_management_card.html #}
+{# Card displaying token information and refresh button #}
+
+<div class="card mb-3">
+    <div class="card-header bg-primary text-white d-flex align-items-center">
+        <i class="bi bi-key me-1"></i>
+        <span class="flex-grow-1">Tokens</span>
+        {# id="refresh-tokens" is used by JS to trigger token reload #}
+        <button id="refresh-tokens" class="btn btn-sm btn-outline-light">
+            <i class="bi bi-arrow-clockwise"></i>
+        </button>
+    </div>
+    <div class="card-body pb-0" id="token-container">
+        <div class="token-item mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+                <strong>Admin Token</strong>
+                {# data-token-id is used by JS for copying #}
+                <button class="btn btn-sm btn-outline-light copy-token" data-token-id="admin-token">
+                    <i class="bi bi-clipboard"></i>
+                </button>
+            </div>
+            {# id="admin-token" is where the admin token value is displayed #}
+            <input type="text" id="admin-token" class="form-control form-control-sm token-input" readonly>
+        </div>
+
+        {# id="agent-tokens-container" is where agent tokens are dynamically added by JS #}
+        <div id="agent-tokens-container">
+            <!-- Agent tokens will be added here dynamically by JavaScript -->
+            <div class="text-center"><div class="spinner-border spinner-border-sm" role="status"></div> Loading Agent Tokens...</div> {# Initial loading state #}
+        </div>
+    </div>
+</div>

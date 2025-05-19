@@ -10,3 +10,4 @@ httpx
 tabulate
 pyperclip
 mcp
+requests

@@ -1,0 +1,76 @@
+{# templates/views/task_explorer_content.html #}
+{# Contains the layout for the Task Explorer View #}
+
+{# This container's visibility is controlled by JavaScript #}
+{# Initially hidden, shown when the "Task Explorer" nav link is clicked #}
+<div id="task-explorer-container" style="display: none; width: 100%; height: 100%;">
+    {# The inner div uses CSS Grid to arrange filters, list, and details #}
+    <div id="task-explorer-view">
+        {# Left Panel: Task Filters #}
+        <div id="task-filters-panel">
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h6 class="m-0"><i class="bi bi-funnel"></i> Filters</h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label small">Status</label>
+                        <div class="d-flex flex-wrap gap-2">
+                            {# data-filter and data-value attributes used by JS #}
+                            <button class="btn btn-sm btn-outline-light task-filter-btn active" data-filter="status" data-value="all">All</button>
+                            <button class="btn btn-sm btn-outline-warning task-filter-btn" data-filter="status" data-value="pending">Pending</button>
+                            <button class="btn btn-sm btn-outline-info task-filter-btn" data-filter="status" data-value="in_progress">In Progress</button>
+                            <button class="btn btn-sm btn-outline-success task-filter-btn" data-filter="status" data-value="completed">Completed</button>
+                            <button class="btn btn-sm btn-outline-secondary task-filter-btn" data-filter="status" data-value="cancelled">Cancelled</button>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small">Priority</label>
+                        <div class="d-flex flex-wrap gap-2">
+                            {# data-filter and data-value attributes used by JS #}
+                            <button class="btn btn-sm btn-outline-light task-filter-btn active" data-filter="priority" data-value="all">All</button>
+                            <button class="btn btn-sm btn-outline-secondary task-filter-btn" data-filter="priority" data-value="low">Low</button>
+                            <button class="btn btn-sm btn-outline-primary task-filter-btn" data-filter="priority" data-value="medium">Medium</button>
+                            <button class="btn btn-sm btn-outline-danger task-filter-btn" data-filter="priority" data-value="high">High</button>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="agent-filter" class="form-label small">Assigned To</label>
+                        {# id="agent-filter" is populated and used by JS #}
+                        <select id="agent-filter" class="form-select form-select-sm">
+                            <option value="all" selected>All Agents</option>
+                            <!-- Agents will be populated via JavaScript -->
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div> {# /#task-filters-panel #}
+
+        {# Middle Panel: Task List #}
+        <div id="task-list-panel">
+            <div class="card mb-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="m-0"><i class="bi bi-list-task"></i> Tasks</h6>
+                    {# id="task-count" is updated by JS #}
+                    <span class="badge bg-primary" id="task-count">0</span>
+                </div>
+                <div class="card-body p-0">
+                    {# id="tasks-container" is where the task list is rendered by JS #}
+                    <div id="tasks-container">
+                        {# Initial loading state for the list #}
+                        <div class="text-center p-3">
+                            <div class="spinner-border spinner-border-sm" role="status"></div> Loading Tasks...
+                        </div>
+                    </div> {# /#tasks-container #}
+                </div>
+            </div>
+        </div> {# /#task-list-panel #}
+
+        {# Right Panel: Task Detail Panel #}
+        {# id="task-detail-panel" is where the details of a selected task are rendered by JS #}
+        <div id="task-detail-panel">
+            {# Initial placeholder text #}
+            <h5 class="text-muted p-3">Select a task from the list to see details.</h5>
+        </div> {# /#task-detail-panel #}
+    </div> {# /#task-explorer-view #}
+</div> {# /#task-explorer-container #}

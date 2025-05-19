@@ -1,0 +1,11 @@
+{# templates/sidebar_parts/node_details_card.html #}
+{# Card displaying details of a selected graph node #}
+
+<!-- Node Details Area -->
+<div class="card flex-grow-1"> {# flex-grow-1 allows this card to fill remaining sidebar space #}
+     <div class="card-header bg-secondary text-white"><i class="bi bi-search"></i> Node Details</div>
+     {# id="graph-node-details" is where the details content is rendered by JS #}
+     <div class="card-body overflow-auto" id="graph-node-details">
+          <p class="text-muted small p-3">Click a node in the Graph View to see details.</p> {# Added padding #}
+     </div>
+</div>

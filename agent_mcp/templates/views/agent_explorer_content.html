@@ -1,0 +1,25 @@
+{# templates/views/agent_explorer_content.html #}
+{# Contains the layout for the Agent Explorer View #}
+
+{# This container's visibility is controlled by JavaScript #}
+{# Initially hidden, shown when the "Agent Explorer" nav link is clicked #}
+<div id="agent-explorer-container" style="display: none; width: 100%; height: 100%;">
+    {# The inner div uses flexbox to arrange the list and details side-by-side #}
+    <div id="agent-explorer-view">
+        {# Left panel: Agent Master List #}
+        {# id="agent-master-list" is where the list of agents is rendered by JS #}
+        <div id="agent-master-list">
+            {# Initial loading state for the list #}
+            <div class="text-center p-3">
+                <div class="spinner-border spinner-border-sm" role="status"></div> Loading Agents...
+            </div>
+        </div> {# /#agent-master-list #}
+
+        {# Right panel: Agent Detail Panel #}
+        {# id="agent-detail-panel" is where the details of a selected agent are rendered by JS #}
+        <div id="agent-detail-panel">
+            {# Initial placeholder text #}
+            <h5 class="text-muted p-3">Select an agent from the list to see details.</h5>
+        </div> {# /#agent-detail-panel #}
+    </div> {# /#agent-explorer-view #}
+</div> {# /#agent-explorer-container #}
