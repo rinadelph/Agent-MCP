@@ -1,0 +1,14 @@
+{# templates/components/spinner_overlay.html #}
+{# Reusable spinner overlay component #}
+{#
+   Expects the following variable:
+   - spinner_id: The HTML ID for this specific spinner overlay (e.g., 'graph-spinner')
+#}
+
+{# The spinner-overlay class provides the positioning and background #}
+{# The ID is used by JavaScript to target and control this specific spinner #}
+<div class="spinner-overlay" id="{{ spinner_id }}" style="display: none;"> {# Initially hidden #}
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span> {# Generic loading text #}
+    </div>
+</div> {# /.spinner-overlay #}

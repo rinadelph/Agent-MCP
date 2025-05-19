@@ -1,0 +1,22 @@
+{# templates/sidebar_parts/navigation.html #}
+{# Sidebar navigation links to switch main content views #}
+
+<ul class="nav nav-pills flex-column mb-auto" id="dashboard-nav">
+  <li class="nav-item">
+    {# data-view attribute is used by the JavaScript to identify which view container to show #}
+    <a href="#" class="nav-link active" data-view="graph-and-task">
+      <i class="bi bi-grid-3x3-gap me-2"></i>Split View
+    </a>
+  </li>
+  <li>
+    <a href="#" class="nav-link" data-view="agent-explorer">
+      <i class="bi bi-people me-2"></i>Agent Explorer
+    </a>
+  </li>
+  <li>
+    <a href="#" class="nav-link" data-view="task-explorer">
+      <i class="bi bi-kanban me-2"></i>Task Explorer
+    </a>
+  </li>
+  {# Add other navigation links here for future views #}
+</ul>

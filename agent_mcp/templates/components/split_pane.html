@@ -1,0 +1,24 @@
+{# templates/components/split_pane.html #}
+{# Reusable component for a single pane within a split view #}
+{#
+   Expects the following variables:
+   - pane_id: The HTML ID for the main split-pane div (e.g., 'graph-view-pane')
+   - header_title: The text for the pane's header (e.g., 'Graph View')
+   - header_icon_class: The Bootstrap icon class for the header (e.g., 'bi-diagram-3')
+   - content_id: The HTML ID for the pane's content div (e.g., 'network-visualization')
+   - spinner_id: The HTML ID for the spinner overlay within this pane (e.g., 'graph-spinner')
+#}
+
+<div class="split-pane" id="{{ pane_id }}">
+    <div class="split-pane-header">
+        <h6 class="m-0"><i class="bi {{ header_icon_class }}"></i> {{ header_title }}</h6>
+        {# Add any pane-specific controls here if needed later #}
+    </div>
+    <div class="split-pane-content">
+        {# The actual content (like a graph visualization) will be rendered inside this div #}
+        <div id="{{ content_id }}" style="width: 100%; height: 100%;">
+            {# Include a spinner overlay specific to this pane #}
+            {% include 'components/spinner_overlay.html' %}
+        </div>
+    </div>
+</div> {# /.split-pane #}

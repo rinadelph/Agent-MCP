@@ -1,0 +1,723 @@
+{# templates/includes/global_styles.html #}
+<style>
+    :root {
+        --primary-color: #3498db;
+        --secondary-color: #2ecc71;
+        --warning-color: #f39c12;
+        --danger-color: #e74c3c;
+        --dark-color: #1a1a1a; /* Darker BG */
+        --light-color: #ecf0f1; /* Light Text */
+        --medium-color: #7f8c8d;
+        --border-color: #333;
+    }
+    body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        margin: 0;
+        padding: 0;
+        background-color: #2c3e50; /* Dark background */
+        color: var(--light-color); /* Light text */
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+    }
+    .header {
+        background-color: var(--dark-color);
+        color: white;
+        padding: 0.5rem 1rem; /* Reduced padding */
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-shrink: 0;
+        border-bottom: 1px solid var(--border-color);
+    }
+    .content-wrapper {
+        flex-grow: 1;
+        display: flex;
+        padding: 10px;
+        overflow: hidden; /* Prevent body scroll */
+    }
+    .sidebar {
+        background-color: #282c34; /* Darker sidebar */
+        color: var(--light-color);
+        border-radius: 8px;
+        padding: 15px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        border: 1px solid var(--border-color);
+        flex: 0 0 280px; /* Fixed width */
+        margin-right: 10px;
+        display: flex;
+        flex-direction: column;
+        overflow-y: auto; /* Allow sidebar scroll if needed */
+    }
+    .main-content {
+        background-color: var(--dark-color); /* Match body or slightly different */
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        border: 1px solid var(--border-color);
+        flex-grow: 1;
+        display: flex; /* Make it flex to contain graph */
+        padding: 5px; /* Minimal padding around graph */
+        overflow: hidden; /* Prevent content overflow */
+    }
+
+    /* Split View Styles */
+    .split-view-container {
+        display: flex;
+        width: 100%;
+        height: 100%;
+        position: relative;
+    }
+
+    .split-pane {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-width: 0; /* Allow panes to shrink below content size */
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    .split-pane-header {
+        background-color: #333842;
+        padding: 8px 12px;
+        border-bottom: 1px solid var(--border-color);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .split-pane-content {
+        flex: 1;
+        overflow: hidden;
+        position: relative;
+    }
+
+    .resize-handle {
+        width: 8px;
+        background-color: #444;
+        cursor: col-resize;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .resize-handle::after {
+        content: "";
+        width: 2px;
+        height: 30px;
+        background-color: #666;
+        border-radius: 1px;
+    }
+
+    .resize-handle:hover::after,
+    .resize-handle.active::after {
+        background-color: var(--primary-color);
+    }
+
+    #network-visualization {
+        width: 100%;
+        height: 100%;
+        border: none; /* Remove border for dark mode */
+        background-color: var(--dark-color); /* Ensure graph BG matches */
+    }
+    .card {
+        background-color: #333842; /* Darker cards */
+        border: 1px solid #444;
+        color: var(--light-color);
+        border-radius: 8px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        margin-bottom: 15px;
+    }
+     .card-header {
+        background-color: #444a57; /* Darker card header */
+        color: white;
+        border-bottom: 1px solid var(--border-color);
+        border-radius: 8px 8px 0 0 !important;
+        font-weight: 600;
+        padding: 0.5rem 1rem; /* Smaller header */
+    }
+    .card-body p {
+        margin-bottom: 0.5rem;
+    }
+    .spinner-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: rgba(255,255,255,0.7);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+        border-radius: 8px;
+    }
+    .details-panel {
+        background-color: #282c34; /* Darker details panel */
+        color: var(--light-color);
+        border-left: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 15px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        flex: 0 0 320px; /* Fixed width */
+        margin-left: 10px;
+        display: flex;
+        flex-direction: column;
+        overflow-y: auto;
+        height: calc(100vh - 120px); /* Adjusted height for tabs */
+    }
+    .details-panel h4, .details-panel h5, .details-panel h6 {
+         border-bottom: 1px solid var(--border-color);
+         color: #aab;
+    }
+    .details-panel pre {
+        background-color: #222;
+        border: 1px solid var(--border-color);
+        color: #ccc;
+        padding: 10px;
+        border-radius: 4px;
+        font-size: 0.85em;
+        max-height: 300px;
+        overflow-y: auto;
+        white-space: pre-wrap; /* Wrap long lines */
+        word-wrap: break-word;
+    }
+    .details-panel .action-item {
+        border-bottom: 1px dotted #444;
+        font-size: 0.8em;
+        margin-bottom: 5px;
+        padding-bottom: 5px;
+    }
+    .details-panel .action-item:last-child {
+        border-bottom: none;
+    }
+    .view-container {
+        display: none; /* Hide views by default */
+        height: 100%; /* Fill parent */
+        width: 100%;
+    }
+    .view-container.active {
+        display: block; /* Show active view */
+    }
+    #agent-explorer-view {
+        display: flex;
+        height: 100%;
+    }
+    #agent-master-list {
+        flex: 0 0 300px; /* Slightly wider list for the enhanced agent cards */
+        overflow-y: auto;
+        border-right: 1px solid #444;
+        padding: 15px;
+        background-color: rgba(40, 44, 52, 0.5); /* Slightly different background */
+    }
+    #agent-detail-panel {
+        flex-grow: 1;
+        overflow-y: auto;
+        padding: 0;
+        background-color: #282c34;
+    }
+    .agent-list-header {
+        margin-bottom: 12px;
+        padding-bottom: 8px;
+    }
+    .agent-list-item {
+        cursor: pointer;
+        transition: all 0.2s ease;
+        border: 1px solid #444;
+    }
+    .agent-list-item:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+    .agent-list-item.selected {
+        border-color: #3498db;
+        box-shadow: 0 0 0 1px #3498db; /* Highlight with primary color */
+    }
+
+    /* Task Explorer Styles */
+    #task-explorer-view {
+        display: grid;
+        grid-template-columns: 250px 350px 1fr;
+        grid-template-areas: "filters list details";
+        height: 100%;
+        grid-gap: 15px;
+        padding: 15px;
+    }
+    #task-filters-panel {
+        grid-area: filters;
+        overflow-y: auto;
+    }
+    #task-list-panel {
+        grid-area: list;
+        overflow-y: auto;
+    }
+    #task-detail-panel {
+        grid-area: details;
+        overflow-y: auto;
+        background-color: #282c34;
+        border-radius: 8px;
+        border: 1px solid #444;
+    }
+    .task-item {
+        cursor: pointer;
+        border-left: 4px solid #666;
+        transition: all 0.2s ease;
+        margin-bottom: 8px;
+    }
+    .task-item.status-pending { border-left-color: #f39c12; }
+    .task-item.status-in_progress { border-left-color: #3498db; }
+    .task-item.status-completed { border-left-color: #2ecc71; }
+    .task-item.status-cancelled { border-left-color: #95a5a6; }
+
+    .task-item.priority-high {
+        background-color: rgba(231, 76, 60, 0.1);
+    }
+    .task-item:hover {
+        transform: translateX(3px);
+    }
+    .task-item.selected {
+        background-color: #3a3f48;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    .task-filter-btn.active {
+        color: #fff;
+        font-weight: bold;
+    }
+    .nav-pills .nav-link {
+        color: #ccc;
+    }
+    .nav-pills .nav-link.active {
+        background-color: var(--primary-color);
+        color: white;
+    }
+    .text-muted {
+         color: #999 !important; /* Make muted text lighter */
+    }
+
+    /* Chatbox Styles */
+    .chatbox-container {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        width: 350px;
+        border-radius: 10px;
+        overflow: hidden;
+        background-color: #282c34;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        border: 1px solid var(--border-color);
+        display: flex;
+        flex-direction: column;
+        z-index: 1000;
+    }
+
+    .chatbox-header {
+        background-color: var(--dark-color);
+        color: white;
+        padding: 10px 15px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .chatbox-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 600;
+    }
+
+    .chatbox-controls {
+        display: flex;
+        gap: 10px;
+    }
+
+    .chatbox-controls button {
+        background: none;
+        border: none;
+        color: #ccc;
+        cursor: pointer;
+        padding: 0;
+        font-size: 14px;
+    }
+
+    .chatbox-controls button:hover {
+        color: white;
+    }
+
+    .chat-tabs {
+        display: flex;
+        background-color: #333842;
+        border-bottom: 1px solid var(--border-color);
+        overflow-x: auto;
+    }
+
+    .chat-tab {
+        padding: 8px 12px;
+        font-size: 13px;
+        cursor: pointer;
+        white-space: nowrap;
+        border-right: 1px solid var(--border-color);
+        background-color: #333842;
+        color: #ccc;
+    }
+
+    .chat-tab.active {
+        background-color: #444a57;
+        color: white;
+        font-weight: 500;
+    }
+
+    .chat-tab:hover:not(.active) {
+        background-color: #3a3f4b;
+    }
+
+    .new-chat-tab {
+        display: flex;
+        align-items: center;
+        padding: 8px 12px;
+        cursor: pointer;
+        color: #999;
+    }
+
+    .new-chat-tab:hover {
+        color: white;
+    }
+
+    .chatbox-messages {
+        flex-grow: 1;
+        overflow-y: auto;
+        padding: 15px;
+        height: 300px;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .message {
+        max-width: 85%;
+        padding: 8px 12px;
+        margin-bottom: 10px;
+        border-radius: 10px;
+        position: relative;
+        word-wrap: break-word;
+    }
+
+    .message.user {
+        align-self: flex-end;
+        background-color: var(--primary-color);
+        color: white;
+        border-bottom-right-radius: 2px;
+    }
+
+    .message.agent {
+        align-self: flex-start;
+        background-color: #444a57;
+        color: white;
+        border-bottom-left-radius: 2px;
+    }
+
+    .message-time {
+        font-size: 10px;
+        opacity: 0.8;
+        text-align: right;
+        margin-top: 2px;
+    }
+
+    .chatbox-input {
+        border-top: 1px solid var(--border-color);
+        padding: 10px 15px;
+        display: flex;
+        background-color: #333842;
+    }
+
+    .chatbox-input input {
+        flex-grow: 1;
+        background-color: #444a57;
+        border: 1px solid #555;
+        border-radius: 18px;
+        padding: 8px 15px;
+        color: white;
+        outline: none;
+    }
+
+    .chatbox-input input:focus {
+        border-color: var(--primary-color);
+    }
+
+    .send-button {
+        background-color: var(--primary-color);
+        color: white;
+        border: none;
+        border-radius: 50%;
+        width: 36px;
+        height: 36px;
+        margin-left: 10px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .send-button:hover {
+        background-color: #2980b9;
+    }
+
+    .chatbox-toggle {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        background-color: var(--primary-color);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        border: none;
+        z-index: 999;
+    }
+
+    .chatbox-toggle:hover {
+        background-color: #2980b9;
+    }
+
+    .chatbox-minimized {
+        height: 45px !important;
+    }
+
+    .chatbox-minimized .chatbox-messages,
+    .chatbox-minimized .chatbox-input,
+    .chatbox-minimized .chat-tabs {
+        display: none;
+    }
+
+    .chatbox-hidden {
+        display: none !important;
+    }
+
+    /* Animation */
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .chatbox-container {
+        animation: fadeIn 0.3s ease forwards;
+    }
+    /* Enhanced Tree/Graph View Styles */
+    #network-visualization, #task-network-visualization {
+        background: #23272e;
+        border-radius: 10px;
+        border: 2px solid #444;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.25);
+        min-height: 400px;
+        transition: box-shadow 0.2s;
+    }
+    #network-visualization:focus, #task-network-visualization:focus {
+        box-shadow: 0 0 0 3px var(--primary-color);
+        outline: none;
+    }
+    .vis-network {
+        border-radius: 10px;
+    }
+    .vis-label {
+        font-size: 15px !important;
+        font-weight: 500;
+        color: #fff !important;
+        text-shadow: 0 1px 2px #000, 0 0 2px #23272e;
+        padding: 2px 8px;
+        border-radius: 6px;
+        background: rgba(30,34,40,0.7);
+        box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+    }
+    .vis-selected .vis-label {
+        background: var(--primary-color) !important;
+        color: #fff !important;
+        font-weight: bold;
+    }
+    .vis-node {
+        border-width: 3px !important;
+        border-color: #888 !important;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+    }
+    .vis-node.agent {
+        background: linear-gradient(135deg, #4CAF50 60%, #2ecc71 100%) !important;
+        border-color: #2ecc71 !important;
+    }
+    .vis-node.task {
+        background: linear-gradient(135deg, #FFC107 60%, #FFA000 100%) !important;
+        border-color: #FFA000 !important;
+    }
+    .vis-node.context {
+        background: linear-gradient(135deg, #9C27B0 60%, #7B1FA2 100%) !important;
+        border-color: #7B1FA2 !important;
+    }
+    .vis-node.file {
+        background: linear-gradient(135deg, #795548 60%, #5D4037 100%) !important;
+        border-color: #5D4037 !important;
+    }
+    .vis-node.admin {
+        background: linear-gradient(135deg, #607D8B 60%, #455A64 100%) !important;
+        border-color: #455A64 !important;
+    }
+    .vis-edge {
+        width: 2.5px !important;
+        color: #aaa !important;
+        opacity: 0.8;
+    }
+    .vis-edge .vis-arrow {
+        color: var(--primary-color) !important;
+    }
+    .vis-network .vis-navigation {
+        background: rgba(44,62,80,0.9);
+        border-radius: 6px;
+        padding: 6px 10px;
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 10;
+        display: flex;
+        gap: 8px;
+    }
+    .vis-network .vis-navigation button {
+        background: var(--primary-color);
+        color: #fff;
+        border: none;
+        border-radius: 4px;
+        padding: 4px 8px;
+        font-size: 15px;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+    .vis-network .vis-navigation button:hover {
+        background: #217dbb;
+    }
+    /* Additional Enhanced Tree/Graph View Styles */
+    .vis-network:before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: radial-gradient(circle at center, rgba(52, 152, 219, 0.05) 0%, rgba(0, 0, 0, 0) 70%);
+        pointer-events: none;
+        border-radius: 10px;
+    }
+
+    .graph-controls {
+        position: absolute;
+        bottom: 15px;
+        left: 15px;
+        z-index: 10;
+        display: flex;
+        gap: 8px;
+        flex-direction: column;
+        background: rgba(44, 62, 80, 0.85);
+        padding: 8px;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    .graph-controls button {
+        background: var(--primary-color);
+        color: white;
+        border: none;
+        border-radius: 6px;
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .graph-controls button:hover {
+        background: #2980b9;
+        transform: scale(1.1);
+    }
+
+    .graph-controls .separator {
+        height: 1px;
+        background: rgba(255, 255, 255, 0.2);
+        margin: 4px 0;
+    }
+
+    /* Enhanced Node & Edge Styles */
+    .vis-node {
+        transition: transform 0.3s, box-shadow 0.3s, opacity 0.3s !important;
+    }
+
+    .vis-node:hover {
+        transform: scale(1.1) !important;
+        box-shadow: 0 0 15px rgba(52, 152, 219, 0.5) !important;
+        z-index: 10 !important;
+    }
+
+    .vis-node.highlight {
+        transform: scale(1.15) !important;
+        box-shadow: 0 0 20px rgba(231, 76, 60, 0.6) !important;
+        z-index: 20 !important;
+    }
+
+    .vis-edge {
+        transition: opacity 0.3s, width 0.3s !important;
+    }
+
+    .vis-edge.highlight {
+        width: 4px !important;
+        opacity: 1 !important;
+        z-index: 10 !important;
+    }
+
+    /* Animated label appearance */
+    @keyframes labelFadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .vis-label {
+        animation: labelFadeIn 0.3s ease-out forwards;
+    }
+
+    /* Styling for node levels in hierarchical view */
+    .hierarchical-level-0 { border-color: #e74c3c !important; }
+    .hierarchical-level-1 { border-color: #3498db !important; }
+    .hierarchical-level-2 { border-color: #2ecc71 !important; }
+    .hierarchical-level-3 { border-color: #f39c12 !important; }
+    .hierarchical-level-4 { border-color: #9b59b6 !important; }
+    .hierarchical-level-5 { border-color: #1abc9c !important; }
+
+    /* Token styling */
+    .token-input {
+        background-color: #222;
+        color: #e2e2e2;
+        border: 1px solid #444;
+        font-family: 'Courier New', monospace;
+        font-size: 0.85em;
+    }
+
+    .token-item {
+        padding-bottom: 10px;
+        border-bottom: 1px dotted #444;
+    }
+
+    .token-item:last-child {
+        border-bottom: none;
+    }
+
+    .copy-token:hover {
+        background-color: #375a7f;
+    }
+
+    .copy-token.btn-success {
+        background-color: #00bc8c;
+        border-color: #00bc8c;
+    }
+</style>

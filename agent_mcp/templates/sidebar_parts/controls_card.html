@@ -1,0 +1,26 @@
+{# templates/sidebar_parts/controls_card.html #}
+{# Card containing general dashboard controls #}
+
+<div class="card mb-3">
+    <div class="card-header bg-primary text-white">
+        <i class="bi bi-gear"></i> Controls
+    </div>
+    <div class="card-body">
+        <button id="refresh-btn" class="btn btn-sm btn-outline-light mb-2 w-100">
+            <i class="bi bi-arrow-clockwise"></i> Refresh Data
+        </button>
+        <button id="create-agent-btn" class="btn btn-sm btn-primary mb-2 w-100">
+            <i class="bi bi-plus-circle"></i> Create Agent
+        </button>
+        <div class="btn-group btn-group-sm w-100 mb-2" role="group">
+          {# data-layout attributes are used by the JavaScript to switch graph layouts #}
+          <button type="button" class="btn btn-outline-secondary layout-btn active" data-layout="physics">Physics</button>
+          <button type="button" class="btn btn-outline-secondary layout-btn" data-layout="hierarchical">Tree (LR)</button>
+        </div>
+        <div class="form-check form-switch mt-2">
+            {# id="auto-refresh-toggle" is used by JS to manage the interval #}
+            <input class="form-check-input" type="checkbox" id="auto-refresh-toggle" checked>
+            <label class="form-check-label" for="auto-refresh-toggle">Auto-refresh (10s)</label>
+        </div>
+    </div>
+</div>

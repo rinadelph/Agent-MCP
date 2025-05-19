@@ -1,0 +1,28 @@
+{# templates/views/split_view_content.html #}
+{# Contains the layout for the Split View (Graph and Task Tree) #}
+
+{# This container's visibility is controlled by JavaScript #}
+{# Initially hidden, shown when the "Split View" nav link is clicked #}
+<div class="split-view-container" id="split-view-container" style="display: none;">
+
+    {# Graph View Pane - Uses the reusable split_pane component #}
+    {% set pane_id = 'graph-view-pane' %}
+    {% set header_title = 'Graph View' %}
+    {% set header_icon_class = 'bi-diagram-3' %}
+    {% set content_id = 'network-visualization' %}
+    {% set spinner_id = 'graph-spinner' %}
+    {% include 'components/split_pane.html' %}
+
+    {# Resize Handle - Placed between the two panes #}
+    {# id="main-resize-handle" is used by JS for drag functionality #}
+    <div class="resize-handle" id="main-resize-handle"></div>
+
+    {# Task Tree View Pane - Uses the reusable split_pane component #}
+    {% set pane_id = 'task-tree-pane' %}
+    {% set header_title = 'Task Tree' %}
+    {% set header_icon_class = 'bi-list-nested' %}
+    {% set content_id = 'task-network-visualization' %}
+    {% set spinner_id = 'task-spinner' %}
+    {% include 'components/split_pane.html' %}
+
+</div> {# /.split-view-container #}
