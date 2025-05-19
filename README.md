@@ -15,7 +15,9 @@ A framework for creating multi-agent systems using the MCP (Model Context Protoc
 
 ### 2. Start MCP Server
 ```bash
-uv run -m mcp_template.main --port 8080 --project-dir /path/to/your/project
+uv run -m agent_mcp.cli -- server --port 8080 --project-dir /path/to/your/project
+# or if you have rye configured and are in the project root:
+# rye run start --project-dir /path/to/your/project
 ```
 
 **IMPORTANT**: When the server starts, it will create a database in your project's `.agent` folder. Your admin token is stored in this database. To find it:
@@ -63,7 +65,6 @@ Follow the detailed instructions below for more information.
 - Graph visualization of agent interactions
 - Support for embedding and RAG capabilities
 - Interactive dashboard for visualizing tasks, agents and context
-- Terminal UI for managing tokens and tasks via command line
 
 ## Project Planning with the Main Context Document (MCD)
 
@@ -167,7 +168,7 @@ The MCP system uses a hierarchical structure with:
 #### 1. Starting the MCP Server
 
 ```bash
-uv run -m mcp_template.main --port 8080 --project-dir /path/to/your/project
+uv run -m agent_mcp.cli -- server --port 8080 --project-dir /path/to/your/project
 ```
 
 Options:
@@ -200,7 +201,7 @@ The MCP system uses two types of tokens for authentication:
 
 **MCP Server** - This is the ONLY component you start with a command:
 ```bash
-uv run -m mcp_template.main --port 8080 --project-dir /path/to/your/project
+uv run -m agent_mcp.cli -- server --port 8080 --project-dir /path/to/your/project
 ```
 
 **Admin Agent** - Create by telling your AI assistant:
@@ -255,35 +256,6 @@ Access the dashboard at `http://localhost:8080` to visualize what's happening in
 
 **Important:** The dashboard is only for visualization - you don't create or manage agents here. All agent creation and task assignment happens through your AI assistant chat.
 
-#### Terminal UI (Management)
-Agent MCP now provides two terminal interfaces for management:
-
-1. **Command-Line Interface (CLI)** - Command-based terminal tool:
-```bash
-./scripts/mcp --token your_admin_token task list
-```
-
-2. **Text User Interface (TUI)** - NEW! Interactive terminal interface with navigation:
-```bash
-# Run directly with Python
-python -m mcp_template_terminal_ui.tui
-
-# Or use the provided script
-./scripts/mcptui
-```
-
-Features:
-- Create and manage multiple MCP instances
-- View and copy tokens for easy access
-- Create, list, and manage tasks
-- Update task status and add notes
-- View and update project context
-- Interactive RAG query interface
-- Keyboard navigation and visual layout
-- Persistent instance management
-
-See the [Terminal UI Documentation](docs/TERMINAL_UI.md) for detailed usage instructions.
-
 ### Multiple Agent Sessions: Visual Guide
 
 For complex projects, you'll have multiple chat sessions open at once:
@@ -335,7 +307,7 @@ touch MCD.md
 
 ### Step 4: Start MCP Server
 ```bash
-uv run -m mcp_template.main --port 8080 --project-dir $(pwd)
+uv run -m agent_mcp.cli -- server --port 8080 --project-dir $(pwd)
 ```
 
 ### Step 5: Find Admin Token
@@ -423,12 +395,12 @@ The Retrieval-Augmented Generation (RAG) system allows agents to access relevant
 
 1. Index project files:
    ```bash
-   python -m mcp_template.rag_indexer --project-dir /path/to/project
+   python -m agent_mcp.features.rag.indexing -- --project-dir /path/to/project
    ```
 
 2. Add documentation to the knowledge base:
    ```bash
-   python -m mcp_template.rag_indexer --add-doc /path/to/document.md
+   python -m agent_mcp.features.rag.indexing -- --add-doc /path/to/document.md
    ```
 
 ### Using RAG in Agent Workflows
@@ -437,63 +409,3 @@ Agents can query the knowledge base using:
 ```python
 response = await client.ask_project_rag("How does the authentication system work?")
 ```
-
-This returns relevant context without loading entire files, saving tokens and improving response quality.
-
-## Agent Task Assignment Strategy
-
-![Agent MCP Dashboard](assets/images/dashboard_resized.png)
-
-For optimal performance, follow these guidelines:
-
-1. **Task Granularity**: Break down large tasks into atomic units with clear inputs/outputs
-2. **Dependency Tracking**: Explicitly define task dependencies in assignment
-3. **Capability Matching**: Assign tasks to agents with relevant capabilities
-4. **Progress Monitoring**: Use explicit status updates to track task progress
-5. **Context Sharing**: Provide necessary context at assignment time to reduce later lookups
-
-Example task assignment from admin to worker:
-```
-@worker1 Please implement the login form component based on the MCD section 6.1. 
-Dependencies: None
-Artifacts: src/components/LoginForm.tsx
-Context: Uses FormKit, requires email validation
-```
-
-When creating a new worker agent:
-1. Tell your admin agent: "Create a new agent with ID 'frontend-worker' and assign it to implement the login page based on the MCD."
-2. Open a new window/session and initialize the worker agent with the AUTO prompt described earlier
-3. Make sure to include the admin token so the worker can access its assigned tasks
-
-## Components
-
-- `main.py`: MCP server implementation
-- `mcp_client.py`: Client library for connecting agents to MCP
-- `dashboard_api.py`: API endpoints for visualization
-- `rag_agent_test.py`: Example of a RAG-capable agent
-- `docs/INSTRUCTIONS.md`: Operational guidelines for agents
-
-## Environment Variables
-
-- `OPENAI_API_KEY`: Your OpenAI API key
-- `MCP_SERVER_URL`: URL of the MCP server
-- `MCP_ADMIN_TOKEN`: (Optional) Admin token for direct access
-- `MCP_PROJECT_DIR`: Path to the project directory
-
-## License
-
-MIT License
-
-## Community
-
-<div align="center">
-  <a href="https://discord.gg/7Jm7nrhjGn">
-    <img src="https://img.shields.io/badge/Discord-Join%20Our%20Community-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Join our Discord community" width="300"/>
-  </a>
-</div>
-
-Join our Discord community to discuss Agent MCP, share your projects, get help, and connect with other developers building with AI tools. We're a growing community focused on pushing the boundaries of what's possible with multi-agent systems and AI collaboration.
-
-<div align="center">
-  <h3><a href="https://discord.gg/7Jm7nrhjGn">👉 Join the Discord Server 👈</a></h3>
-</div>

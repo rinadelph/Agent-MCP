@@ -3,7 +3,7 @@
 *   **Objective:** Implement a Multi-Agent Collaboration Protocol (MCP) template for creating and managing multi-agent systems.
 *   **Scope:** Python-based MCP server and client implementation with environment variable support, dashboard visualization, and task management.
 *   **Success Criteria:** 
-    * Server can be started using `uv run -m mcp_template.main --port xxxx --project-dir xxxxx`
+    * Server can be started using `uv run -m agent_mcp.cli -- server --port xxxx --project-dir xxxxx`
     * API keys and configuration use environment variables (no hardcoded values)
     * Agents can connect to the MCP server and collaborate on tasks
     * Dashboard provides visualization of agent interactions
@@ -99,10 +99,10 @@
 
 ## 5. Implementation Details & File Structure
 
-*   **Target Directory/Module:** `/mcp_template`
+*   **Target Directory/Module:** `/agent-mcp`
 *   **File Structure Plan:**
     ```
-    /mcp_template/
+    /agent-mcp/
     ├── __init__.py
     ├── main.py                 # Server implementation
     ├── mcp_client.py           # Client library
