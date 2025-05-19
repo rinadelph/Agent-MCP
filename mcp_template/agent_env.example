@@ -1,8 +1,0 @@
-# OpenAI API Key - required for the Agents SDK
-OPENAI_API_KEY=your_openai_api_key_here
-
-# MCP Server URL
-MCP_SERVER_URL=http://localhost:8080/messages/
-
-# Optional - Admin token for direct access without prompting
-# MCP_ADMIN_TOKEN=your_admin_token_here 
