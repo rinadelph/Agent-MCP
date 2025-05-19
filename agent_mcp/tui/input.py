@@ -4,8 +4,6 @@ Provides utilities for capturing key presses including arrow keys.
 """
 
 import sys
-import termios
-import tty
 import time
 from typing import Optional, Tuple
 from enum import Enum
@@ -15,6 +13,14 @@ try:
     import msvcrt
 except ImportError:
     msvcrt = None
+
+# For Unix/Linux specific terminal control
+if sys.platform != 'win32':
+    import termios
+    import tty
+else:
+    termios = None
+    tty = None
 
 
 class Key(Enum):

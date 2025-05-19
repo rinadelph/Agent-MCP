@@ -28,7 +28,6 @@ dependencies = [
     "sqlite-vec",
     "httpx",
     "mcp>=1.8.1",
-    "termios ; sys_platform != 'win32'",
 ]
 
 [project.optional-dependencies]
