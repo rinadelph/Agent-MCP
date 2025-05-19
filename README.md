@@ -411,3 +411,17 @@ Agents can query the knowledge base using:
 ```python
 response = await client.ask_project_rag("How does the authentication system work?")
 ```
+
+## Community
+
+<div align="center">
+  <a href="https://discord.gg/7Jm7nrhjGn">
+    <img src="https://img.shields.io/badge/Discord-Join%20Our%20Community-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Join our Discord community" width="300"/>
+  </a>
+</div>
+
+Join our Discord community to discuss Agent MCP, share your projects, get help, and connect with other developers building with AI tools. We're a growing community focused on pushing the boundaries of what's possible with multi-agent systems and AI collaboration.
+
+<div align="center">
+  <h3><a href="https://discord.gg/7Jm7nrhjGn">👉 Join the Discord Server 👈</a></h3>
+</div>
