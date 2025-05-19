@@ -3,10 +3,12 @@ requires = ["setuptools>=42", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "mcp_template"
+name = "agent-mcp"
 version = "0.1.0"
 description = "Agent MCP Template for creating multi-agent systems"
-authors = [{name = "Agent MCP Team"}]
+authors = [
+    {name = "AIမ့်CURSOR", email = "accounts@cursor.com"},
+]
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
@@ -37,7 +39,31 @@ dev = [
 ]
 
 [tool.setuptools]
-packages = ["mcp_template"]
+py-modules = []
+
+[tool.setuptools.packages."agent-mcp"]
+where = ["."]
+include = ["agent-mcp", "agent-mcp.*"]
+
+[tool.setuptools.package-data]
+"agent-mcp" = ["py.typed", "templates/**/*", "static/**/*"]
+
+[tool.rye]
+managed = true
+dev-dependencies = [
+    "pytest>=8.3.2",
+    "ruff>=0.5.5",
+]
+
+[tool.rye.scripts]
+# Default run, assumes server mode
+run = { cmd = "uv run -m agent-mcp.cli -- server --port 8080 --project-dir ." }
+start = { cmd = "uv run -m agent-mcp.cli -- server --port 8080 --project-dir ." }
+cli = { cmd = "uv run -m agent-mcp.cli --" }
+test = { cmd = "pytest" }
+lint = { cmd = "ruff check ." }
+format = { cmd = "ruff format ." }
+index = { cmd = "uv run -m agent-mcp.features.rag.indexing -- --project-dir ." }
 
 [tool.black]
 line-length = 88
@@ -46,3 +72,10 @@ target-version = ["py310"]
 [tool.isort]
 profile = "black"
 line_length = 88
+
+[tool.ruff]
+# ... existing code ...
+
+[tool.ruff.lint.isort]
+known-first-party = ["agent-mcp"]
+# ... existing code ...

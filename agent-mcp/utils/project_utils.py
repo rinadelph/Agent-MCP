@@ -1,4 +1,4 @@
-# Agent-MCP/mcp_template/mcp_server_src/utils/project_utils.py
+# Agent-MCP/agent-mcp/utils/project_utils.py
 import os
 import json
 import datetime
@@ -13,10 +13,10 @@ from ..core.config import logger, get_project_dir # Import get_project_dir for M
 # For now, let's assume it might come from the main package's __init__ or a dedicated version file.
 # We can hardcode it temporarily or make it configurable.
 try:
-    # Attempt to get version from the root __init__.py of mcp_template
-    from mcp_template import __version__ as MCP_VERSION
+    # Attempt to get version from the root __init__.py of agent-mcp
+    from agent_mcp import __version__ as MCP_VERSION
 except ImportError:
-    logger.warning("Could not import __version__ from mcp_template. Using default '0.1.0'.")
+    logger.warning("Could not import __version__ from agent_mcp. Using default '0.1.0'.")
     MCP_VERSION = "0.1.0" # Fallback, matches original main.py:1041
 
 # Original location: main.py lines 876-929 (init_agent_directory)
@@ -34,18 +34,18 @@ def init_agent_directory(project_dir_str: str) -> Optional[Path]:
 
     # Validate that the project directory is not the MCP directory itself
     # This logic needs to correctly identify the MCP codebase root.
-    # Assuming this file is at: Agent-MCP/mcp_template/mcp_server_src/utils/project_utils.py
+    # Assuming this file is at: Agent-MCP/agent-mcp/utils/project_utils.py
     # Then, __file__.resolve() gives the path to this file.
     # .parent -> .../utils
     # .parent.parent -> .../mcp_server_src
-    # .parent.parent.parent -> .../mcp_template (This is the root of the agent code package)
+    # .parent.parent.parent -> .../agent-mcp (This is the root of the agent code package)
     # .parent.parent.parent.parent -> .../Agent-MCP (This is the repository root)
     # The original check was against `Path(__file__).resolve().parent.parent` from `main.py`
-    # which would be `mcp_template`.
-    mcp_codebase_root_for_check = Path(__file__).resolve().parent.parent.parent # This should point to mcp_template
+    # which would be `agent-mcp`.
+    agent_mcp_codebase_root_for_check = Path(__file__).resolve().parent.parent.parent # This should point to agent-mcp
 
     # Original main.py line 880-884
-    if project_path == mcp_codebase_root_for_check or project_path in mcp_codebase_root_for_check.parents:
+    if project_path == agent_mcp_codebase_root_for_check or project_path in agent_mcp_codebase_root_for_check.parents:
         # This warning matches the original behavior.
         logger.warning(f"WARNING: Initializing .agent in the MCP directory itself ({project_path}) or its parent is not recommended!")
         logger.warning(f"Please specify a project directory that is NOT the MCP codebase.")
