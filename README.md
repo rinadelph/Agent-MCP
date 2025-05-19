@@ -17,7 +17,7 @@ A framework for creating multi-agent systems using the MCP (Model Context Protoc
 
 ### 2. Start MCP Server
 ```bash
-uv run -m agent_mcp.cli -- server --port 8080 --project-dir /path/to/your/project
+uv run -m agent_mcp.cli --port 8080 --project-dir /path/to/your/project
 # or if you have rye configured and are in the project root:
 # rye run start --project-dir /path/to/your/project
 ```
