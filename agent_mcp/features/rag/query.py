@@ -117,43 +117,29 @@ async def query_rag_system(query_text: str) -> str:
                     query_embedding = response.data[0].embedding
                     query_embedding_json = json.dumps(query_embedding)
 
-                    # Search Vector Table (main.py:1495-1502)
-                    k_results = 5 # Number of results to retrieve
-                    # The original query used `k = ?2`. sqlite-vec's `MATCH` clause takes `k` as a parameter.
-                    # The exact syntax for parameterizing `k` in `MATCH ... AND k = ?` might vary
-                    # or might not be directly supported. It's often part of the `LIMIT` clause or intrinsic to `MATCH`.
-                    # Assuming `sqlite-vec` supports `LIMIT` correctly with `MATCH`.
-                    # Let's adjust to a more standard way or how `sqlite-vec` expects it.
-                    # If `k` is part of `MATCH`, it's usually `knn_search(embedding, k)`.
-                    # The original query `WHERE r.embedding MATCH ?1 AND k = ?2 ORDER BY r.distance`
-                    # implies `k` is a parameter to the MATCH.
-                    # For `vec0`, the `k` parameter is typically part of the `MATCH` clause itself or handled by `LIMIT`.
-                    # The original query seems to be using a specific syntax for `vec0`.
-                    # Let's assume the original query structure was correct for their sqlite-vec version.
-                    # `WHERE r.embedding MATCH json_extract(?, '$') AND k = ?`
-                    # The `json_extract` might be needed if `?1` is a JSON string.
-                    # `vec0` expects the vector directly.
+                    # Search Vector Table with metadata
+                    k_results = 10 # Increased to get more diverse results
                     sql_vector_search = """
-                        SELECT c.chunk_text, c.source_type, c.source_ref, r.distance
+                        SELECT c.chunk_text, c.source_type, c.source_ref, c.metadata, r.distance
                         FROM rag_embeddings r
                         JOIN rag_chunks c ON r.rowid = c.chunk_id
                         WHERE r.embedding MATCH ? 
                         ORDER BY r.distance
                         LIMIT ? 
-                    """ # Using LIMIT for 'k' is more standard for vec0 if k isn't part of MATCH syntax.
-                      # The original query `AND k = ?2` might be specific to a version or a different VSS extension.
-                      # For `vec0`, you usually pass the query vector and limit results.
-                      # The original code `WHERE r.embedding MATCH ?1 AND k = ?2` is unusual.
-                      # `vec0` queries are typically like `WHERE vss_search(embedding, query_vector(?1), k_value(?2))`
-                      # or `WHERE embedding MATCH ?1 LIMIT ?2`.
-                      # Given `MATCH ?1`, `LIMIT ?2` is the most probable correct interpretation for `vec0`.
-                    
-                    # The original query was:
-                    # WHERE r.embedding MATCH ?1 AND k = ?2 ORDER BY r.distance
-                    # For `vec0`, `MATCH` takes the query vector. `k` is not part of `MATCH`.
-                    # So, we use `LIMIT`.
+                    """
                     cursor.execute(sql_vector_search, (query_embedding_json, k_results))
-                    vector_search_results = [dict(row) for row in cursor.fetchall()]
+                    raw_results = cursor.fetchall()
+                    
+                    # Process results to parse metadata
+                    for row in raw_results:
+                        result = dict(row)
+                        # Parse metadata JSON if present
+                        if result.get('metadata'):
+                            try:
+                                result['metadata'] = json.loads(result['metadata'])
+                            except json.JSONDecodeError:
+                                result['metadata'] = None
+                        vector_search_results.append(result)
                 else:
                     logger.warning("RAG Query: 'rag_embeddings' table not found. Skipping vector search.")
             except sqlite3.Error as e_vec_sql:
@@ -199,8 +185,27 @@ async def query_rag_system(query_text: str) -> str:
             context_parts.append("--- Indexed Project Knowledge (Vector Search Results) ---")
             for i, item in enumerate(vector_search_results):
                 chunk_text = item['chunk_text']
-                source_info = f"Source Type: {item['source_type']}, Reference: {item['source_ref']}"
-                distance = item.get('distance', 'N/A') # Distance might not always be present depending on VSS
+                source_type = item['source_type']
+                source_ref = item['source_ref']
+                metadata = item.get('metadata', {})
+                distance = item.get('distance', 'N/A')
+                
+                # Enhanced source info with metadata
+                source_info = f"Source Type: {source_type}, Reference: {source_ref}"
+                
+                # Add code-specific metadata if available
+                if metadata and source_type in ['code', 'code_summary']:
+                    if metadata.get('language'):
+                        source_info += f", Language: {metadata['language']}"
+                    if metadata.get('section_type'):
+                        source_info += f", Section: {metadata['section_type']}"
+                    if metadata.get('entities'):
+                        entity_names = [e.get('name', '') for e in metadata['entities']]
+                        if entity_names:
+                            source_info += f", Contains: {', '.join(entity_names[:3])}"
+                            if len(entity_names) > 3:
+                                source_info += f" (+{len(entity_names)-3} more)"
+                
                 entry_text = f"Retrieved Chunk {i+1} (Similarity/Distance: {distance}):\n{source_info}\nContent:\n{chunk_text}\n"
                 chunk_tokens = len(entry_text.split())
                 if current_token_count + chunk_tokens < MAX_CONTEXT_TOKENS:

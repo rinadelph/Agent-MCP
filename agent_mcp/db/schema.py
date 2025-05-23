@@ -109,10 +109,11 @@ def init_database() -> None:
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS rag_chunks (
                 chunk_id INTEGER PRIMARY KEY AUTOINCREMENT, -- Matches rowid for vec0 table
-                source_type TEXT NOT NULL, -- e.g., 'markdown', 'context', 'filemeta', 'codefile'
+                source_type TEXT NOT NULL, -- e.g., 'markdown', 'context', 'filemeta', 'codefile', 'code', 'code_summary'
                 source_ref TEXT NOT NULL,  -- Filepath, context_key, or other reference
                 chunk_text TEXT NOT NULL,
-                indexed_at TEXT NOT NULL
+                indexed_at TEXT NOT NULL,
+                metadata TEXT -- JSON object with chunk-specific metadata (entities, language, etc.)
             )
         ''')
         # Index for rag_chunks (Original main.py line 352)
@@ -130,9 +131,10 @@ def init_database() -> None:
         # Initialize default timestamps if not present (Original main.py lines 360-362)
         default_meta_entries = [
             ('last_indexed_markdown', '1970-01-01T00:00:00Z'),
+            ('last_indexed_code', '1970-01-01T00:00:00Z'),     # NEW for code-aware indexing
             ('last_indexed_context', '1970-01-01T00:00:00Z'),
             ('last_indexed_filemeta', '1970-01-01T00:00:00Z'),
-            ('last_indexed_tasks', '1970-01-01T00:00:00Z')  # NEW for System 8
+            ('last_indexed_tasks', '1970-01-01T00:00:00Z')     # NEW for System 8
             # Add other source types here as they are supported for indexing
         ]
         cursor.executemany("INSERT OR IGNORE INTO rag_meta (meta_key, meta_value) VALUES (?, ?)", default_meta_entries)
