@@ -6,6 +6,7 @@ import json
 import hashlib
 import glob
 import os
+import sqlite3
 from pathlib import Path
 from typing import List, Dict, Tuple, Any, Optional, NoReturn
 
@@ -28,6 +29,10 @@ from ...external.openai_service import get_openai_client # To get the initialize
 
 # Import chunking functions from this RAG feature package
 from .chunking import simple_chunker, markdown_aware_chunker
+from .code_chunking import (
+    chunk_code_aware, detect_language_family, extract_code_entities,
+    create_file_summary, CODE_EXTENSIONS, DOCUMENT_EXTENSIONS
+)
 
 # Original location: main.py lines 512 - 826 (run_rag_indexing_periodically function and its logic)
 
@@ -156,14 +161,17 @@ async def run_rag_indexing_periodically(interval_seconds: int = 300, *, task_sta
             current_project_dir = get_project_dir() # From config (main.py:537)
             sources_to_check: List[Tuple[str, str, str, Any, str]] = [] # type, ref, content, mod_time/iso, hash
 
-            # 1. Scan Markdown Files (Original main.py:540-582)
+            # 1. Scan Markdown Files and Code Files
             last_md_time_str = last_indexed_timestamps.get('last_indexed_markdown', '1970-01-01T00:00:00Z')
+            last_code_time_str = last_indexed_timestamps.get('last_indexed_code', '1970-01-01T00:00:00Z')
             # Ensure timezone awareness for comparison if ISO strings have 'Z' or offset
             last_md_timestamp = datetime.datetime.fromisoformat(last_md_time_str.replace('Z', '+00:00')).timestamp()
+            last_code_timestamp = datetime.datetime.fromisoformat(last_code_time_str.replace('Z', '+00:00')).timestamp()
             max_md_mod_timestamp = last_md_timestamp
+            max_code_mod_timestamp = last_code_timestamp
 
+            # Find all markdown files
             all_md_files_found = []
-            # glob pattern from main.py:556
             for md_file_path_str in glob.glob(str(current_project_dir / "**/*.md"), recursive=True):
                 md_path_obj = Path(md_file_path_str)
                 should_ignore = False
@@ -177,13 +185,25 @@ async def run_rag_indexing_periodically(interval_seconds: int = 300, *, task_sta
             
             logger.info(f"Found {len(all_md_files_found)} markdown files to consider for indexing (after filtering ignored dirs).")
 
+            # Find all code files
+            all_code_files_found = []
+            for extension in CODE_EXTENSIONS:
+                for code_file_path_str in glob.glob(str(current_project_dir / f"**/*{extension}"), recursive=True):
+                    code_path_obj = Path(code_file_path_str)
+                    should_ignore = False
+                    for part in code_path_obj.parts:
+                        if part in IGNORE_DIRS_FOR_INDEXING or (part.startswith('.') and part not in ['.', '..']):
+                            should_ignore = True
+                            break
+                    if not should_ignore:
+                        all_code_files_found.append(code_path_obj)
+            
+            logger.info(f"Found {len(all_code_files_found)} code files to consider for indexing (after filtering ignored dirs).")
+
+            # Process markdown files
             for md_path_obj in all_md_files_found:
                 try:
                     mod_time = md_path_obj.stat().st_mtime
-                    # Optimization: check mod_time before reading and hashing (main.py:572)
-                    # If mod_time <= last_md_timestamp, we still need to check hash for content changes
-                    # The original code only added if mod_time > last_md_time.
-                    # A more robust check involves hashing. We'll collect all and filter by hash later.
                     content = md_path_obj.read_text(encoding='utf-8')
                     normalized_path = str(md_path_obj.relative_to(current_project_dir).as_posix())
                     current_hash = hashlib.sha256(content.encode('utf-8')).hexdigest()
@@ -192,6 +212,19 @@ async def run_rag_indexing_periodically(interval_seconds: int = 300, *, task_sta
                         max_md_mod_timestamp = mod_time
                 except Exception as e:
                     logger.warning(f"Failed to read or process markdown file {md_path_obj}: {e}")
+
+            # Process code files
+            for code_path_obj in all_code_files_found:
+                try:
+                    mod_time = code_path_obj.stat().st_mtime
+                    content = code_path_obj.read_text(encoding='utf-8')
+                    normalized_path = str(code_path_obj.relative_to(current_project_dir).as_posix())
+                    current_hash = hashlib.sha256(content.encode('utf-8')).hexdigest()
+                    sources_to_check.append(('code', normalized_path, content, mod_time, current_hash))
+                    if mod_time > max_code_mod_timestamp:
+                        max_code_mod_timestamp = mod_time
+                except Exception as e:
+                    logger.warning(f"Failed to read or process code file {code_path_obj}: {e}")
 
             # 2. Scan Project Context (Original main.py:585-603)
             last_ctx_time_str = last_indexed_timestamps.get('last_indexed_context', '1970-01-01T00:00:00Z')
@@ -275,22 +308,41 @@ async def run_rag_indexing_periodically(interval_seconds: int = 300, *, task_sta
 
                 # Generate chunks and prepare for embedding (Original main.py:631-647)
                 all_chunks_texts_to_embed: List[str] = []
-                chunk_source_metadata_map: List[Tuple[str, str, str]] = [] # type, ref, current_hash for each chunk
+                chunk_source_metadata_map: List[Tuple[str, str, str, Dict[str, Any]]] = [] # type, ref, current_hash, metadata for each chunk
 
                 for source_type, source_ref, content, current_hash_of_source in sources_to_process_for_embedding:
-                    chunks: List[str]
-                    if source_type == 'markdown':
-                        chunks = markdown_aware_chunker(content)
-                    else: # For context or other flat text types
-                        chunks = simple_chunker(content)
+                    chunks_with_metadata: List[Tuple[str, Dict[str, Any]]] = []
                     
-                    if not chunks:
+                    if source_type == 'markdown':
+                        # Simple chunking for markdown
+                        text_chunks = markdown_aware_chunker(content)
+                        chunks_with_metadata = [(chunk, {'source_type': 'markdown'}) for chunk in text_chunks]
+                    elif source_type == 'code':
+                        # Code-aware chunking for code files
+                        file_path = current_project_dir / source_ref
+                        
+                        # First, create a file summary
+                        entities = extract_code_entities(content, file_path)
+                        file_summary = create_file_summary(content, file_path, entities)
+                        summary_text = f"File: {source_ref}\n{json.dumps(file_summary, indent=2)}"
+                        chunks_with_metadata.append((summary_text, {'source_type': 'code_summary', **file_summary}))
+                        
+                        # Then chunk the code
+                        code_chunks = chunk_code_aware(content, file_path)
+                        chunks_with_metadata.extend(code_chunks)
+                    else:
+                        # Simple chunking for other types (context, etc.)
+                        text_chunks = simple_chunker(content)
+                        chunks_with_metadata = [(chunk, {'source_type': source_type}) for chunk in text_chunks]
+                    
+                    if not chunks_with_metadata:
                         logger.warning(f"No chunks generated for {source_type}: {source_ref}. Skipping.")
                         continue
                     
-                    for chunk_text in chunks:
+                    for chunk_text, metadata in chunks_with_metadata:
                         all_chunks_texts_to_embed.append(chunk_text)
-                        chunk_source_metadata_map.append((source_type, source_ref, current_hash_of_source))
+                        # Store metadata along with source info
+                        chunk_source_metadata_map.append((source_type, source_ref, current_hash_of_source, metadata))
                 
                 if all_chunks_texts_to_embed:
                     logger.info(f"Generated {len(all_chunks_texts_to_embed)} new chunks for embedding.")
@@ -363,11 +415,13 @@ async def run_rag_indexing_periodically(interval_seconds: int = 300, *, task_sta
                                 logger.warning(f"Skipping chunk {i} for DB insertion due to missing embedding.")
                                 continue
                             
-                            source_type, source_ref, current_hash_of_source = chunk_source_metadata_map[i]
+                            source_type, source_ref, current_hash_of_source, chunk_metadata = chunk_source_metadata_map[i]
                             try:
+                                # Store chunk with optional metadata
+                                metadata_json = json.dumps(chunk_metadata) if chunk_metadata else None
                                 cursor.execute(
-                                    "INSERT INTO rag_chunks (source_type, source_ref, chunk_text, indexed_at) VALUES (?, ?, ?, ?)",
-                                    (source_type, source_ref, chunk_text_to_insert, indexed_at_iso)
+                                    "INSERT INTO rag_chunks (source_type, source_ref, chunk_text, indexed_at, metadata) VALUES (?, ?, ?, ?, ?)",
+                                    (source_type, source_ref, chunk_text_to_insert, indexed_at_iso, metadata_json)
                                 )
                                 chunk_rowid = cursor.lastrowid # This is the chunk_id
                                 
@@ -404,7 +458,9 @@ async def run_rag_indexing_periodically(interval_seconds: int = 300, *, task_sta
             # The 'embeddings_api_successful' flag covers this.
             if 'embeddings_api_successful' not in locals() or embeddings_api_successful: # Check if flag exists and is True
                 new_md_time_iso = datetime.datetime.fromtimestamp(max_md_mod_timestamp).isoformat() + "Z"
+                new_code_time_iso = datetime.datetime.fromtimestamp(max_code_mod_timestamp).isoformat() + "Z"
                 cursor.execute("INSERT OR REPLACE INTO rag_meta (meta_key, meta_value) VALUES (?, ?)", ('last_indexed_markdown', new_md_time_iso))
+                cursor.execute("INSERT OR REPLACE INTO rag_meta (meta_key, meta_value) VALUES (?, ?)", ('last_indexed_code', new_code_time_iso))
                 cursor.execute("INSERT OR REPLACE INTO rag_meta (meta_key, meta_value) VALUES (?, ?)", ('last_indexed_context', max_ctx_mod_time_iso))
                 cursor.execute("INSERT OR REPLACE INTO rag_meta (meta_key, meta_value) VALUES (?, ?)", ('last_indexed_tasks', max_task_mod_time_iso))
                 # Add other source types here
@@ -476,7 +532,7 @@ async def index_task_data(task_id: str, task_data: Dict[str, Any]) -> None:
         content = format_task_for_embedding(task_data)
         
         # Generate chunks (tasks are usually small, so one chunk is fine)
-        chunks = simple_chunker(content, max_chunk_size=2000)
+        chunks = simple_chunker(content, chunk_size=2000)
         
         # Delete existing chunks for this task
         cursor.execute(
