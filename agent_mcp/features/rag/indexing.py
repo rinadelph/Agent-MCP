@@ -74,13 +74,22 @@ async def _get_embeddings_batch_openai(
         return False
 
     try:
+        # Validate batch_chunks before sending to API
+        validated_chunks = []
+        for chunk in batch_chunks:
+            if isinstance(chunk, str) and chunk.strip():
+                validated_chunks.append(chunk)
+            else:
+                logger.warning(f"Invalid chunk in batch: {type(chunk)} - {repr(chunk)[:50]}")
+                validated_chunks.append(" ")  # Use single space as fallback to maintain batch size
+        
         # Create a separate async client for each batch for true concurrency
         # Using async client directly with HTTPX to ensure truly parallel requests
         async_client = openai.AsyncOpenAI(api_key=openai_api_key)
         response = await async_client.embeddings.create(
-            input=batch_chunks,
-            model=EMBEDDING_MODEL,
-            dimensions=EMBEDDING_DIMENSION # Ensure this matches model capabilities
+            input=validated_chunks,
+            model=EMBEDDING_MODEL
+            # Removed dimensions parameter - let the model use its default
         )
         # Store results directly in the provided results list
         for j, item_embedding in enumerate(response.data):
@@ -340,9 +349,13 @@ async def run_rag_indexing_periodically(interval_seconds: int = 300, *, task_sta
                         continue
                     
                     for chunk_text, metadata in chunks_with_metadata:
-                        all_chunks_texts_to_embed.append(chunk_text)
-                        # Store metadata along with source info
-                        chunk_source_metadata_map.append((source_type, source_ref, current_hash_of_source, metadata))
+                        # Validate chunk before adding - skip empty or whitespace-only chunks
+                        if chunk_text and chunk_text.strip():
+                            all_chunks_texts_to_embed.append(chunk_text.strip())
+                            # Store metadata along with source info
+                            chunk_source_metadata_map.append((source_type, source_ref, current_hash_of_source, metadata))
+                        else:
+                            logger.warning(f"Skipping empty chunk from {source_type}: {source_ref}")
                 
                 if all_chunks_texts_to_embed:
                     logger.info(f"Generated {len(all_chunks_texts_to_embed)} new chunks for embedding.")

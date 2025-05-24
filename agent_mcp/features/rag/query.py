@@ -111,8 +111,8 @@ async def query_rag_system(query_text: str) -> str:
                     # Embed the query (main.py:1487-1492)
                     response = openai_client.embeddings.create(
                         input=[query_text],
-                        model=EMBEDDING_MODEL,
-                        dimensions=EMBEDDING_DIMENSION
+                        model=EMBEDDING_MODEL
+                        # Removed dimensions parameter - let the model use its default
                     )
                     query_embedding = response.data[0].embedding
                     query_embedding_json = json.dumps(query_embedding)
