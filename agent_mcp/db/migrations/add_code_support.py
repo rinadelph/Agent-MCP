@@ -62,13 +62,23 @@ def migrate_database():
             cursor.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='rag_embeddings'")
             create_sql = cursor.fetchone()
             
-            if create_sql and '1024' in create_sql[0] and EMBEDDING_DIMENSION == 3072:
-                logger.warning("rag_embeddings table uses 1024 dimensions but config uses 3072.")
-                logger.warning("To use 3072 dimensions, you need to:")
+            # Extract current dimension from SQL
+            current_dim = None
+            if '1024' in create_sql[0]:
+                current_dim = 1024
+            elif '1536' in create_sql[0]:
+                current_dim = 1536
+            elif '3072' in create_sql[0]:
+                current_dim = 3072
+            
+            if current_dim and current_dim != EMBEDDING_DIMENSION:
+                logger.warning(f"rag_embeddings table uses {current_dim} dimensions but config uses {EMBEDDING_DIMENSION}.")
+                logger.warning(f"To use {EMBEDDING_DIMENSION} dimensions, you need to:")
                 logger.warning("1. Delete all existing embeddings: DELETE FROM rag_embeddings;")
                 logger.warning("2. Drop and recreate the table: DROP TABLE rag_embeddings;")
                 logger.warning("3. Re-run the server to recreate with new dimensions")
                 logger.warning("4. Let the indexer re-generate all embeddings")
+                logger.warning("Note: The server will automatically handle this when dimension changes are detected.")
             elif create_sql and str(EMBEDDING_DIMENSION) in create_sql[0]:
                 logger.info(f"rag_embeddings table already uses {EMBEDDING_DIMENSION} dimensions.")
             else:
