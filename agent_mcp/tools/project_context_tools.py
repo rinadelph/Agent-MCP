@@ -127,24 +127,21 @@ async def view_project_context_tool_impl(arguments: Dict[str, Any]) -> List[mcp_
 # --- update_project_context tool ---
 # Original logic from main.py: lines 1468-1500 (update_project_context_tool function)
 async def update_project_context_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.TextContent]:
-    admin_auth_token = arguments.get("token")
+    auth_token = arguments.get("token")
     context_key_to_update = arguments.get("context_key")
     context_value_to_set = arguments.get("context_value") # This is Any, will be JSON serialized
     description_for_context = arguments.get("description") # Optional string
 
-    if not verify_token(admin_auth_token, "admin"): # main.py:1473
-        return [mcp_types.TextContent(type="text", text="Unauthorized: Admin token required")]
-
-    requesting_admin_id = get_agent_id(admin_auth_token) # Should be "admin" (main.py:1476)
-    if not requesting_admin_id: # Should not happen if verify_token passed
-        logger.error("Admin token verified but could not get admin_id. This is unexpected.")
-        return [mcp_types.TextContent(type="text", text="Internal authorization error.")]
+    # Modified: Allow any agent with a valid token, not just admin
+    requesting_agent_id = get_agent_id(auth_token)
+    if not requesting_agent_id:
+        return [mcp_types.TextContent(type="text", text="Unauthorized: Valid token required")]
         
     if not context_key_to_update or context_value_to_set is None: # Value can be null, but not missing
         return [mcp_types.TextContent(type="text", text="Error: context_key and context_value are required.")]
 
     # Log audit (main.py:1477)
-    log_audit(requesting_admin_id, "update_project_context", 
+    log_audit(requesting_agent_id, "update_project_context", 
               {"context_key": context_key_to_update, "value_type": str(type(context_value_to_set)), "description": description_for_context})
 
     conn = None
@@ -210,11 +207,11 @@ def register_project_context_tools():
 
     register_tool(
         name="update_project_context", # main.py:1825
-        description="Add or update a project context entry with a specific key. The value can be any JSON-serializable type. Admin only.",
+        description="Add or update a project context entry with a specific key. The value can be any JSON-serializable type.",
         input_schema={ # From main.py:1826-1839
             "type": "object",
             "properties": {
-                "token": {"type": "string", "description": "Admin authentication token"},
+                "token": {"type": "string", "description": "Authentication token (agent or admin)"},
                 "context_key": {"type": "string", "description": "The exact key for the context entry (e.g., 'api.service_x.url')."},
                 "context_value": {"type": "object", "description": "The JSON-serializable value to set (e.g., string, number, list, dict).", "additionalProperties": True}, # Allow any valid JSON as value
                 "description": {"type": "string", "description": "Optional description of this context entry."}

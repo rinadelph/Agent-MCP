@@ -7,6 +7,71 @@ from .connection import get_db_connection, check_vss_loadability, is_vss_loadabl
 # No direct need for globals here, VSS loadability is checked via connection module functions.
 
 # Original location: main.py lines 265-370 (init_database function)
+def check_embedding_dimension_compatibility(conn: sqlite3.Connection) -> bool:
+    """
+    Check if the current rag_embeddings table dimension matches the configured dimension.
+    Returns True if compatible or table doesn't exist, False if incompatible.
+    """
+    cursor = conn.cursor()
+    
+    # Check if rag_embeddings exists
+    cursor.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='rag_embeddings'")
+    result = cursor.fetchone()
+    
+    if result is None:
+        # Table doesn't exist, so it's compatible (will be created with correct dimension)
+        return True
+    
+    create_sql = result[0]
+    
+    # Check if the current dimension matches the configured dimension
+    if f"FLOAT[{EMBEDDING_DIMENSION}]" in create_sql:
+        return True
+    
+    # Check for old dimensions
+    if "FLOAT[1024]" in create_sql or "FLOAT[1536]" in create_sql or "FLOAT[3072]" in create_sql:
+        current_dim = None
+        if "FLOAT[1024]" in create_sql:
+            current_dim = 1024
+        elif "FLOAT[1536]" in create_sql:
+            current_dim = 1536
+        elif "FLOAT[3072]" in create_sql:
+            current_dim = 3072
+        
+        if current_dim != EMBEDDING_DIMENSION:
+            logger.warning(f"Embedding dimension mismatch: table has {current_dim}, config expects {EMBEDDING_DIMENSION}")
+            # If it's 1024 (very old version), always recreate
+            if current_dim == 1024:
+                logger.info("Detected very old embedding dimension (1024), will recreate table")
+            return False
+    
+    return True
+
+
+def handle_embedding_dimension_change(conn: sqlite3.Connection) -> None:
+    """
+    Handle embedding dimension changes by dropping and recreating the embeddings table.
+    This will cause all embeddings to be regenerated.
+    """
+    cursor = conn.cursor()
+    
+    logger.warning("Handling embedding dimension change...")
+    
+    # Delete all embeddings
+    cursor.execute("DELETE FROM rag_embeddings")
+    
+    # Drop the old table
+    cursor.execute("DROP TABLE IF EXISTS rag_embeddings")
+    
+    # Clear all stored hashes to force re-indexing
+    cursor.execute("DELETE FROM rag_meta WHERE meta_key LIKE 'hash_%'")
+    
+    # Reset last indexed timestamps to force re-indexing
+    cursor.execute("UPDATE rag_meta SET meta_value = '1970-01-01T00:00:00Z' WHERE meta_key LIKE 'last_indexed_%'")
+    
+    logger.info("Cleared embeddings and reset indexing timestamps for dimension change")
+
+
 def init_database() -> None:
     """
     Initializes the SQLite database and creates tables if they don't exist.
@@ -143,6 +208,11 @@ def init_database() -> None:
         # RAG Embeddings Table (Virtual Table using sqlite-vec)
         # (Original main.py lines 365-379)
         if vss_is_actually_loadable:
+            # Check if we need to handle dimension changes
+            if not check_embedding_dimension_compatibility(conn):
+                logger.warning("Embedding dimension has changed. Recreating embeddings table...")
+                handle_embedding_dimension_change(conn)
+            
             try:
                 # Explicitly define the embedding column and its dimensions.
                 # The table name `rag_embeddings` and `vec0` module are from the original.
