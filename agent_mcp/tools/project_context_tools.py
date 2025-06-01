@@ -128,17 +128,29 @@ async def view_project_context_tool_impl(arguments: Dict[str, Any]) -> List[mcp_
 # Original logic from main.py: lines 1468-1500 (update_project_context_tool function)
 async def update_project_context_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.TextContent]:
     auth_token = arguments.get("token")
+    
+    # Support both single and bulk operations
     context_key_to_update = arguments.get("context_key")
-    context_value_to_set = arguments.get("context_value") # This is Any, will be JSON serialized
-    description_for_context = arguments.get("description") # Optional string
-
-    # Modified: Allow any agent with a valid token, not just admin
+    context_value_to_set = arguments.get("context_value")
+    description_for_context = arguments.get("description")
+    updates_list = arguments.get("updates")  # For bulk operations
+    
     requesting_agent_id = get_agent_id(auth_token)
     if not requesting_agent_id:
         return [mcp_types.TextContent(type="text", text="Unauthorized: Valid token required")]
-        
-    if not context_key_to_update or context_value_to_set is None: # Value can be null, but not missing
-        return [mcp_types.TextContent(type="text", text="Error: context_key and context_value are required.")]
+    
+    # Determine operation mode
+    is_bulk_operation = updates_list is not None
+    
+    if is_bulk_operation:
+        if not isinstance(updates_list, list) or len(updates_list) == 0:
+            return [mcp_types.TextContent(type="text", text="Error: updates must be a non-empty list for bulk operations.")]
+        return await _handle_bulk_context_update(requesting_agent_id, updates_list)
+    else:
+        # Single operation (backward compatibility)
+        if not context_key_to_update or context_value_to_set is None:
+            return [mcp_types.TextContent(type="text", text="Error: context_key and context_value are required for single updates.")]
+        return await _handle_single_context_update(requesting_agent_id, context_key_to_update, context_value_to_set, description_for_context)
 
     # Log audit (main.py:1477)
     log_audit(requesting_agent_id, "update_project_context", 
@@ -161,14 +173,14 @@ async def update_project_context_tool_impl(arguments: Dict[str, Any]) -> List[mc
         cursor.execute("""
             INSERT OR REPLACE INTO project_context (context_key, value, last_updated, updated_by, description)
             VALUES (?, ?, ?, ?, ?)
-        """, (context_key_to_update, value_json_str, updated_at_iso, requesting_admin_id, description_for_context))
+        """, (context_key_to_update, value_json_str, updated_at_iso, requesting_agent_id, description_for_context))
         
         # Log to agent_actions table
-        log_agent_action_to_db(cursor, requesting_admin_id, "updated_context", 
+        log_agent_action_to_db(cursor, requesting_agent_id, "updated_context", 
                                details={'context_key': context_key_to_update, 'action': 'set/update'})
         conn.commit()
         
-        logger.info(f"Project context for key '{context_key_to_update}' updated by '{requesting_admin_id}'.")
+        logger.info(f"Project context for key '{context_key_to_update}' updated by '{requesting_agent_id}'.")
         return [mcp_types.TextContent(
             type="text",
             text=f"Project context updated successfully for key '{context_key_to_update}'."
@@ -182,6 +194,201 @@ async def update_project_context_tool_impl(arguments: Dict[str, Any]) -> List[mc
         if conn: conn.rollback()
         logger.error(f"Unexpected error updating project context for key '{context_key_to_update}': {e}", exc_info=True)
         return [mcp_types.TextContent(type="text", text=f"Unexpected error updating project context: {e}")]
+    finally:
+        if conn:
+            conn.close()
+
+
+# --- bulk_update_project_context tool ---
+async def bulk_update_project_context_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.TextContent]:
+    auth_token = arguments.get("token")
+    updates = arguments.get("updates", [])  # List of update operations
+
+    requesting_agent_id = get_agent_id(auth_token)
+    if not requesting_agent_id:
+        return [mcp_types.TextContent(type="text", text="Unauthorized: Valid token required")]
+        
+    if not updates or not isinstance(updates, list):
+        return [mcp_types.TextContent(type="text", text="Error: updates array is required.")]
+
+    # Validate each update operation
+    for i, update in enumerate(updates):
+        if not isinstance(update, dict):
+            return [mcp_types.TextContent(type="text", text=f"Error: Update {i} must be an object.")]
+        if "context_key" not in update:
+            return [mcp_types.TextContent(type="text", text=f"Error: Update {i} missing required 'context_key'.")]
+        if "context_value" not in update:
+            return [mcp_types.TextContent(type="text", text=f"Error: Update {i} missing required 'context_value'.")]
+
+    # Log audit
+    log_audit(requesting_agent_id, "bulk_update_project_context", 
+              {"update_count": len(updates)})
+
+    conn = None
+    results = []
+    failed_updates = []
+    
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        updated_at_iso = datetime.datetime.now().isoformat()
+
+        # Process each update atomically
+        for i, update in enumerate(updates):
+            try:
+                context_key = update["context_key"]
+                context_value = update["context_value"]
+                description = update.get("description", f"Bulk update operation {i+1}")
+                
+                # Validate JSON serialization
+                value_json_str = json.dumps(context_value)
+                
+                # Execute update
+                cursor.execute("""
+                    INSERT OR REPLACE INTO project_context (context_key, value, last_updated, updated_by, description)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (context_key, value_json_str, updated_at_iso, requesting_agent_id, description))
+                
+                results.append(f"✓ Updated '{context_key}'")
+                
+                # Log individual action
+                log_agent_action_to_db(cursor, requesting_agent_id, "bulk_updated_context", 
+                                       details={'context_key': context_key, 'operation': f'bulk_update_{i+1}'})
+                
+            except (TypeError, json.JSONEncodeError) as e_json:
+                failed_updates.append(f"✗ Failed '{update.get('context_key', 'unknown')}': Invalid JSON - {e_json}")
+            except Exception as e_update:
+                failed_updates.append(f"✗ Failed '{update.get('context_key', 'unknown')}': {str(e_update)}")
+
+        conn.commit()
+        
+        # Build response
+        response_parts = [f"Bulk update completed: {len(results)} successful, {len(failed_updates)} failed"]
+        
+        if results:
+            response_parts.append("\nSuccessful updates:")
+            response_parts.extend(results)
+            
+        if failed_updates:
+            response_parts.append("\nFailed updates:")
+            response_parts.extend(failed_updates)
+        
+        logger.info(f"Bulk context update by '{requesting_agent_id}': {len(results)} successful, {len(failed_updates)} failed.")
+        return [mcp_types.TextContent(type="text", text="\n".join(response_parts))]
+
+    except sqlite3.Error as e_sql:
+        if conn: conn.rollback()
+        logger.error(f"Database error in bulk context update: {e_sql}", exc_info=True)
+        return [mcp_types.TextContent(type="text", text=f"Database error in bulk update: {e_sql}")]
+    except Exception as e:
+        if conn: conn.rollback()
+        logger.error(f"Unexpected error in bulk context update: {e}", exc_info=True)
+        return [mcp_types.TextContent(type="text", text=f"Unexpected error in bulk update: {e}")]
+    finally:
+        if conn:
+            conn.close()
+
+
+# --- validate_context_consistency tool ---
+async def validate_context_consistency_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.TextContent]:
+    auth_token = arguments.get("token")
+
+    requesting_agent_id = get_agent_id(auth_token)
+    if not requesting_agent_id:
+        return [mcp_types.TextContent(type="text", text="Unauthorized: Valid token required")]
+
+    # Log audit
+    log_audit(requesting_agent_id, "validate_context_consistency", {})
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        issues = []
+        warnings = []
+        
+        # Get all context entries
+        cursor.execute("SELECT context_key, value, description, updated_by, last_updated FROM project_context ORDER BY context_key")
+        all_entries = [dict(row) for row in cursor.fetchall()]
+        
+        if not all_entries:
+            return [mcp_types.TextContent(type="text", text="No project context entries found.")]
+
+        # Check 1: Invalid JSON values
+        for entry in all_entries:
+            try:
+                json.loads(entry["value"])
+            except json.JSONDecodeError as e:
+                issues.append(f"Invalid JSON in '{entry['context_key']}': {e}")
+
+        # Check 2: Duplicate or conflicting keys (case-insensitive)
+        key_map = {}
+        for entry in all_entries:
+            key_lower = entry["context_key"].lower()
+            if key_lower in key_map:
+                issues.append(f"Potential duplicate keys: '{key_map[key_lower]}' and '{entry['context_key']}'")
+            else:
+                key_map[key_lower] = entry["context_key"]
+
+        # Check 3: Missing descriptions
+        missing_desc = [entry["context_key"] for entry in all_entries if not entry.get("description")]
+        if missing_desc:
+            warnings.extend([f"Missing description: '{key}'" for key in missing_desc[:10]])
+            if len(missing_desc) > 10:
+                warnings.append(f"... and {len(missing_desc) - 10} more missing descriptions")
+
+        # Check 4: Very old entries (potential staleness)
+        import datetime as dt
+        cutoff_date = (dt.datetime.now() - dt.timedelta(days=30)).isoformat()
+        old_entries = [entry["context_key"] for entry in all_entries 
+                      if entry["last_updated"] < cutoff_date]
+        if old_entries:
+            warnings.extend([f"Old entry (>30 days): '{key}'" for key in old_entries[:5]])
+            if len(old_entries) > 5:
+                warnings.append(f"... and {len(old_entries) - 5} more old entries")
+
+        # Check 5: Unusually large values (potential bloat)
+        large_entries = []
+        for entry in all_entries:
+            if len(entry["value"]) > 10000:  # 10KB threshold
+                large_entries.append(f"{entry['context_key']} ({len(entry['value'])} chars)")
+        if large_entries:
+            warnings.extend([f"Large entry: {entry}" for entry in large_entries[:5]])
+            if len(large_entries) > 5:
+                warnings.append(f"... and {len(large_entries) - 5} more large entries")
+
+        # Build response
+        response_parts = [f"Context Consistency Validation Results"]
+        response_parts.append(f"Total entries: {len(all_entries)}")
+        
+        if not issues and not warnings:
+            response_parts.append("\n✅ No issues found! Context appears consistent.")
+        else:
+            if issues:
+                response_parts.append(f"\n🚨 Critical Issues ({len(issues)}):")
+                response_parts.extend([f"  {issue}" for issue in issues])
+            
+            if warnings:
+                response_parts.append(f"\n⚠️  Warnings ({len(warnings)}):")
+                response_parts.extend([f"  {warning}" for warning in warnings])
+                
+            response_parts.append("\nRecommendations:")
+            if issues:
+                response_parts.append("- Fix critical issues immediately")
+                response_parts.append("- Use bulk_update_project_context for corrections")
+            if warnings:
+                response_parts.append("- Review warnings for potential cleanup")
+                response_parts.append("- Consider using delete_project_context for unused entries")
+
+        return [mcp_types.TextContent(type="text", text="\n".join(response_parts))]
+
+    except sqlite3.Error as e_sql:
+        logger.error(f"Database error validating context consistency: {e_sql}", exc_info=True)
+        return [mcp_types.TextContent(type="text", text=f"Database error validating context: {e_sql}")]
+    except Exception as e:
+        logger.error(f"Unexpected error validating context consistency: {e}", exc_info=True)
+        return [mcp_types.TextContent(type="text", text=f"Unexpected error validating context: {e}")]
     finally:
         if conn:
             conn.close()
@@ -220,6 +427,48 @@ def register_project_context_tools():
             "additionalProperties": False
         },
         implementation=update_project_context_tool_impl
+    )
+
+    register_tool(
+        name="bulk_update_project_context",
+        description="Update multiple project context entries atomically. Essential for large-scale context corrections.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "token": {"type": "string", "description": "Authentication token"},
+                "updates": {
+                    "type": "array",
+                    "description": "Array of update operations",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "context_key": {"type": "string", "description": "The context key to update"},
+                            "context_value": {"description": "The new value (any JSON-serializable type)"},
+                            "description": {"type": "string", "description": "Optional description for this update"}
+                        },
+                        "required": ["context_key", "context_value"],
+                        "additionalProperties": False
+                    }
+                }
+            },
+            "required": ["token", "updates"],
+            "additionalProperties": False
+        },
+        implementation=bulk_update_project_context_tool_impl
+    )
+
+    register_tool(
+        name="validate_context_consistency",
+        description="Check for inconsistencies, conflicts, and quality issues in project context. Critical for preventing context poisoning.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "token": {"type": "string", "description": "Authentication token"}
+            },
+            "required": ["token"],
+            "additionalProperties": False
+        },
+        implementation=validate_context_consistency_tool_impl
     )
 
 # Call registration when this module is imported
