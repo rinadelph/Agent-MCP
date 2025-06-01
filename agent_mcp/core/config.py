@@ -120,10 +120,10 @@ EMBEDDING_MODEL: str = ADVANCED_EMBEDDING_MODEL if ADVANCED_EMBEDDINGS else SIMP
 EMBEDDING_DIMENSION: int = ADVANCED_EMBEDDING_DIMENSION if ADVANCED_EMBEDDINGS else SIMPLE_EMBEDDING_DIMENSION
 
 CHAT_MODEL: str = "gpt-4.1-2025-04-14" # From main.py:179 (Ensure this matches your desired model)
-TASK_ANALYSIS_MODEL: str = "gpt-3.5-turbo-16k" # Cheaper model for task placement analysis
+TASK_ANALYSIS_MODEL: str = "gpt-4.1-2025-04-14" # Same model for consistent task placement analysis
 MAX_EMBEDDING_BATCH_SIZE: int = 100 # From main.py:181
-MAX_CONTEXT_TOKENS: int = 12000 # From main.py:182
-TASK_ANALYSIS_MAX_TOKENS: int = 16000 # Context window for task analysis model
+MAX_CONTEXT_TOKENS: int = 1000000 # GPT-4.1 has 1M token context window
+TASK_ANALYSIS_MAX_TOKENS: int = 1000000 # Same 1M token context window for task analysis
 
 # --- Project Directory Helpers ---
 # These rely on an environment variable "MCP_PROJECT_DIR" being set,

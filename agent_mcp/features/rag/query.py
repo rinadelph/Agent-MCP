@@ -228,7 +228,11 @@ async def query_rag_system(query_text: str) -> str:
 Use the provided context, which may include recently updated live data (like project context keys or tasks) and information retrieved from an indexed knowledge base (like documentation or code summaries), to answer the user's query. 
 Prioritize information from the 'Live' sections if available and relevant for time-sensitive data. 
 Answer using *only* the information given in the context. If the context doesn't contain the answer, state that clearly.
-Be concise and directly answer the query based on the provided information."""
+
+Be VERBOSE and comprehensive in your responses. It's better to give too much context than too little. 
+When answering, please also suggest additional context entries and queries that might be helpful for understanding this topic better.
+For example, suggest related files to examine, related project context keys to check, or follow-up questions that could provide more insight.
+Always err on the side of providing more detailed explanations and comprehensive information rather than brief responses."""
             
             user_message_for_llm = f"CONTEXT:\n{combined_context_str}\n\nQUERY:\n{query_text}\n\nBased *only* on the CONTEXT provided above, please answer the QUERY."
 
@@ -241,7 +245,7 @@ Be concise and directly answer the query based on the provided information."""
                     {"role": "system", "content": system_prompt_for_llm},
                     {"role": "user", "content": user_message_for_llm}
                 ],
-                # temperature=0.2 # Consider adding for more factual responses
+                temperature=0.4  # Increased for more diverse context discovery while maintaining accuracy
             )
             answer = chat_response.choices[0].message.content
 
@@ -397,7 +401,12 @@ async def query_rag_system_with_model(
 You must CRITICALLY THINK about task placement, dependencies, and hierarchical relationships.
 Use the provided context to make intelligent recommendations about task organization.
 Be strict about the single root task rule and logical task relationships.
-Answer in the exact JSON format requested."""
+
+Be VERBOSE and comprehensive in your analysis. It's better to give too much context than too little.
+When making recommendations, suggest additional context entries and queries that might be helpful for understanding task relationships better.
+Consider suggesting related files to examine, project context keys to check, or follow-up questions for deeper task analysis.
+Provide detailed explanations for your reasoning and comprehensive information rather than brief responses.
+Answer in the exact JSON format requested, but include thorough explanations in your reasoning sections."""
             
             user_message_for_llm = f"CONTEXT:\n{combined_context_str}\n\nQUERY:\n{query_text}\n\nBased on the CONTEXT provided above, please answer the QUERY."
             
@@ -410,7 +419,7 @@ Answer in the exact JSON format requested."""
                     {"role": "system", "content": system_prompt_for_llm},
                     {"role": "user", "content": user_message_for_llm}
                 ],
-                temperature=0.3  # Lower temperature for more consistent JSON formatting
+                temperature=0.4  # Increased for more diverse analysis while maintaining JSON consistency
             )
             answer = chat_response.choices[0].message.content
             
