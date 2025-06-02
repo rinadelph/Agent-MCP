@@ -10,9 +10,11 @@ import json
 import sqlite3
 import datetime
 import asyncio
+import re
 from typing import Dict, List, Any, Optional, Set, Tuple
 from .config import logger
 from ..db.connection import get_db_connection
+from .relationship_aware_migration import RelationshipAwareMigration
 
 
 class Step1_ProjectStateAnalyzer:
@@ -462,14 +464,186 @@ class Step3_TaskCategorizer:
 class Step4_PhaseStructureBuilder:
     """Step 4: Build the actual phase structure for migration"""
     
+    def _identify_workstreams(self, tasks: List[Dict[str, Any]]) -> Dict[str, List[Dict]]:
+        """Identify logical workstreams from tasks"""
+        workstreams = {}
+        
+        # Define workstream patterns with multiple indicators
+        workstream_patterns = {
+            'quote_calculator': {
+                'keywords': ['quote', 'calculator', 'pricing', 'estimate', 'quotation'],
+                'patterns': [r'quote\s+calculator', r'pricing\s+logic', r'quote\s+system'],
+                'min_score': 1
+            },
+            'authentication': {
+                'keywords': ['auth', 'login', 'user', 'profile', 'session', 'authentication', 'signup', 'signin'],
+                'patterns': [r'user\s+management', r'authentication\s+system', r'login\s+system'],
+                'min_score': 2
+            },
+            'dashboard': {
+                'keywords': ['dashboard', 'admin', 'management', 'overview', 'analytics'],
+                'patterns': [r'admin\s+dashboard', r'management\s+interface'],
+                'min_score': 1
+            },
+            'api_development': {
+                'keywords': ['api', 'endpoint', 'service', 'backend', 'rest', 'graphql'],
+                'patterns': [r'api\s+endpoint', r'backend\s+service', r'rest\s+api'],
+                'min_score': 1
+            },
+            'database': {
+                'keywords': ['database', 'schema', 'table', 'migration', 'sql', 'db'],
+                'patterns': [r'database\s+schema', r'data\s+model', r'table\s+structure'],
+                'min_score': 1
+            },
+            'ui_development': {
+                'keywords': ['ui', 'component', 'page', 'interface', 'frontend', 'view', 'screen'],
+                'patterns': [r'ui\s+component', r'user\s+interface', r'frontend\s+page'],
+                'min_score': 2
+            },
+            'testing': {
+                'keywords': ['test', 'testing', 'quality', 'qa', 'unit', 'integration', 'e2e'],
+                'patterns': [r'unit\s+test', r'integration\s+test', r'test\s+suite'],
+                'min_score': 1
+            },
+            'deployment': {
+                'keywords': ['deploy', 'deployment', 'production', 'release', 'build', 'ci', 'cd'],
+                'patterns': [r'deployment\s+pipeline', r'ci/cd', r'production\s+release'],
+                'min_score': 1
+            }
+        }
+        
+        # Score each task against workstream patterns
+        for task in tasks:
+            title = task.get('title', '').lower()
+            description = task.get('description', '').lower()
+            full_text = f"{title} {description}"
+            
+            best_score = 0
+            best_workstream = None
+            
+            for workstream_key, pattern_info in workstream_patterns.items():
+                score = 0
+                
+                # Check keywords
+                for keyword in pattern_info['keywords']:
+                    if keyword in full_text:
+                        score += 1
+                
+                # Check regex patterns
+                for pattern in pattern_info['patterns']:
+                    if re.search(pattern, full_text, re.IGNORECASE):
+                        score += 2  # Patterns are more specific, so higher weight
+                
+                # Update best match if score meets minimum
+                if score >= pattern_info['min_score'] and score > best_score:
+                    best_score = score
+                    best_workstream = workstream_key
+            
+            # If no good match, use general category
+            if not best_workstream:
+                workstream_key = 'general'
+            else:
+                workstream_key = best_workstream
+            
+            if workstream_key not in workstreams:
+                workstreams[workstream_key] = []
+            workstreams[workstream_key].append(task)
+        
+        # Consolidate small workstreams
+        consolidated_workstreams = {}
+        general_tasks = workstreams.get('general', [])
+        
+        for workstream_key, tasks_list in workstreams.items():
+            if workstream_key == 'general':
+                continue
+                
+            # If workstream has fewer than 3 tasks, merge into general
+            if len(tasks_list) < 3:
+                general_tasks.extend(tasks_list)
+                logger.info(f"   Consolidating small workstream '{workstream_key}' ({len(tasks_list)} tasks) into general")
+            else:
+                consolidated_workstreams[workstream_key] = tasks_list
+        
+        # Only include general if it has tasks
+        if general_tasks:
+            consolidated_workstreams['general'] = general_tasks
+        
+        # If we end up with too many workstreams, further consolidate
+        if len(consolidated_workstreams) > 7:
+            logger.info(f"   Too many workstreams ({len(consolidated_workstreams)}), applying further consolidation...")
+            
+            # Sort by task count and keep top 6, merge rest into general
+            sorted_workstreams = sorted(consolidated_workstreams.items(), 
+                                      key=lambda x: len(x[1]), 
+                                      reverse=True)
+            
+            final_workstreams = {}
+            general_overflow = []
+            
+            for i, (ws_key, ws_tasks) in enumerate(sorted_workstreams):
+                if i < 6:
+                    final_workstreams[ws_key] = ws_tasks
+                else:
+                    general_overflow.extend(ws_tasks)
+            
+            if general_overflow:
+                if 'general' in final_workstreams:
+                    final_workstreams['general'].extend(general_overflow)
+                else:
+                    final_workstreams['general'] = general_overflow
+            
+            return final_workstreams
+        
+        return consolidated_workstreams
+    
     async def build_phase_structure(self, phase_mapping: Dict[str, Any], 
-                                   task_categorization: Dict[str, Any]) -> Dict[str, Any]:
+                                   task_categorization: Dict[str, Any],
+                                   all_tasks: List[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Build the phase structure for migration"""
         
-        logger.info("🏗️ Step 4: Building phase structure...")
+        logger.info("🏗️ Step 4: Building phase structure with relationship-aware workstream analysis...")
         
+        # Use relationship-aware migration if all_tasks provided
+        if all_tasks:
+            # Filter out cancelled tasks
+            active_tasks = [t for t in all_tasks if t.get('status') != 'cancelled']
+            
+            relationship_migration = RelationshipAwareMigration(active_tasks, phase_mapping)
+            relationship_structure = await relationship_migration.create_workstream_structure()
+            
+            # Extract mappings from relationship analysis
+            workstream_mappings = relationship_structure['workstream_mappings']
+            task_assignments = relationship_structure['task_assignments']
+            
+            logger.info(f"   Relationship analysis found {len(workstream_mappings)} natural workstreams")
+            logger.info(f"   All {len(task_assignments)} tasks assigned (no orphans!)")
+            
+            # Create phase structures
+            phases_to_create = self._create_phases_from_workstreams(workstream_mappings, phase_mapping)
+            
+            structure = {
+                'phases_to_create': phases_to_create,
+                'task_assignments': task_assignments,
+                'workstream_mappings': workstream_mappings,
+                'migration_strategy': {
+                    'preserve_hierarchy': True,
+                    'relationship_based': True,
+                    'no_orphans': True,
+                    'reasoning': [
+                        "Used relationship analysis to identify natural task clusters",
+                        "Preserved parent-child relationships within workstreams",
+                        "Ensured every task is assigned to a workstream",
+                        "Created workstreams only where tasks exist"
+                    ]
+                }
+            }
+            
+            return structure
+        
+        # Fallback to original logic if no all_tasks provided
         phases_to_create = []
         task_assignments = {}
+        workstream_mappings = {}  # Maps tasks to their workstream root tasks
         
         # Determine which phases need to be created
         current_phase = phase_mapping.get('current_phase')
@@ -479,35 +653,251 @@ class Step4_PhaseStructureBuilder:
         for phase_id in completed_phases:
             phase_info = self._get_phase_info(phase_id)
             phase_info['status'] = 'completed'
-            phase_info['tasks'] = self._get_tasks_for_phase(phase_id, task_categorization, completed=True)
+            phase_tasks = self._get_tasks_for_phase(phase_id, task_categorization, completed=True)
+            phase_info['tasks'] = phase_tasks
+            
+            # Identify workstreams within this phase
+            workstreams = self._identify_workstreams(phase_tasks)
+            phase_info['workstreams'] = workstreams
+            phase_info['workstream_count'] = len(workstreams)
+            
             phases_to_create.append(phase_info)
             
-            # Assign tasks to this phase
-            for task in phase_info['tasks']:
-                task_assignments[task['task_id']] = phase_id
+            # Create workstream mapping for migration
+            for workstream_key, workstream_tasks in workstreams.items():
+                workstream_root_id = f"root_{phase_id}_{workstream_key}"
+                workstream_mappings[workstream_root_id] = {
+                    'phase_id': phase_id,
+                    'workstream_key': workstream_key,
+                    'tasks': workstream_tasks,
+                    'title': self._create_workstream_title(workstream_key)
+                }
+                
+                # Assign tasks to workstream root (to be created during migration)
+                for task in workstream_tasks:
+                    task_assignments[task['task_id']] = workstream_root_id
         
         # Create current active phase
         if current_phase:
             phase_info = self._get_phase_info(current_phase)
             phase_info['status'] = 'in_progress'
-            phase_info['tasks'] = self._get_tasks_for_phase(current_phase, task_categorization, completed=False)
+            phase_tasks = self._get_tasks_for_phase(current_phase, task_categorization, completed=False)
+            phase_info['tasks'] = phase_tasks
+            
+            # Identify workstreams within this phase
+            workstreams = self._identify_workstreams(phase_tasks)
+            phase_info['workstreams'] = workstreams
+            phase_info['workstream_count'] = len(workstreams)
+            
             phases_to_create.append(phase_info)
             
-            # Assign tasks to this phase
-            for task in phase_info['tasks']:
-                task_assignments[task['task_id']] = current_phase
+            # Create workstream mapping for migration
+            for workstream_key, workstream_tasks in workstreams.items():
+                workstream_root_id = f"root_{current_phase}_{workstream_key}"
+                workstream_mappings[workstream_root_id] = {
+                    'phase_id': current_phase,
+                    'workstream_key': workstream_key,
+                    'tasks': workstream_tasks,
+                    'title': self._create_workstream_title(workstream_key)
+                }
+                
+                # Assign tasks to workstream root (to be created during migration)
+                for task in workstream_tasks:
+                    task_assignments[task['task_id']] = workstream_root_id
+        
+        # Ensure ALL tasks get assigned to a workstream
+        if all_tasks:
+            # Get all task IDs from the database
+            all_task_ids_from_db = {task['task_id'] for task in all_tasks 
+                                   if not task['task_id'].startswith('phase_')}  # Exclude phase tasks
+            
+            assigned_task_ids = set(task_assignments.keys())
+            unassigned_task_ids = all_task_ids_from_db - assigned_task_ids
+            
+            if unassigned_task_ids:
+                logger.info(f"   Found {len(unassigned_task_ids)} unassigned tasks, assigning to appropriate workstreams")
+                
+                # Group unassigned tasks by their status
+                unassigned_tasks = [task for task in all_tasks if task['task_id'] in unassigned_task_ids]
+                
+                # Categorize these unassigned tasks
+                for task in unassigned_tasks:
+                    # Determine which phase this task should belong to based on status
+                    if task['status'] == 'cancelled':
+                        continue  # Skip cancelled tasks
+                    
+                    task_phase = None
+                    if task['status'] == 'completed':
+                        # Completed tasks likely belong to foundation phase
+                        task_phase = 'phase_1_foundation'
+                    elif task['status'] in ['in_progress', 'pending']:
+                        # Active/pending tasks belong to current phase
+                        task_phase = current_phase or 'phase_2_intelligence'
+                    
+                    if task_phase:
+                        # Try to categorize the task into an existing workstream
+                        workstream_key = self._categorize_single_task(task)
+                        workstream_root_id = f"root_{task_phase}_{workstream_key}"
+                        
+                        # If workstream doesn't exist, create it
+                        if workstream_root_id not in workstream_mappings:
+                            workstream_mappings[workstream_root_id] = {
+                                'phase_id': task_phase,
+                                'workstream_key': workstream_key,
+                                'tasks': [],
+                                'title': self._create_workstream_title(workstream_key)
+                            }
+                        
+                        # Assign task to workstream
+                        task_assignments[task['task_id']] = workstream_root_id
+                        workstream_mappings[workstream_root_id]['tasks'].append(task)
         
         structure = {
             'phases_to_create': phases_to_create,
             'task_assignments': task_assignments,
+            'workstream_mappings': workstream_mappings,  # New: Maps workstream roots to their tasks
             'migration_strategy': self._determine_migration_strategy(phase_mapping, task_categorization)
         }
         
         logger.info(f"   Phases to create: {len(phases_to_create)}")
         for phase in phases_to_create:
-            logger.info(f"   - {phase['name']}: {len(phase['tasks'])} tasks ({phase['status']})")
+            logger.info(f"   - {phase['name']}: {len(phase['tasks'])} tasks in {phase.get('workstream_count', 0)} workstreams ({phase['status']})")
+        
+        logger.info(f"   Total workstreams identified: {len(workstream_mappings)}")
         
         return structure
+    
+    def _categorize_single_task(self, task: Dict[str, Any]) -> str:
+        """Categorize a single task into a workstream"""
+        title = task.get('title', '').lower()
+        description = task.get('description', '').lower()
+        full_text = f"{title} {description}"
+        
+        # Use same logic as _identify_workstreams but for single task
+        workstream_patterns = {
+            'quote_calculator': {
+                'keywords': ['quote', 'calculator', 'pricing', 'estimate', 'quotation'],
+                'patterns': [r'quote\s+calculator', r'pricing\s+logic', r'quote\s+system'],
+                'min_score': 1
+            },
+            'authentication': {
+                'keywords': ['auth', 'login', 'user', 'profile', 'session', 'authentication', 'signup', 'signin'],
+                'patterns': [r'user\s+management', r'authentication\s+system', r'login\s+system'],
+                'min_score': 2
+            },
+            'dashboard': {
+                'keywords': ['dashboard', 'admin', 'management', 'overview', 'analytics'],
+                'patterns': [r'admin\s+dashboard', r'management\s+interface'],
+                'min_score': 1
+            },
+            'api_development': {
+                'keywords': ['api', 'endpoint', 'service', 'backend', 'rest', 'graphql'],
+                'patterns': [r'api\s+endpoint', r'backend\s+service', r'rest\s+api'],
+                'min_score': 1
+            },
+            'database': {
+                'keywords': ['database', 'schema', 'table', 'migration', 'sql', 'db'],
+                'patterns': [r'database\s+schema', r'data\s+model', r'table\s+structure'],
+                'min_score': 1
+            },
+            'ui_development': {
+                'keywords': ['ui', 'component', 'page', 'interface', 'frontend', 'view', 'screen'],
+                'patterns': [r'ui\s+component', r'user\s+interface', r'frontend\s+page'],
+                'min_score': 2
+            },
+            'testing': {
+                'keywords': ['test', 'testing', 'quality', 'qa', 'unit', 'integration', 'e2e'],
+                'patterns': [r'unit\s+test', r'integration\s+test', r'test\s+suite'],
+                'min_score': 1
+            },
+            'deployment': {
+                'keywords': ['deploy', 'deployment', 'production', 'release', 'build', 'ci', 'cd'],
+                'patterns': [r'deployment\s+pipeline', r'ci/cd', r'production\s+release'],
+                'min_score': 1
+            }
+        }
+        
+        best_score = 0
+        best_workstream = None
+        
+        for workstream_key, pattern_info in workstream_patterns.items():
+            score = 0
+            
+            # Check keywords
+            for keyword in pattern_info['keywords']:
+                if keyword in full_text:
+                    score += 1
+            
+            # Check regex patterns
+            for pattern in pattern_info['patterns']:
+                if re.search(pattern, full_text, re.IGNORECASE):
+                    score += 2  # Patterns are more specific, so higher weight
+            
+            # Update best match if score meets minimum
+            if score >= pattern_info['min_score'] and score > best_score:
+                best_score = score
+                best_workstream = workstream_key
+        
+        return best_workstream or 'general'
+    
+    def _create_phases_from_workstreams(self, workstream_mappings: Dict[str, Any], 
+                                       phase_mapping: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Create phase structures from workstream mappings"""
+        phases_to_create = []
+        phase_info_map = {}
+        
+        # Group workstreams by phase
+        for ws_id, ws_info in workstream_mappings.items():
+            phase_id = ws_info['phase_id']
+            
+            if phase_id not in phase_info_map:
+                # Create phase info
+                phase_info = self._get_phase_info(phase_id)
+                
+                # Determine phase status
+                if phase_id in phase_mapping.get('completed_phases', []):
+                    phase_info['status'] = 'completed'
+                elif phase_id == phase_mapping.get('current_phase'):
+                    phase_info['status'] = 'in_progress'
+                else:
+                    phase_info['status'] = 'pending'
+                
+                phase_info['workstreams'] = {}
+                phase_info['tasks'] = []
+                phase_info_map[phase_id] = phase_info
+                phases_to_create.append(phase_info)
+            
+            # Add workstream to phase
+            ws_key = ws_info['workstream_key']
+            phase_info_map[phase_id]['workstreams'][ws_key] = ws_info['tasks']
+            phase_info_map[phase_id]['tasks'].extend(ws_info['tasks'])
+        
+        # Update workstream counts
+        for phase_info in phases_to_create:
+            phase_info['workstream_count'] = len(phase_info['workstreams'])
+        
+        return phases_to_create
+    
+    def _create_workstream_title(self, workstream_key: str) -> str:
+        """Create a human-readable title for a workstream"""
+        
+        title_map = {
+            'quote_calculator': 'Quote Calculator System',
+            'authentication': 'Authentication & User Management',
+            'dashboard': 'Dashboard Features',
+            'api_development': 'API Development',
+            'database': 'Database Architecture',
+            'ui_development': 'UI Components & Pages',
+            'testing': 'Testing Framework',
+            'deployment': 'Deployment & DevOps',
+            'general': 'General Tasks'
+        }
+        
+        if workstream_key in title_map:
+            return title_map[workstream_key]
+        
+        # Fallback: Capitalize and replace underscores
+        return workstream_key.replace('_', ' ').title()
     
     def _get_phase_info(self, phase_id: str) -> Dict[str, Any]:
         """Get phase information"""
@@ -564,10 +954,12 @@ class Step4_PhaseStructureBuilder:
             'preserve_hierarchy': True,
             'mark_completed_phases': len(phase_mapping.get('completed_phases', [])) > 0,
             'focus_on_current_phase': True,
+            'create_workstream_roots': True,  # New: Create multiple root tasks per phase
             'reasoning': [
                 "Preserve existing task hierarchies within phases",
                 "Mark phases as completed if foundational work is done",
-                "Focus migration on current active development phase"
+                "Focus migration on current active development phase",
+                "Create logical workstreams as root tasks for better organization"
             ]
         }
 
@@ -607,8 +999,8 @@ class GranularMigrationManager:
             # Step 3: Categorize tasks
             task_categorization = await self.step3_categorizer.categorize_tasks(all_tasks, phase_mapping)
             
-            # Step 4: Build phase structure
-            phase_structure = await self.step4_builder.build_phase_structure(phase_mapping, task_categorization)
+            # Step 4: Build phase structure (pass all_tasks for complete coverage)
+            phase_structure = await self.step4_builder.build_phase_structure(phase_mapping, task_categorization, all_tasks)
             
             # Step 5: Execute migration
             logger.info("🚀 Step 5: Executing granular migration...")
@@ -671,21 +1063,103 @@ class GranularMigrationManager:
             for phase_info in phase_structure['phases_to_create']:
                 await self._create_phase(cursor, phase_info)
             
+            # Create workstream root tasks (only if they have tasks)
+            workstream_mappings = phase_structure.get('workstream_mappings', {})
+            created_workstreams = 0
+            skipped_workstreams = 0
+            
+            for workstream_root_id, workstream_info in workstream_mappings.items():
+                # Only create workstream if it has tasks to migrate
+                if len(workstream_info.get('tasks', [])) > 0:
+                    await self._create_workstream_root(cursor, workstream_root_id, workstream_info)
+                    created_workstreams += 1
+                else:
+                    logger.warning(f"   Skipping empty workstream: {workstream_info.get('title', workstream_root_id)}")
+                    skipped_workstreams += 1
+            
             # Migrate tasks
             migrated_count = 0
-            for task_id, phase_id in phase_structure['task_assignments'].items():
-                if await self._migrate_task(cursor, task_id, phase_id):
+            for task_id, parent_id in phase_structure['task_assignments'].items():
+                if await self._migrate_task(cursor, task_id, parent_id):
                     migrated_count += 1
             
             conn.commit()
             conn.close()
             
-            logger.info(f"   ✅ Migrated {migrated_count} tasks")
+            logger.info(f"   ✅ Created {created_workstreams} workstream root tasks")
+            if skipped_workstreams > 0:
+                logger.info(f"   ⚠️  Skipped {skipped_workstreams} empty workstreams")
+            logger.info(f"   ✅ Migrated {migrated_count} tasks to workstreams")
             return True
             
         except Exception as e:
             logger.error(f"Error executing granular migration: {e}")
             return False
+    
+    async def _create_workstream_root(self, cursor, workstream_root_id: str, workstream_info: Dict[str, Any]) -> None:
+        """Create a workstream root task"""
+        
+        created_at = datetime.datetime.now().isoformat()
+        phase_id = workstream_info['phase_id']
+        title = workstream_info['title']
+        task_count = len(workstream_info.get('tasks', []))
+        
+        # Create a description based on the workstream's tasks
+        task_titles = [t.get('title', '') for t in workstream_info.get('tasks', [])[:3]]
+        description = f"Workstream containing {task_count} related tasks"
+        if task_titles:
+            description += f" including: {', '.join(task_titles[:2])}"
+            if task_count > 2:
+                description += f" and {task_count - 2} more"
+        
+        initial_notes = [{
+            "timestamp": created_at,
+            "author": "granular_migration",
+            "content": f"🚀 Workstream root task created during migration. Groups {task_count} related tasks."
+        }]
+        
+        # Determine workstream status based on child tasks
+        workstream_status = "pending"
+        if workstream_info.get('tasks'):
+            task_statuses = [t.get('status', 'pending') for t in workstream_info['tasks']]
+            if all(status == 'completed' for status in task_statuses):
+                workstream_status = "completed"
+            elif any(status == 'in_progress' for status in task_statuses):
+                workstream_status = "in_progress"
+            elif any(status == 'completed' for status in task_statuses):
+                workstream_status = "in_progress"  # Some completed means work has started
+        
+        root_task_data = {
+            "task_id": workstream_root_id,
+            "title": title,
+            "description": description,
+            "assigned_to": None,
+            "created_by": "granular_migration",
+            "status": workstream_status,
+            "priority": "high",
+            "created_at": created_at,
+            "updated_at": created_at,
+            "parent_task": phase_id,  # Root task belongs to phase
+            "child_tasks": json.dumps([]),
+            "depends_on_tasks": json.dumps([]),
+            "notes": json.dumps(initial_notes)
+        }
+        
+        cursor.execute("""
+            INSERT INTO tasks (task_id, title, description, assigned_to, created_by, status, priority,
+                             created_at, updated_at, parent_task, child_tasks, depends_on_tasks, notes)
+            VALUES (:task_id, :title, :description, :assigned_to, :created_by, :status, :priority,
+                    :created_at, :updated_at, :parent_task, :child_tasks, :depends_on_tasks, :notes)
+        """, root_task_data)
+        
+        # Update phase's child_tasks to include this root task
+        cursor.execute("SELECT child_tasks FROM tasks WHERE task_id = ?", (phase_id,))
+        phase_children = json.loads(cursor.fetchone()["child_tasks"] or "[]")
+        phase_children.append(workstream_root_id)
+        cursor.execute("UPDATE tasks SET child_tasks = ? WHERE task_id = ?", 
+                      (json.dumps(phase_children), phase_id))
+        
+        logger.info(f"      Created root task: {title} ({workstream_root_id})")
     
     async def _create_phase(self, cursor, phase_info: Dict[str, Any]) -> None:
         """Create a phase with proper status"""
@@ -731,8 +1205,8 @@ class GranularMigrationManager:
         
         logger.info(f"   📊 Created {phase_info['name']} (status: {status})")
     
-    async def _migrate_task(self, cursor, task_id: str, phase_id: str) -> bool:
-        """Migrate a task to a phase"""
+    async def _migrate_task(self, cursor, task_id: str, parent_id: str) -> bool:
+        """Migrate a task to a workstream root or phase"""
         try:
             cursor.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,))
             task = cursor.fetchone()
@@ -742,12 +1216,13 @@ class GranularMigrationManager:
             task = dict(task)
             current_parent = task.get('parent_task')
             
-            # Strategy: Only root tasks become children of phases
-            # Subtasks maintain their existing parent relationships
-            if current_parent is None:
-                new_parent = phase_id
-            else:
-                new_parent = current_parent  # Keep existing parent
+            # With relationship-aware migration, we preserve hierarchies
+            # Only update parent if task has no parent or parent is phase/root
+            should_update_parent = (
+                not current_parent or
+                current_parent.startswith(('phase_', 'root_')) or
+                current_parent not in [row['task_id'] for row in cursor.execute("SELECT task_id FROM tasks")]
+            )
             
             updated_at = datetime.datetime.now().isoformat()
             
@@ -756,15 +1231,39 @@ class GranularMigrationManager:
             migration_note = {
                 "timestamp": updated_at,
                 "author": "granular_migration",
-                "content": f"🔧 Granular migration: Task organized under {phase_id} based on project state analysis."
+                "content": f"🔧 Relationship-aware migration: Task organized under {parent_id} workstream. Hierarchy preserved."
             }
             current_notes.append(migration_note)
             
-            cursor.execute("""
-                UPDATE tasks 
-                SET parent_task = ?, updated_at = ?, notes = ?
-                WHERE task_id = ?
-            """, (new_parent, updated_at, json.dumps(current_notes), task_id))
+            if should_update_parent:
+                # Update task parent to workstream root
+                cursor.execute("""
+                    UPDATE tasks 
+                    SET parent_task = ?, updated_at = ?, notes = ?
+                    WHERE task_id = ?
+                """, (parent_id, updated_at, json.dumps(current_notes), task_id))
+                
+                # Update parent's child_tasks list
+                cursor.execute("SELECT child_tasks FROM tasks WHERE task_id = ?", (parent_id,))
+                parent_row = cursor.fetchone()
+                if parent_row:
+                    parent_children = json.loads(parent_row["child_tasks"] or "[]")
+                    if task_id not in parent_children:
+                        parent_children.append(task_id)
+                        cursor.execute("UPDATE tasks SET child_tasks = ? WHERE task_id = ?", 
+                                      (json.dumps(parent_children), parent_id))
+            else:
+                # Just update notes to indicate migration
+                cursor.execute("""
+                    UPDATE tasks 
+                    SET updated_at = ?, notes = ?
+                    WHERE task_id = ?
+                """, (updated_at, json.dumps(current_notes), task_id))
+                
+                # Ensure the task's parent is also being migrated to same workstream
+                if current_parent:
+                    # This maintains the hierarchy within the workstream
+                    pass
             
             return True
             

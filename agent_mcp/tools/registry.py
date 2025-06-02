@@ -224,3 +224,13 @@ async def dispatch_tool_call(
 # The actual tool schemas and implementations will be populated by calls to `register_tool`
 # from each of the specific tool modules (e.g., admin_tools.py, task_tools.py, etc.)
 # when those modules are imported by the application (e.g., in mcp_server_src/tools/__init__.py).
+
+def get_tool_registry():
+    """
+    Returns the tool registry with schemas and implementations.
+    This provides access to the registered tools for inspection or use.
+    """
+    return {
+        "schemas": tool_schemas,
+        "implementations": tool_implementations
+    }

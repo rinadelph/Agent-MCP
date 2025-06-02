@@ -1,11 +1,11 @@
 [build-system]
-requires = ["setuptools>=42", "wheel"]
+requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-mcp"
-version = "0.1.0"
-description = "Agent MCP Template for creating multi-agent systems"
+version = "2.0.0"
+description = "Multi-Agent Collaboration Platform with intelligent task distribution"
 authors = [
     {name = "AIမ့်CURSOR", email = "accounts@cursor.com"},
 ]
@@ -29,6 +29,9 @@ dependencies = [
     "httpx",
     "mcp>=1.8.1",
 ]
+
+[project.scripts]
+agent-mcp = "agent_mcp.cli_main:main"
 
 [project.optional-dependencies]
 dev = [

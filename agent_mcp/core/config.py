@@ -104,20 +104,9 @@ AGENT_COLORS: List[str] = [ # From main.py:160-164 (Note: original had 160-165, 
 ]
 
 # --- OpenAI Model Configuration ---
-# Advanced mode flag - set by CLI
-ADVANCED_EMBEDDINGS: bool = False  # Default to simple mode
-
-# Original/Simple mode configuration (default) - restored to original values
-SIMPLE_EMBEDDING_MODEL: str = "text-embedding-3-large" # Original embedding model (unchanged)
-SIMPLE_EMBEDDING_DIMENSION: int = 1024 # Original dimension (From main.py:180)
-
-# Advanced mode configuration - new enhanced mode
-ADVANCED_EMBEDDING_MODEL: str = "text-embedding-3-large" # From main.py:178
-ADVANCED_EMBEDDING_DIMENSION: int = 3072 # Full dimension for text-embedding-3-large for better code understanding
-
-# Dynamic configuration based on mode
-EMBEDDING_MODEL: str = ADVANCED_EMBEDDING_MODEL if ADVANCED_EMBEDDINGS else SIMPLE_EMBEDDING_MODEL
-EMBEDDING_DIMENSION: int = ADVANCED_EMBEDDING_DIMENSION if ADVANCED_EMBEDDINGS else SIMPLE_EMBEDDING_DIMENSION
+# Fixed embedding configuration - using simple mode only
+EMBEDDING_MODEL: str = "text-embedding-3-large" # Original embedding model (unchanged)
+EMBEDDING_DIMENSION: int = 1024 # Original dimension (From main.py:180)
 
 CHAT_MODEL: str = "gpt-4.1-2025-04-14" # From main.py:179 (Ensure this matches your desired model)
 TASK_ANALYSIS_MODEL: str = "gpt-4.1-2025-04-14" # Same model for consistent task placement analysis

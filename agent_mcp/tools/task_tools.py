@@ -397,8 +397,8 @@ async def assign_task_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Tex
             
             return [mcp_types.TextContent(
                 type="text",
-                text=f"ERROR: Cannot create task without parent. {root_count} root task(s) already exist: {root_ids}\n\n"
-                     f"You MUST specify a parent_task_id. Every task except the first must have a parent.\n"
+                text=f"⚠️ Multiple root tasks detected. {non_phase_root_count} root task(s) already exist: {non_phase_root_ids}\n\n"
+                     f"Best practice: Specify a parent_task_id to organize tasks hierarchically.\n"
                      f"{suggestion_text}\n"
                      f"💡 Use auto_suggest_parent=true for smarter suggestions based on task content.\n"
                      f"Use 'view_tasks' for complete task list, or use one of the suggestions above."
@@ -434,19 +434,32 @@ async def assign_task_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Tex
         created_at_iso = datetime.datetime.now().isoformat()
         status = "pending"
         
-        # Check single root task rule
+        # Enhanced multi-root task support with phase awareness
         if parent_task_id_arg is None:
-            cursor.execute("SELECT COUNT(*) as count, MIN(task_id) as root_id FROM tasks WHERE parent_task IS NULL")
-            result = cursor.fetchone()
-            root_count = result['count']
-            existing_root_id = result['root_id']
+            # Check if we're in a phase-based workflow
+            cursor.execute("""
+                SELECT task_id, title, status FROM tasks 
+                WHERE parent_task IS NULL AND task_id LIKE 'phase_%' AND status NOT IN ('completed', 'cancelled')
+                ORDER BY task_id ASC
+                LIMIT 1
+            """)
+            active_phase = cursor.fetchone()
             
-            if root_count > 0:
-                logger.error(f"Attempt to create second root task. Existing root: {existing_root_id}")
+            if active_phase:
+                # In phase-based workflow, tasks must be assigned to phases
+                logger.warning(f"Attempt to create root task when active phase exists: {active_phase['task_id']}")
                 return [mcp_types.TextContent(
                     type="text",
-                    text=f"ERROR: Cannot create root task. A root task already exists ({existing_root_id}). All new tasks must have a parent."
+                    text=f"❌ Cannot create standalone root task. Active phase '{active_phase['task_id']}' exists.\n"
+                         f"Tasks must be assigned to phases. Use parent_task_id='{active_phase['task_id']}' or create a root task within the phase."
                 )]
+            else:
+                # Non-phase workflow - allow multiple root tasks (workstreams)
+                cursor.execute("SELECT COUNT(*) as count FROM tasks WHERE parent_task IS NULL")
+                root_count = cursor.fetchone()['count']
+                
+                logger.info(f"Creating new root task. Currently {root_count} root tasks exist.")
+                # Note: In non-phase workflows, multiple root tasks are allowed
         
         # Smart workload validation
         workload_analysis = None
@@ -545,6 +558,16 @@ async def assign_task_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Tex
                 logger.info(f"RAG suggestions automatically applied for task {new_task_id}")
             else:
                 validation_message = "\n✓ RAG validation approved placement\n"
+            
+            # Check if RAG suggested creating a root task
+            if validation_result.get("is_root_task_suggestion", False):
+                validation_message += "📊 RAG identified this as a new workstream - creating as root task\n"
+                # If we're in phase workflow, parent should be the phase
+                if validation_result.get("hierarchy_analysis", {}).get("in_phase_workflow"):
+                    phase_id = validation_result["hierarchy_analysis"].get("active_phase_id")
+                    if phase_id:
+                        final_parent_task_id = phase_id
+                        validation_message += f"✓ Creating as root task under phase: {phase_id}\n"
 
         # Build initial notes with coordination information
         initial_notes = []
@@ -644,6 +667,11 @@ async def assign_task_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Tex
         logger.info(f"Task '{new_task_id}' ({task_title}) assigned to agent '{target_agent_id}'.")
         
         # Build comprehensive response
+        # Check if this is a root task creation
+        is_root_task = False
+        if final_parent_task_id and final_parent_task_id.startswith("phase_"):
+            is_root_task = validation_result.get("is_root_task_suggestion", False) if validation_performed else False
+        
         response_parts = [f"✅ **Task Assigned Successfully**"]
         response_parts.append(f"   Task ID: {new_task_id}")
         response_parts.append(f"   Title: {task_title}")
@@ -656,8 +684,12 @@ async def assign_task_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Tex
                 cursor.execute("SELECT title, status FROM tasks WHERE task_id = ?", (final_parent_task_id,))
                 phase_info = cursor.fetchone()
                 if phase_info:
-                    response_parts.append(f"   📊 Phase: {final_parent_task_id} - {phase_info['title']}")
-                    response_parts.append(f"        Status: {phase_info['status']}")
+                    if is_root_task:
+                        response_parts.append(f"   🚀 **Root Task (Workstream)** in Phase: {phase_info['title']}")
+                        response_parts.append(f"        This creates a new independent workstream")
+                    else:
+                        response_parts.append(f"   📊 Phase: {final_parent_task_id} - {phase_info['title']}")
+                    response_parts.append(f"        Phase Status: {phase_info['status']}")
                 else:
                     response_parts.append(f"   📊 Phase: {final_parent_task_id}")
             else:
@@ -1991,6 +2023,174 @@ async def search_tasks_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Te
     return [mcp_types.TextContent(type="text", text="\n".join(response_parts))]
 
 
+# --- Helper function for smart parent task suggestions ---
+def _suggest_optimal_parent_task(cursor, agent_id: str, task_description: str) -> Dict[str, Any]:
+    """Create a new root task (workstream) within a phase"""
+    admin_auth_token = arguments.get("token")
+    phase_id = arguments.get("phase_id")
+    workstream_title = arguments.get("workstream_title")
+    workstream_description = arguments.get("workstream_description")
+    assigned_agent_id = arguments.get("assigned_agent_id")  # Optional initial assignment
+    priority = arguments.get("priority", "medium")
+    estimated_subtasks = arguments.get("estimated_subtasks")  # Optional planning info
+    
+    if not verify_token(admin_auth_token, "admin"):
+        return [mcp_types.TextContent(type="text", text="Unauthorized: Admin token required")]
+    
+    if not all([phase_id, workstream_title, workstream_description]):
+        return [mcp_types.TextContent(type="text", text="Error: phase_id, workstream_title, and workstream_description are required.")]
+    
+    requesting_agent_id = get_agent_id(admin_auth_token)
+    log_audit(requesting_agent_id, "create_root_task", {"phase_id": phase_id, "title": workstream_title})
+    
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Validate phase exists and is not completed
+        cursor.execute("SELECT task_id, title, status FROM tasks WHERE task_id = ?", (phase_id,))
+        phase = cursor.fetchone()
+        
+        if not phase:
+            return [mcp_types.TextContent(type="text", text=f"❌ Phase '{phase_id}' not found. Use create_phase first.")]
+        
+        if phase["status"] == "completed":
+            return [mcp_types.TextContent(type="text", text=f"❌ Cannot create root task in completed phase '{phase_id}'.")]
+        
+        # Check linear phase progression
+        from .phase_management_tools import _get_phase_hierarchy, _analyze_phase_completion
+        
+        phase_hierarchy = _get_phase_hierarchy()
+        current_phase_def = None
+        for phase_def in phase_hierarchy["phases"]:
+            if phase_def["phase_id"] == phase_id:
+                current_phase_def = phase_def
+                break
+        
+        if current_phase_def and current_phase_def["prerequisites"]:
+            for prereq_phase_id in current_phase_def["prerequisites"]:
+                # Check if prerequisite phase exists first
+                cursor.execute("SELECT task_id FROM tasks WHERE task_id = ?", (prereq_phase_id,))
+                if cursor.fetchone():  # Only check completion if phase exists
+                    prereq_completion = _analyze_phase_completion(cursor, prereq_phase_id)
+                    if not prereq_completion["can_advance"]:
+                        return [mcp_types.TextContent(
+                            type="text",
+                            text=f"❌ Cannot create root task in phase '{phase_id}'. Prerequisite phase '{prereq_phase_id}' is only {prereq_completion['completion_percentage']}% complete."
+                        )]
+        
+        # Validate agent if provided
+        if assigned_agent_id:
+            cursor.execute("SELECT agent_id FROM agents WHERE agent_id = ? AND status != 'terminated'", (assigned_agent_id,))
+            if not cursor.fetchone():
+                return [mcp_types.TextContent(type="text", text=f"Agent '{assigned_agent_id}' not found or is terminated.")]
+        
+        # Create the root task
+        new_task_id = _generate_task_id()
+        created_at_iso = datetime.datetime.now().isoformat()
+        
+        task_data = {
+            "task_id": new_task_id,
+            "title": workstream_title,
+            "description": workstream_description,
+            "assigned_to": assigned_agent_id,
+            "created_by": "admin",
+            "status": "pending",
+            "priority": priority,
+            "created_at": created_at_iso,
+            "updated_at": created_at_iso,
+            "parent_task": phase_id,  # Root task of the phase
+            "child_tasks": json.dumps([]),
+            "depends_on_tasks": json.dumps([]),
+            "notes": json.dumps([{
+                "timestamp": created_at_iso,
+                "author": "system",
+                "content": f"🚀 Root task (workstream) created in {phase['title']}."
+            }])
+        }
+        
+        if estimated_subtasks:
+            task_data["notes"] = json.dumps([{
+                "timestamp": created_at_iso,
+                "author": "system",
+                "content": f"🚀 Root task (workstream) created in {phase['title']}. Estimated {estimated_subtasks} subtasks planned."
+            }])
+        
+        cursor.execute("""
+            INSERT INTO tasks (task_id, title, description, assigned_to, created_by, status, priority,
+                             created_at, updated_at, parent_task, child_tasks, depends_on_tasks, notes)
+            VALUES (:task_id, :title, :description, :assigned_to, :created_by, :status, :priority,
+                    :created_at, :updated_at, :parent_task, :child_tasks, :depends_on_tasks, :notes)
+        """, task_data)
+        
+        # Update phase's child_tasks list
+        cursor.execute("SELECT child_tasks FROM tasks WHERE task_id = ?", (phase_id,))
+        phase_children = json.loads(cursor.fetchone()["child_tasks"] or "[]")
+        phase_children.append(new_task_id)
+        cursor.execute("UPDATE tasks SET child_tasks = ? WHERE task_id = ?", 
+                      (json.dumps(phase_children), phase_id))
+        
+        # Update in-memory cache
+        task_data_for_memory = task_data.copy()
+        task_data_for_memory["child_tasks"] = []
+        task_data_for_memory["depends_on_tasks"] = []
+        task_data_for_memory["notes"] = json.loads(task_data["notes"])
+        g.tasks[new_task_id] = task_data_for_memory
+        
+        if phase_id in g.tasks:
+            g.tasks[phase_id]["child_tasks"] = phase_children
+        
+        # Get current phase completion status
+        completion = _analyze_phase_completion(cursor, phase_id)
+        
+        log_agent_action_to_db(cursor, requesting_agent_id, "create_root_task", 
+                             new_task_id, {"phase_id": phase_id, "workstream": workstream_title})
+        conn.commit()
+        
+        response_parts = [
+            f"✅ **Root Task Created Successfully**",
+            f"   Task ID: {new_task_id}",
+            f"   Workstream: {workstream_title}",
+            f"   Phase: {phase['title']}",
+            f"   Priority: {priority}",
+            f"   Status: pending",
+            ""
+        ]
+        
+        if assigned_agent_id:
+            response_parts.append(f"✓ Assigned to: {assigned_agent_id}")
+        else:
+            response_parts.append("⚠️ No initial agent assignment - use update_task_status to assign later")
+        
+        response_parts.extend([
+            "",
+            f"📊 **Phase Status Update:**",
+            f"   Total root tasks in phase: {completion['total_root_tasks']}",
+            f"   Phase completion: {completion['completion_percentage']}%",
+            "",
+            "📋 **Next Steps:**",
+            f"• Use assign_task with parent_task_id='{new_task_id}' to add subtasks",
+            "• Assign agents to work on this workstream",
+            "• Create dependencies between root tasks if needed",
+            "• Track progress independently from other workstreams"
+        ])
+        
+        return [mcp_types.TextContent(type="text", text="\n".join(response_parts))]
+        
+    except sqlite3.Error as e_sql:
+        if conn: conn.rollback()
+        logger.error(f"Database error creating root task: {e_sql}", exc_info=True)
+        return [mcp_types.TextContent(type="text", text=f"Database error: {e_sql}")]
+    except Exception as e:
+        if conn: conn.rollback()
+        logger.error(f"Unexpected error creating root task: {e}", exc_info=True)
+        return [mcp_types.TextContent(type="text", text=f"Unexpected error: {e}")]
+    finally:
+        if conn:
+            conn.close()
+
+
 # --- Register all task tools ---
 def register_task_tools():
     register_tool(
@@ -2201,6 +2401,31 @@ def register_task_tools():
             "additionalProperties": False
         },
         implementation=search_tasks_tool_impl
+    )
+
+    register_tool(
+        name="create_root_task",
+        description="Create a new root task (workstream) within a phase. Enables multiple independent workstreams per phase for better organization.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "token": {"type": "string", "description": "Admin authentication token"},
+                "phase_id": {"type": "string", "description": "Phase ID to create the root task in (e.g., 'phase_2_intelligence')"},
+                "workstream_title": {"type": "string", "description": "Title of the workstream/root task"},
+                "workstream_description": {"type": "string", "description": "Detailed description of the workstream objectives"},
+                "assigned_agent_id": {"type": "string", "description": "Optional initial agent assignment"},
+                "priority": {
+                    "type": "string", 
+                    "description": "Task priority",
+                    "enum": ["low", "medium", "high", "critical"],
+                    "default": "medium"
+                },
+                "estimated_subtasks": {"type": "integer", "description": "Optional estimate of subtasks for planning", "minimum": 0}
+            },
+            "required": ["token", "phase_id", "workstream_title", "workstream_description"],
+            "additionalProperties": False
+        },
+        implementation=create_self_task_tool_impl
     )
 
     register_tool(

@@ -5,6 +5,116 @@ from ...tools.rag_tools import ask_project_rag_tool_impl
 import mcp.types as mcp_types
 from ...core.config import logger, TASK_ANALYSIS_MODEL, TASK_ANALYSIS_MAX_TOKENS
 from ...external.openai_service import get_openai_client
+from ...core.auth import get_agent_id
+from ...core import globals as g
+from ...db.connection import get_db_connection
+
+def _get_agent_context(agent_id: str) -> Dict[str, Any]:
+    """Get comprehensive context about an agent's current work"""
+    if agent_id == "admin":
+        return {"is_admin": True}
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        # Get agent's active tasks
+        cursor.execute("""
+            SELECT task_id, title, parent_task, status, priority, updated_at
+            FROM tasks 
+            WHERE assigned_to = ? AND status IN ('pending', 'in_progress')
+            ORDER BY 
+                CASE status WHEN 'in_progress' THEN 0 ELSE 1 END,
+                priority DESC,
+                updated_at DESC
+            LIMIT 10
+        """, (agent_id,))
+        active_tasks = [dict(row) for row in cursor.fetchall()]
+        
+        # Get agent's recently completed tasks
+        cursor.execute("""
+            SELECT task_id, title, parent_task, completed_at
+            FROM tasks 
+            WHERE assigned_to = ? AND status = 'completed'
+            ORDER BY updated_at DESC
+            LIMIT 5
+        """, (agent_id,))
+        recent_completed = [dict(row) for row in cursor.fetchall()]
+        
+        # Identify workstreams (root tasks) agent is working on
+        workstream_ids = set()
+        for task in active_tasks + recent_completed:
+            # Traverse up to find root task
+            current_id = task.get('parent_task')
+            while current_id:
+                cursor.execute("SELECT parent_task, title FROM tasks WHERE task_id = ?", (current_id,))
+                parent_info = cursor.fetchone()
+                if parent_info and parent_info['parent_task']:
+                    current_id = parent_info['parent_task']
+                else:
+                    if current_id:
+                        workstream_ids.add(current_id)
+                    break
+        
+        # Get workstream details
+        workstreams = []
+        for ws_id in workstream_ids:
+            cursor.execute("SELECT task_id, title, description FROM tasks WHERE task_id = ?", (ws_id,))
+            ws = cursor.fetchone()
+            if ws:
+                workstreams.append(dict(ws))
+        
+        # Get agent info from memory
+        agent_info = None
+        for token, data in g.active_agents.items():
+            if data.get("agent_id") == agent_id:
+                agent_info = data
+                break
+        
+        # Create work pattern summary
+        work_pattern = _analyze_work_pattern(active_tasks, recent_completed)
+        
+        return {
+            "is_admin": False,
+            "agent_id": agent_id,
+            "active_tasks": active_tasks,
+            "recent_completed": recent_completed,
+            "assigned_workstreams": workstreams,
+            "current_focus": active_tasks[0]["title"] if active_tasks else None,
+            "agent_capabilities": agent_info.get("capabilities", []) if agent_info else [],
+            "work_pattern": work_pattern,
+            "working_directory": g.agent_working_dirs.get(agent_id, "unknown")
+        }
+        
+    finally:
+        conn.close()
+
+def _analyze_work_pattern(active_tasks: List[Dict], completed_tasks: List[Dict]) -> str:
+    """Analyze agent's work pattern for context"""
+    if not active_tasks and not completed_tasks:
+        return "No prior work history"
+    
+    # Analyze task types
+    all_tasks = active_tasks + completed_tasks
+    keywords = []
+    for task in all_tasks:
+        title_lower = task.get('title', '').lower()
+        if 'api' in title_lower or 'endpoint' in title_lower:
+            keywords.append('API development')
+        elif 'ui' in title_lower or 'component' in title_lower:
+            keywords.append('UI development')
+        elif 'test' in title_lower:
+            keywords.append('testing')
+        elif 'database' in title_lower or 'schema' in title_lower:
+            keywords.append('database work')
+        elif 'document' in title_lower:
+            keywords.append('documentation')
+    
+    if keywords:
+        unique_patterns = list(set(keywords))
+        return f"Agent primarily works on: {', '.join(unique_patterns[:3])}"
+    
+    return "General development tasks"
 
 async def validate_task_placement(
     title: str,
@@ -43,41 +153,101 @@ async def validate_task_placement(
         }
     """
     try:
+        # Get requester identity
+        requester_id = get_agent_id(auth_token)
+        
+        # Get agent context if not admin
+        agent_context = _get_agent_context(requester_id)
+        agent_context_str = ""
+        
+        if not agent_context.get("is_admin"):
+            # Build detailed agent context for RAG
+            agent_context_str = f"""
+        AGENT CONTEXT (Requester: {requester_id}):
+        - Current Focus: {agent_context.get('current_focus', 'None')}
+        - Active Tasks: {len(agent_context.get('active_tasks', []))} tasks
+        - Work Pattern: {agent_context.get('work_pattern')}
+        - Assigned Workstreams: {', '.join([w['title'] for w in agent_context.get('assigned_workstreams', [])])}
+        
+        Agent's Active Tasks:
+        {json.dumps([{'id': t['task_id'], 'title': t['title']} for t in agent_context.get('active_tasks', [])[:5]], indent=2)}
+        
+        Recent Completed Tasks:
+        {json.dumps([{'id': t['task_id'], 'title': t['title']} for t in agent_context.get('recent_completed', [])[:3]], indent=2)}
+        
+        IMPORTANT: This agent is requesting task creation. Consider their current workload and expertise when suggesting placement.
+        The task likely relates to their current work unless explicitly stated otherwise.
+            """
+        
+        # Check if we're in a phase-based workflow
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Check for active phases
+        cursor.execute("""
+            SELECT task_id, title, status 
+            FROM tasks 
+            WHERE parent_task IS NULL AND task_id LIKE 'phase_%' AND status NOT IN ('completed', 'cancelled')
+            ORDER BY task_id ASC
+            LIMIT 1
+        """)
+        active_phase = cursor.fetchone()
+        
+        phase_context = ""
+        if active_phase:
+            phase_context = f"""
+        PHASE-BASED WORKFLOW DETECTED:
+        Active Phase: {active_phase['task_id']} - {active_phase['title']}
+        Status: {active_phase['status']}
+        
+        IMPORTANT: We are using a phase-based workflow. Tasks should be organized under root tasks within the active phase.
+        Multiple root tasks per phase are allowed and encouraged for organizing independent workstreams.
+            """
+        
         # Check if trying to create a root task (no parent)
-        from ...db.connection import get_db_connection
         root_task_check = ""
         if parent_task_id is None:
-            # Check if a root task already exists
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute("SELECT COUNT(*) as count FROM tasks WHERE parent_task IS NULL")
-            root_count = cursor.fetchone()['count']
-            conn.close()
-            
-            if root_count > 0:
+            if active_phase:
                 root_task_check = f"""
-                CRITICAL: There are already {root_count} root task(s) in the system. 
-                ONLY ONE root task is allowed. This task MUST have a parent.
+                NO PARENT SPECIFIED: In phase-based workflow, this could be:
+                1. A new root task (workstream) under phase {active_phase['task_id']}
+                2. A subtask under an existing root task in the phase
+                
+                Analyze the task scope to determine if it's a new workstream or part of existing work.
                 """
+            else:
+                # Non-phase workflow - check root task count
+                cursor.execute("SELECT COUNT(*) as count FROM tasks WHERE parent_task IS NULL")
+                root_count = cursor.fetchone()['count']
+                if root_count > 0:
+                    root_task_check = f"""
+                    NO PARENT SPECIFIED: There are already {root_count} root task(s) in the system.
+                    Consider if this should be a subtask of an existing root task or a new independent workstream.
+                    """
+        
+        conn.close()
         
         # Format the query for RAG with emphasis on critical thinking
         query = f"""
+        {agent_context_str}
+        {phase_context}
         {root_task_check}
         
         CRITICAL THINKING REQUIRED: Analyze the proposed task placement with deep consideration of the ENTIRE task hierarchy:
         
         Title: {title}
         Description: {description}
-        Proposed Parent Task: {parent_task_id or 'None (ATTEMPTING TO CREATE ROOT TASK)'}
+        Proposed Parent Task: {parent_task_id or 'None (NO PARENT SPECIFIED)'}
         Proposed Dependencies: {json.dumps(depends_on_tasks or [])}
         Created By: {created_by}
         
         YOU MUST CRITICALLY EVALUATE:
         
         1. HIERARCHY RULES:
-           - There can be ONLY ONE root task (no parent) in the entire system
-           - Every other task MUST have a parent
-           - If proposing a root task, explain why this should be THE root task
+           - In phase-based workflow: Multiple root tasks allowed per phase
+           - In non-phase workflow: Consider if multiple root tasks make sense
+           - Analyze if this is a new workstream or part of existing work
+           - If agent-requested: Consider placing within agent's current workstream
         
         2. LOGICAL PLACEMENT:
            - Analyze ALL existing tasks to find the most logical parent
@@ -100,11 +270,16 @@ async def validate_task_placement(
         Please respond in the following JSON format:
         {{
             "placement_assessment": "appropriate" | "needs_adjustment" | "problematic",
+            "task_type_decision": {{
+                "is_new_workstream": true | false,
+                "should_be_root_task": true | false,
+                "reasoning": "explanation of why this is/isn't a new workstream"
+            }},
             "hierarchy_analysis": {{
-                "root_task_exists": true | false,
-                "current_root_task_id": "task_id or null",
-                "proposed_is_root": true | false,
-                "hierarchy_violation": true | false
+                "in_phase_workflow": true | false,
+                "active_phase_id": "phase_id or null",
+                "recommended_placement": "root_task" | "subtask",
+                "workstream_alignment": "matches_agent_work" | "new_workstream" | "cross_workstream"
             }},
             "parent_suggestion": {{
                 "recommended_parent": "task_id or null",
@@ -185,9 +360,9 @@ async def validate_task_placement(
         
         # Process the RAG response into our format
         if rag_data:
-            # Check for hierarchy violations first
+            # Extract task type decision
+            task_type_decision = rag_data.get("task_type_decision", {})
             hierarchy_analysis = rag_data.get("hierarchy_analysis", {})
-            hierarchy_violation = hierarchy_analysis.get("hierarchy_violation", False)
             
             # Map RAG recommendations to our status codes
             status_map = {
@@ -202,15 +377,17 @@ async def validate_task_placement(
                 "approved"
             )
             
-            # Override status if hierarchy violation detected
-            if hierarchy_violation and parent_task_id is None:
-                status = "denied"
-                logger.warning(f"Task creation denied due to hierarchy violation (attempting to create second root task)")
-            else:
-                status = base_status
+            # No longer deny based on hierarchy violations - we support multiple root tasks
+            status = base_status
             
             # Extract suggestions
             parent_suggestion = rag_data.get("parent_suggestion", {})
+            
+            # Handle root task creation decision
+            should_be_root = task_type_decision.get("should_be_root_task", False)
+            if should_be_root and hierarchy_analysis.get("in_phase_workflow"):
+                # Update parent suggestion to be the active phase for root task creation
+                parent_suggestion["recommended_parent"] = hierarchy_analysis.get("active_phase_id")
             dependency_suggestions = rag_data.get("dependency_suggestions", {})
             
             suggestions = {
@@ -261,7 +438,10 @@ async def validate_task_placement(
                 "suggestions": suggestions,
                 "duplicates": duplicates,
                 "message": full_message,
-                "hierarchy_analysis": hierarchy_analysis  # Include for additional context
+                "hierarchy_analysis": hierarchy_analysis,  # Include for additional context
+                "task_type_decision": task_type_decision,  # Include workstream decision
+                "is_root_task_suggestion": should_be_root,  # Flag for root task creation
+                "agent_context_used": not agent_context.get("is_admin", False)  # Whether agent context was used
             }
         else:
             # Fallback response if RAG parsing failed

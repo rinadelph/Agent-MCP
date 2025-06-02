@@ -41,7 +41,9 @@ def initialize_openai_client() -> Optional[openai.OpenAI]:
         logger.error("OpenAI library failed to import. Cannot initialize client.")
         return None
 
-    if not OPENAI_API_KEY_ENV: # Check from config.py, which got it from os.environ
+    # Re-check the environment variable directly instead of using the cached value
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
         logger.error("OPENAI_API_KEY not found in environment variables. Cannot initialize OpenAI client.")
         # Do not print to console - just log to file
         return None
@@ -50,7 +52,7 @@ def initialize_openai_client() -> Optional[openai.OpenAI]:
     try:
         # Create the OpenAI client instance
         # Original main.py:191
-        client = openai.OpenAI(api_key=OPENAI_API_KEY_ENV)
+        client = openai.OpenAI(api_key=api_key)
 
         # Test the connection by making a simple, low-cost API call
         # Original main.py:193 (client.models.list())

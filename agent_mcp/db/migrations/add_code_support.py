@@ -5,7 +5,7 @@ Migration script to add code-aware RAG support to existing databases.
 This script:
 1. Adds the metadata column to rag_chunks table if missing
 2. Adds the last_indexed_code entry to rag_meta if missing
-3. Re-creates the rag_embeddings table with the new dimension (3072)
+3. Re-creates the rag_embeddings table with the new dimension
 """
 
 import sqlite3

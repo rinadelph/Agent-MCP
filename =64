@@ -1,0 +1,10 @@
+Defaulting to user installation because normal site-packages is not writeable
+Requirement already satisfied: pip in /usr/lib/python3/dist-packages (22.0.2)
+Collecting pip
+  Downloading pip-25.1.1-py3-none-any.whl (1.8 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.8/1.8 MB 2.8 MB/s eta 0:00:00
+Requirement already satisfied: setuptools in /usr/lib/python3/dist-packages (59.6.0)
+Collecting setuptools
+  Using cached setuptools-80.9.0-py3-none-any.whl (1.2 MB)
+Installing collected packages: setuptools, pip
+Successfully installed pip-25.1.1 setuptools-80.9.0

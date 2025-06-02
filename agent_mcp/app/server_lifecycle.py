@@ -54,6 +54,22 @@ async def application_startup(project_dir_path_str: str, admin_token_param: Opti
     os.environ["MCP_PROJECT_DIR"] = str(project_path) # Critical for other modules using get_project_dir()
     logger.info(f"Using project directory: {project_path}")
 
+    # Check if this is a first-time run (no .agent directory exists)
+    agent_dir_path = project_path / ".agent"
+    if not agent_dir_path.exists():
+        logger.info("")
+        logger.info("=" * 60)
+        logger.info("FIRST TIME SETUP DETECTED")
+        logger.info("=" * 60)
+        logger.info(f"No .agent directory found in: {project_path}")
+        logger.info("")
+        logger.info("Please initialize your project first by running:")
+        logger.info(f"  agent-mcp init")
+        logger.info("")
+        logger.info("This will create the necessary project structure.")
+        logger.info("=" * 60)
+        logger.info("")
+
     # 2. Initialize .agent directory (Original main.py:1962-1966)
     agent_dir = init_agent_directory(str(project_path)) # project_utils.init_agent_directory
     if agent_dir is None: # init_agent_directory returns None on critical failure
@@ -71,16 +87,19 @@ async def application_startup(project_dir_path_str: str, admin_token_param: Opti
         db_path_err = get_db_path_for_error() # Get path for error message
         raise SystemExit(f"Error: Failed to initialize database at {db_path_err}. Check logs and permissions.") from e
 
-    # 3.5. Run Automatic Granular Migration (if needed)
-    # This detects old Agent MCP versions and uses granular step-by-step analysis to create optimal phase structure
+    # 3.5. Check and Apply Database Migrations
+    # This ensures the database is at the current schema version
     try:
-        from ..core.granular_migration import run_granular_migration
-        import asyncio
-        migration_success = asyncio.run(run_granular_migration())
-        if not migration_success:
-            logger.warning("Granular migration encountered issues but continuing startup...")
+        from ..db.migrations.migration_manager import ensure_database_current
+        logger.info("Checking database version...")
+        migration_result = await ensure_database_current()
+        if not migration_result:
+            logger.error("CRITICAL: Database migration failed. Cannot continue with outdated schema.")
+            raise SystemExit("Database migration required but failed. Please check logs.")
     except Exception as e:
-        logger.error(f"Error during automatic granular migration: {e}. Continuing with startup...", exc_info=True)
+        logger.error(f"Error during database migration check: {e}", exc_info=True)
+        # Allow startup to continue if migration check fails (backwards compatibility)
+        logger.warning("Continuing startup despite migration check failure...")
 
     # 4. Handle Admin Token Persistence (Original main.py:1977-2012)
     # This logic ensures g.admin_token is set.

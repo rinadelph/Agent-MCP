@@ -122,8 +122,8 @@ async def run_rag_indexing_periodically(interval_seconds: int = 300, *, task_sta
 
     # Get OpenAI client. The service initializes it and stores in g.openai_client_instance
     # The API key itself is also needed for the truly async batch embedding function.
-    # This should come from config.OPENAI_API_KEY_ENV
-    from ...core.config import OPENAI_API_KEY_ENV as openai_api_key_for_batches
+    # Get the API key directly from environment instead of using cached value
+    openai_api_key_for_batches = os.environ.get("OPENAI_API_KEY")
 
     if not openai_api_key_for_batches:
         logger.error("OpenAI API Key not configured. RAG indexer cannot run.")
@@ -137,11 +137,8 @@ async def run_rag_indexing_periodically(interval_seconds: int = 300, *, task_sta
     while g.server_running: # Uses global flag (main.py:521)
         cycle_start_time = time.time()
         
-        # Log what content will be indexed based on mode
-        if EMBEDDING_DIMENSION == 3072:
-            logger.info("Starting RAG index update cycle (advanced mode: markdown, code, context, tasks)...")
-        else:
-            logger.info("Starting RAG index update cycle (simple mode: markdown, context only)...")
+        # Log what content will be indexed
+        logger.info("Starting RAG index update cycle (indexing markdown, context, and tasks)...")
         
         conn = None # Initialize conn here for broader scope in try-finally
 
@@ -201,21 +198,8 @@ async def run_rag_indexing_periodically(interval_seconds: int = 300, *, task_sta
             
             logger.info(f"Found {len(all_md_files_found)} markdown files to consider for indexing (after filtering ignored dirs).")
 
-            # Find all code files (only in advanced mode)
+            # Code files are not indexed in simple mode
             all_code_files_found = []
-            if ADVANCED_EMBEDDINGS:
-                for extension in CODE_EXTENSIONS:
-                    for code_file_path_str in glob.glob(str(current_project_dir / f"**/*{extension}"), recursive=True):
-                        code_path_obj = Path(code_file_path_str)
-                        should_ignore = False
-                        for part in code_path_obj.parts:
-                            if part in IGNORE_DIRS_FOR_INDEXING or (part.startswith('.') and part not in ['.', '..']):
-                                should_ignore = True
-                                break
-                        if not should_ignore:
-                            all_code_files_found.append(code_path_obj)
-                
-                logger.info(f"Found {len(all_code_files_found)} code files to consider for indexing (after filtering ignored dirs).")
 
             # Process markdown files
             for md_path_obj in all_md_files_found:
@@ -263,33 +247,31 @@ async def run_rag_indexing_periodically(interval_seconds: int = 300, *, task_sta
             
             # 3. Scan File Metadata (Original main.py:605 - "Skipped for now") - Still skipped.
             
-            # 4. Scan Tasks (only in advanced mode - For System 8)
+            # 4. Scan Tasks (for System 8)
             max_task_mod_time_iso = last_indexed_timestamps.get('last_indexed_tasks', '1970-01-01T00:00:00Z')
+            last_task_time_str = last_indexed_timestamps.get('last_indexed_tasks', '1970-01-01T00:00:00Z')
             
-            if ADVANCED_EMBEDDINGS:
-                last_task_time_str = last_indexed_timestamps.get('last_indexed_tasks', '1970-01-01T00:00:00Z')
+            # Get tasks that have been updated since last indexing
+            cursor.execute(
+                "SELECT task_id, title, description, status, assigned_to, created_by, "
+                "parent_task, depends_on_tasks, priority, created_at, updated_at "
+                "FROM tasks WHERE updated_at > ?", 
+                (last_task_time_str,)
+            )
+            
+            for task_row in cursor.fetchall():
+                task_data = dict(task_row)
+                task_id = task_data['task_id']
+                last_mod_iso = task_data['updated_at']
                 
-                # Get tasks that have been updated since last indexing
-                cursor.execute(
-                    "SELECT task_id, title, description, status, assigned_to, created_by, "
-                    "parent_task, depends_on_tasks, priority, created_at, updated_at "
-                    "FROM tasks WHERE updated_at > ?", 
-                    (last_task_time_str,)
-                )
+                # Format task for embedding
+                content_for_embedding = format_task_for_embedding(task_data)
+                current_hash = hashlib.sha256(content_for_embedding.encode('utf-8')).hexdigest()
                 
-                for task_row in cursor.fetchall():
-                    task_data = dict(task_row)
-                    task_id = task_data['task_id']
-                    last_mod_iso = task_data['updated_at']
-                    
-                    # Format task for embedding
-                    content_for_embedding = format_task_for_embedding(task_data)
-                    current_hash = hashlib.sha256(content_for_embedding.encode('utf-8')).hexdigest()
-                    
-                    sources_to_check.append(('task', task_id, content_for_embedding, last_mod_iso, current_hash))
-                    
-                    if last_mod_iso > max_task_mod_time_iso:
-                        max_task_mod_time_iso = last_mod_iso
+                sources_to_check.append(('task', task_id, content_for_embedding, last_mod_iso, current_hash))
+                
+                if last_mod_iso > max_task_mod_time_iso:
+                    max_task_mod_time_iso = last_mod_iso
 
             # Filter sources based on hash comparison (Original main.py:608-615)
             sources_to_process_for_embedding: List[Tuple[str, str, str, str]] = [] # type, ref, content, current_hash
@@ -329,39 +311,17 @@ async def run_rag_indexing_periodically(interval_seconds: int = 300, *, task_sta
                 all_chunks_texts_to_embed: List[str] = []
                 chunk_source_metadata_map: List[Tuple[str, str, str, Dict[str, Any]]] = [] # type, ref, current_hash, metadata for each chunk
 
-                # Import config to check if we're in advanced mode
-                from ...core.config import ADVANCED_EMBEDDINGS
-                
                 for source_type, source_ref, content, current_hash_of_source in sources_to_process_for_embedding:
                     chunks_with_metadata: List[Tuple[str, Dict[str, Any]]] = []
                     
-                    if ADVANCED_EMBEDDINGS:
-                        # Advanced mode: Use sophisticated chunking
-                        if source_type == 'markdown':
-                            # Markdown-aware chunking
-                            text_chunks = markdown_aware_chunker(content)
-                            chunks_with_metadata = [(chunk, {'source_type': 'markdown'}) for chunk in text_chunks]
-                        elif source_type == 'code':
-                            # Code-aware chunking for code files
-                            file_path = current_project_dir / source_ref
-                            
-                            # First, create a file summary
-                            entities = extract_code_entities(content, file_path)
-                            file_summary = create_file_summary(content, file_path, entities)
-                            summary_text = f"File: {source_ref}\n{json.dumps(file_summary, indent=2)}"
-                            chunks_with_metadata.append((summary_text, {'source_type': 'code_summary', **file_summary}))
-                            
-                            # Then chunk the code
-                            code_chunks = chunk_code_aware(content, file_path)
-                            chunks_with_metadata.extend(code_chunks)
-                        else:
-                            # Simple chunking for other types
-                            text_chunks = simple_chunker(content)
-                            chunks_with_metadata = [(chunk, {'source_type': source_type}) for chunk in text_chunks]
+                    # Simple mode: Use appropriate chunking based on type
+                    if source_type == 'markdown':
+                        # Markdown-aware chunking
+                        text_chunks = markdown_aware_chunker(content)
+                        chunks_with_metadata = [(chunk, {'source_type': 'markdown'}) for chunk in text_chunks]
                     else:
-                        # Original/Simple mode: Basic chunking for all types
+                        # Simple chunking for other types (context, tasks)
                         text_chunks = simple_chunker(content)
-                        # Store minimal metadata
                         chunks_with_metadata = [(chunk, {'source_type': source_type}) for chunk in text_chunks]
                     
                     if not chunks_with_metadata:
@@ -494,11 +454,8 @@ async def run_rag_indexing_periodically(interval_seconds: int = 300, *, task_sta
                 cursor.execute("INSERT OR REPLACE INTO rag_meta (meta_key, meta_value) VALUES (?, ?)", ('last_indexed_markdown', new_md_time_iso))
                 cursor.execute("INSERT OR REPLACE INTO rag_meta (meta_key, meta_value) VALUES (?, ?)", ('last_indexed_context', max_ctx_mod_time_iso))
                 
-                # Only update code and tasks timestamps in advanced mode
-                if ADVANCED_EMBEDDINGS:
-                    new_code_time_iso = datetime.datetime.fromtimestamp(max_code_mod_timestamp).isoformat() + "Z"
-                    cursor.execute("INSERT OR REPLACE INTO rag_meta (meta_key, meta_value) VALUES (?, ?)", ('last_indexed_code', new_code_time_iso))
-                    cursor.execute("INSERT OR REPLACE INTO rag_meta (meta_key, meta_value) VALUES (?, ?)", ('last_indexed_tasks', max_task_mod_time_iso))
+                # Update tasks timestamp (tasks are indexed in simple mode)
+                cursor.execute("INSERT OR REPLACE INTO rag_meta (meta_key, meta_value) VALUES (?, ?)", ('last_indexed_tasks', max_task_mod_time_iso))
                 # Add other source types here
             else:
                 logger.warning("Skipping rag_meta timestamp updates due to errors in the embedding/indexing cycle.")

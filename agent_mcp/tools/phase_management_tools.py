@@ -58,9 +58,9 @@ def _get_phase_hierarchy() -> Dict[str, Any]:
     }
 
 def _analyze_phase_completion(cursor, phase_id: str) -> Dict[str, Any]:
-    """Analyze completion status of a phase"""
+    """Analyze completion status of a phase based on root task workstreams"""
     
-    # Get all tasks for this phase (parent tasks with this phase_id)
+    # Get all ROOT tasks for this phase (direct children of phase)
     cursor.execute("""
         SELECT task_id, title, status, priority, assigned_to, created_at, updated_at
         FROM tasks 
@@ -68,71 +68,164 @@ def _analyze_phase_completion(cursor, phase_id: str) -> Dict[str, Any]:
         ORDER BY priority DESC, created_at ASC
     """, (phase_id,))
     
-    phase_tasks = [dict(row) for row in cursor.fetchall()]
+    root_tasks = [dict(row) for row in cursor.fetchall()]
     
-    if not phase_tasks:
+    if not root_tasks:
         return {
             "phase_id": phase_id,
-            "total_tasks": 0,
-            "completed_tasks": 0,
+            "total_root_tasks": 0,
+            "completed_root_tasks": 0,
             "completion_percentage": 0,
             "can_advance": False,
-            "blocking_tasks": [],
+            "blocking_root_tasks": [],
+            "root_task_details": [],
             "status": "empty"
         }
     
-    # Calculate completion metrics
-    total_tasks = len(phase_tasks)
-    completed_tasks = len([t for t in phase_tasks if t['status'] == 'completed'])
-    failed_tasks = len([t for t in phase_tasks if t['status'] == 'failed'])
-    in_progress_tasks = len([t for t in phase_tasks if t['status'] == 'in_progress'])
-    pending_tasks = len([t for t in phase_tasks if t['status'] == 'pending'])
+    # Analyze each root task's completion (including its subtasks)
+    root_task_details = []
+    completed_root_tasks = 0
     
-    completion_percentage = (completed_tasks / total_tasks) * 100 if total_tasks > 0 else 0
+    for root_task in root_tasks:
+        root_task_analysis = _analyze_root_task_completion(cursor, root_task['task_id'])
+        root_task_details.append({
+            "task_id": root_task['task_id'],
+            "title": root_task['title'],
+            "status": root_task['status'],
+            "assigned_to": root_task['assigned_to'],
+            "completion_percentage": root_task_analysis['completion_percentage'],
+            "total_subtasks": root_task_analysis['total_subtasks'],
+            "completed_subtasks": root_task_analysis['completed_subtasks'],
+            "can_complete": root_task_analysis['can_complete'],
+            "blocking_subtasks": root_task_analysis['blocking_subtasks']
+        })
+        
+        # Root task is considered complete if ALL its subtasks are complete AND root task is marked complete
+        if root_task_analysis['can_complete'] and root_task['status'] == 'completed':
+            completed_root_tasks += 1
     
-    # Find blocking tasks (not completed)
-    blocking_tasks = [
+    total_root_tasks = len(root_tasks)
+    completion_percentage = (completed_root_tasks / total_root_tasks) * 100 if total_root_tasks > 0 else 0
+    
+    # Find blocking root tasks (not fully completed)
+    blocking_root_tasks = [
         {
-            "task_id": t["task_id"],
-            "title": t["title"], 
-            "status": t["status"],
-            "assigned_to": t["assigned_to"]
+            "task_id": detail["task_id"],
+            "title": detail["title"],
+            "status": detail["status"],
+            "assigned_to": detail["assigned_to"],
+            "completion_percentage": detail["completion_percentage"],
+            "blocking_subtasks_count": len(detail["blocking_subtasks"])
         }
-        for t in phase_tasks if t['status'] not in ['completed', 'cancelled']
+        for detail in root_task_details 
+        if not (detail['can_complete'] and detail['task_id'] in [t['task_id'] for t in root_tasks if t['status'] == 'completed'])
     ]
     
-    # Determine phase status
+    # Determine phase status based on root task completion
     if completion_percentage == 100:
         status = "completed"
     elif completion_percentage >= 80:
         status = "near_completion"
-    elif in_progress_tasks > 0:
+    elif any(detail['completion_percentage'] > 0 for detail in root_task_details):
         status = "in_progress"
-    elif failed_tasks > 0:
+    elif any(detail['status'] == 'failed' for detail in root_task_details):
         status = "blocked"
     else:
         status = "pending"
     
     return {
         "phase_id": phase_id,
-        "total_tasks": total_tasks,
-        "completed_tasks": completed_tasks,
-        "failed_tasks": failed_tasks,
-        "in_progress_tasks": in_progress_tasks,
-        "pending_tasks": pending_tasks,
+        "total_root_tasks": total_root_tasks,
+        "completed_root_tasks": completed_root_tasks,
         "completion_percentage": round(completion_percentage, 1),
         "can_advance": completion_percentage == 100,
-        "blocking_tasks": blocking_tasks,
+        "blocking_root_tasks": blocking_root_tasks,
+        "root_task_details": root_task_details,
         "status": status
     }
 
-def _get_active_agents_for_phase(cursor, phase_id: str) -> List[Dict[str, Any]]:
-    """Get all agents currently working on tasks in this phase"""
+def _analyze_root_task_completion(cursor, root_task_id: str) -> Dict[str, Any]:
+    """Analyze completion of a root task including all its subtasks recursively"""
     
+    # Get all subtasks under this root task (recursive)
     cursor.execute("""
+        WITH RECURSIVE task_tree AS (
+            SELECT task_id, title, status, assigned_to
+            FROM tasks 
+            WHERE parent_task = ? AND status != 'cancelled'
+            
+            UNION ALL
+            
+            SELECT t.task_id, t.title, t.status, t.assigned_to
+            FROM tasks t
+            INNER JOIN task_tree tt ON t.parent_task = tt.task_id
+            WHERE t.status != 'cancelled'
+        )
+        SELECT * FROM task_tree
+    """, (root_task_id,))
+    
+    subtasks = [dict(row) for row in cursor.fetchall()]
+    
+    if not subtasks:
+        # Root task has no subtasks - completion based on root task status only
+        return {
+            "total_subtasks": 0,
+            "completed_subtasks": 0,
+            "completion_percentage": 100,  # No subtasks means root task itself determines completion
+            "can_complete": True,
+            "blocking_subtasks": []
+        }
+    
+    # Calculate subtask completion
+    total_subtasks = len(subtasks)
+    completed_subtasks = len([t for t in subtasks if t['status'] == 'completed'])
+    failed_subtasks = len([t for t in subtasks if t['status'] == 'failed'])
+    
+    completion_percentage = (completed_subtasks / total_subtasks) * 100 if total_subtasks > 0 else 100
+    
+    # Root task can complete if ALL subtasks are completed
+    can_complete = completion_percentage == 100
+    
+    # Find blocking subtasks
+    blocking_subtasks = [
+        {
+            "task_id": t["task_id"],
+            "title": t["title"],
+            "status": t["status"],
+            "assigned_to": t["assigned_to"]
+        }
+        for t in subtasks if t['status'] not in ['completed', 'cancelled']
+    ]
+    
+    return {
+        "total_subtasks": total_subtasks,
+        "completed_subtasks": completed_subtasks,
+        "failed_subtasks": failed_subtasks,
+        "completion_percentage": round(completion_percentage, 1),
+        "can_complete": can_complete,
+        "blocking_subtasks": blocking_subtasks
+    }
+
+def _get_active_agents_for_phase(cursor, phase_id: str) -> List[Dict[str, Any]]:
+    """Get all agents currently working on tasks in this phase (including all subtasks)"""
+    
+    # Get agents working on root tasks and all their subtasks
+    cursor.execute("""
+        WITH RECURSIVE phase_tasks AS (
+            -- Root tasks directly under phase
+            SELECT task_id, assigned_to FROM tasks WHERE parent_task = ?
+            
+            UNION ALL
+            
+            -- All subtasks under root tasks
+            SELECT t.task_id, t.assigned_to
+            FROM tasks t
+            INNER JOIN phase_tasks pt ON t.parent_task = pt.task_id
+        )
         SELECT DISTINCT assigned_to, COUNT(*) as task_count
-        FROM tasks 
-        WHERE parent_task = ? AND status IN ('pending', 'in_progress')
+        FROM phase_tasks pt
+        INNER JOIN tasks t ON pt.task_id = t.task_id
+        WHERE t.status IN ('pending', 'in_progress') AND assigned_to IS NOT NULL
         GROUP BY assigned_to
     """, (phase_id,))
     
@@ -260,7 +353,7 @@ async def create_phase_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Te
             "",
             "📋 **Next Steps:**",
             f"• Use assign_task with parent_task_id='{phase_def['phase_id']}' to add tasks to this phase",
-            "• All tasks must be 100% complete before advancing to next phase", 
+            "• All root tasks must be 100% complete before advancing to next phase", 
             "• Agents will be terminated between phases for knowledge crystallization"
         ])
         
@@ -319,24 +412,27 @@ async def view_phase_status_tool_impl(arguments: Dict[str, Any]) -> List[mcp_typ
             
             response_parts.append(f"{status_icon} **{phase_def['name']}** ({completion['completion_percentage']}%)")
             response_parts.append(f"   ID: {phase_def['phase_id']} | Order: {phase_def['order']}")
-            response_parts.append(f"   Tasks: {completion['completed_tasks']}/{completion['total_tasks']} completed")
+            response_parts.append(f"   Root Tasks: {completion['completed_root_tasks']}/{completion['total_root_tasks']} completed")
             
-            if completion["total_tasks"] > 0:
+            if completion["total_root_tasks"] > 0:
                 response_parts.append(f"   Status: {completion['status']} | Can advance: {'Yes' if completion['can_advance'] else 'No'}")
             
             # Show blocking tasks if requested and exist
-            if show_blocking_tasks and completion["blocking_tasks"]:
-                response_parts.append(f"   🚫 Blocking tasks ({len(completion['blocking_tasks'])}):")
-                for task in completion["blocking_tasks"][:3]:  # Show first 3
-                    response_parts.append(f"      - {task['task_id']}: {task['title']} ({task['status']}) → {task['assigned_to']}")
-                if len(completion["blocking_tasks"]) > 3:
-                    response_parts.append(f"      ... and {len(completion['blocking_tasks']) - 3} more")
+            if show_blocking_tasks and completion["blocking_root_tasks"]:
+                response_parts.append(f"   🚫 Blocking root tasks ({len(completion['blocking_root_tasks'])}):")
+                for root_task in completion["blocking_root_tasks"][:3]:  # Show first 3
+                    response_parts.append(f"      - {root_task['task_id']}: {root_task['title']} ({root_task['completion_percentage']}%) → {root_task['assigned_to']}")
+                    if root_task['blocking_subtasks_count'] > 0:
+                        response_parts.append(f"        └── {root_task['blocking_subtasks_count']} incomplete subtasks")
+                if len(completion["blocking_root_tasks"]) > 3:
+                    response_parts.append(f"      ... and {len(completion['blocking_root_tasks']) - 3} more")
             
             # Show agent assignments if requested
-            if show_agent_assignments and completion["total_tasks"] > 0:
+            if show_agent_assignments and completion["total_root_tasks"] > 0:
                 agents = _get_active_agents_for_phase(cursor, phase_def["phase_id"])
                 if agents:
-                    response_parts.append(f"   👥 Active agents: {', '.join([f'{a['agent_id']}({a['active_tasks']})' for a in agents])}")
+                    agent_list = ', '.join([f"{a['agent_id']}({a['active_tasks']})" for a in agents])
+                    response_parts.append(f"   👥 Active agents: {agent_list}")
             
             response_parts.append("")
         
@@ -344,7 +440,7 @@ async def view_phase_status_tool_impl(arguments: Dict[str, Any]) -> List[mcp_typ
         response_parts.extend([
             "🔄 **Linear Progression Rules:**",
             "• Phases must be completed in order (1→2→3→4)",
-            "• 100% task completion required before phase advancement",
+            "• 100% root task completion required before phase advancement",
             "• All agents terminated between phases for knowledge crystallization",
             "• Next phase cannot begin until current phase is fully complete"
         ])
@@ -386,21 +482,23 @@ async def advance_phase_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.T
             response_parts = [
                 f"❌ **Cannot Advance from {current_phase_id}**",
                 f"   Completion: {completion['completion_percentage']}% (100% required)",
-                f"   Blocking tasks: {len(completion['blocking_tasks'])}",
+                f"   Blocking root tasks: {len(completion['blocking_root_tasks'])}",
                 ""
             ]
             
-            if completion["blocking_tasks"]:
-                response_parts.append("🚫 **Blocking Tasks:**")
-                for task in completion["blocking_tasks"][:5]:
-                    response_parts.append(f"   - {task['task_id']}: {task['title']} ({task['status']}) → {task['assigned_to']}")
-                if len(completion["blocking_tasks"]) > 5:
-                    response_parts.append(f"   ... and {len(completion['blocking_tasks']) - 5} more")
+            if completion["blocking_root_tasks"]:
+                response_parts.append("🚫 **Blocking Root Tasks:**")
+                for root_task in completion["blocking_root_tasks"][:5]:
+                    response_parts.append(f"   - {root_task['task_id']}: {root_task['title']} ({root_task['completion_percentage']}%) → {root_task['assigned_to']}")
+                    if root_task['blocking_subtasks_count'] > 0:
+                        response_parts.append(f"     └── {root_task['blocking_subtasks_count']} incomplete subtasks blocking completion")
+                if len(completion["blocking_root_tasks"]) > 5:
+                    response_parts.append(f"   ... and {len(completion['blocking_root_tasks']) - 5} more root tasks")
             
             response_parts.extend([
                 "",
                 "💡 **To Advance:**",
-                "• Complete all blocking tasks",
+                "• Complete all blocking root tasks",
                 "• Use force_advance=true to override (not recommended)",
                 "• Ensure proper knowledge crystallization documentation"
             ])
@@ -434,7 +532,7 @@ async def advance_phase_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.T
         response_parts = [
             f"✅ **Phase {current_phase_id} Completed**",
             f"   Final completion: {completion['completion_percentage']}%",
-            f"   Tasks completed: {completion['completed_tasks']}/{completion['total_tasks']}",
+            f"   Root tasks completed: {completion['completed_root_tasks']}/{completion['total_root_tasks']}",
             ""
         ]
         

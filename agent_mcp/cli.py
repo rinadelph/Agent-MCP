@@ -85,32 +85,13 @@ from .tui.display import TUIDisplay # Import TUI display
     default=False,
     help="Disable the terminal UI display (logs will still go to file)."
 )
-@click.option(
-    "--advanced",
-    is_flag=True,
-    default=False,
-    help="Enable advanced embeddings mode with larger dimension (3072) and more sophisticated code analysis."
-)
-def main_cli(port: int, transport: str, project_dir: str, admin_token_cli: Optional[str], debug: bool, no_tui: bool, advanced: bool):
+def main_cli(port: int, transport: str, project_dir: str, admin_token_cli: Optional[str], debug: bool, no_tui: bool):
     """
     Main Command-Line Interface for starting the MCP Server.
     
-    The server supports two embedding modes:
-    - Simple mode (default): Uses text-embedding-3-large (1024 dimensions) - indexes only markdown files and context
-    - Advanced mode (--advanced): Uses text-embedding-3-large (3072 dimensions) - includes code analysis, task indexing
-    
-    Note: Switching between modes will require re-indexing all content.
+    The server uses text-embedding-3-large (1024 dimensions) to index markdown files and context.
     """
-    # Set advanced embeddings mode before other imports that might use it
-    if advanced:
-        from .core import config
-        config.ADVANCED_EMBEDDINGS = True
-        # Update the dynamic configs
-        config.EMBEDDING_MODEL = config.ADVANCED_EMBEDDING_MODEL
-        config.EMBEDDING_DIMENSION = config.ADVANCED_EMBEDDING_DIMENSION
-        logger.info("Advanced embeddings mode enabled (3072 dimensions, text-embedding-3-large, code & task indexing)")
-    else:
-        logger.info("Using simple embeddings mode (1024 dimensions, text-embedding-3-large, markdown & context only)")
+    logger.info("Starting Agent MCP server...")
     
     if debug:
         logger.info("Debug mode enabled via CLI flag or MCP_DEBUG environment variable.")
@@ -132,13 +113,14 @@ def main_cli(port: int, transport: str, project_dir: str, admin_token_cli: Optio
     else:  # Console logging is off, and TUI is also off
         logger.info("Console logging and TUI display are both disabled. Check log file for server messages.")
 
-    # Log the embedding mode being used
-    embedding_mode_info = "advanced" if advanced else "simple"
-    embedding_model_info = config.EMBEDDING_MODEL if 'config' in locals() else "text-embedding-3-large"
-    embedding_dim_info = config.EMBEDDING_DIMENSION if 'config' in locals() else 1024
+    # Show project directory info
+    project_dir_abs = os.path.abspath(project_dir)
+    if project_dir == ".":
+        logger.info(f"Using current directory as project directory: {project_dir_abs}")
+        if not no_tui and CONSOLE_LOGGING_ENABLED:
+            print(f"Project directory: {project_dir_abs}")
     
     logger.info(f"Attempting to start MCP Server: Port={port}, Transport={transport}, ProjectDir='{project_dir}'")
-    logger.info(f"Embedding Mode: {embedding_mode_info} (Model: {embedding_model_info}, Dimensions: {embedding_dim_info})")
 
     # --- TUI Display Loop (if not disabled) ---
     async def tui_display_loop(cli_port: int, cli_transport: str, cli_project_dir: str, *, task_status=anyio.TASK_STATUS_IGNORED):
@@ -548,6 +530,11 @@ def main_cli(port: int, transport: str, project_dir: str, admin_token_cli: Optio
         
     sys.exit(0) # Explicitly exit after cleanup if not already exited by SystemExit
 
-# This allows running `python -m mcp_server_src.cli --port ...`
-if __name__ == "__main__":
+# Entry point for console script
+def main():
+    """Main entry point for agent-mcp command"""
     main_cli()
+
+# This allows running `python -m agent_mcp.cli` or `python cli.py`
+if __name__ == "__main__":
+    main()
