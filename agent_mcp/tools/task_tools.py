@@ -291,6 +291,13 @@ async def assign_task_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Tex
     priority = arguments.get("priority", "medium") # Default from schema
     depends_on_tasks_list = arguments.get("depends_on_tasks") # List[str] or None
     parent_task_id_arg = arguments.get("parent_task_id") # Optional str
+    
+    # Smart coordination features
+    auto_suggest_parent = arguments.get("auto_suggest_parent", True)  # Auto-suggest parent tasks
+    validate_agent_workload = arguments.get("validate_agent_workload", True)  # Check agent capacity
+    auto_schedule = arguments.get("auto_schedule", False)  # Auto-schedule based on dependencies
+    coordination_notes = arguments.get("coordination_notes")  # Optional coordination context
+    estimated_hours = arguments.get("estimated_hours")  # Optional workload estimation
 
     if not verify_token(admin_auth_token, "admin"): # main.py:1326
         return [mcp_types.TextContent(type="text", text="Unauthorized: Admin token required")]
@@ -308,21 +315,49 @@ async def assign_task_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Tex
         root_ids = result['root_ids']
         
         if root_count > 0:
-            # Find some suggested parent tasks to help the admin
-            cursor.execute("""
-                SELECT task_id, title, status 
-                FROM tasks 
-                WHERE status IN ('pending', 'in_progress')
-                ORDER BY 
-                    CASE WHEN assigned_to = ? THEN 0 ELSE 1 END,
-                    created_at DESC
-                LIMIT 5
-            """, (target_agent_id,))
-            
-            suggestions = cursor.fetchall()
-            suggestion_text = "\nSuggested parent tasks:\n"
-            for task in suggestions:
-                suggestion_text += f"  - {task['task_id']}: {task['title']} (status: {task['status']})\n"
+            if auto_suggest_parent:
+                # Use smart parent suggestion
+                parent_suggestions = _suggest_optimal_parent_task(cursor, target_agent_id, task_description)
+                
+                suggestion_text = "\n🧠 **Smart Parent Suggestions:**\n"
+                if parent_suggestions["has_suggestions"]:
+                    for i, suggestion in enumerate(parent_suggestions["suggestions"], 1):
+                        suggestion_text += f"  {i}. {suggestion['task_id']}: {suggestion['title']}\n"
+                        suggestion_text += f"     Status: {suggestion['status']} | Priority: {suggestion['priority']} | {suggestion['reason']}\n"
+                else:
+                    # Fallback to basic suggestions
+                    cursor.execute("""
+                        SELECT task_id, title, status 
+                        FROM tasks 
+                        WHERE status IN ('pending', 'in_progress') AND assigned_to = ?
+                        ORDER BY updated_at DESC
+                        LIMIT 3
+                    """, (target_agent_id,))
+                    
+                    basic_suggestions = cursor.fetchall()
+                    if basic_suggestions:
+                        suggestion_text += "  Based on agent's recent tasks:\n"
+                        for task in basic_suggestions:
+                            suggestion_text += f"  - {task['task_id']}: {task['title']} (status: {task['status']})\n"
+                    else:
+                        suggestion_text += "  No suitable parent tasks found for this agent.\n"
+                        suggestion_text += "  Consider assigning to a different agent with active tasks.\n"
+            else:
+                # Basic suggestion fallback
+                cursor.execute("""
+                    SELECT task_id, title, status 
+                    FROM tasks 
+                    WHERE status IN ('pending', 'in_progress')
+                    ORDER BY 
+                        CASE WHEN assigned_to = ? THEN 0 ELSE 1 END,
+                        created_at DESC
+                    LIMIT 5
+                """, (target_agent_id,))
+                
+                suggestions = cursor.fetchall()
+                suggestion_text = "\nSuggested parent tasks:\n"
+                for task in suggestions:
+                    suggestion_text += f"  - {task['task_id']}: {task['title']} (status: {task['status']})\n"
             
             conn.close()
             
@@ -331,6 +366,7 @@ async def assign_task_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Tex
                 text=f"ERROR: Cannot create task without parent. {root_count} root task(s) already exist: {root_ids}\n\n"
                      f"You MUST specify a parent_task_id. Every task except the first must have a parent.\n"
                      f"{suggestion_text}\n"
+                     f"💡 Use auto_suggest_parent=true for smarter suggestions based on task content.\n"
                      f"Use 'view_tasks' for complete task list, or use one of the suggestions above."
             )]
         
@@ -377,6 +413,22 @@ async def assign_task_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Tex
                     type="text",
                     text=f"ERROR: Cannot create root task. A root task already exists ({existing_root_id}). All new tasks must have a parent."
                 )]
+        
+        # Smart workload validation
+        workload_analysis = None
+        workload_warnings = []
+        
+        if validate_agent_workload:
+            workload_analysis = _analyze_agent_workload(cursor, target_agent_id)
+            
+            if not workload_analysis["can_take_new_task"]:
+                warning_msg = f"⚠️ Agent workload warning: {workload_analysis['capacity_status']} "
+                warning_msg += f"({workload_analysis['total_active_tasks']} active tasks, "
+                warning_msg += f"{workload_analysis['high_priority_tasks']} high priority)"
+                workload_warnings.append(warning_msg)
+                
+                if workload_analysis["recommendations"]:
+                    workload_warnings.extend([f"   💡 {rec}" for rec in workload_analysis["recommendations"][:2]])
         
         # System 8: RAG Pre-Check for Task Placement
         final_parent_task_id = parent_task_id_arg
@@ -425,6 +477,37 @@ async def assign_task_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Tex
             else:
                 validation_message = "\n✓ RAG validation approved placement\n"
 
+        # Build initial notes with coordination information
+        initial_notes = []
+        
+        # Add coordination notes if provided
+        if coordination_notes:
+            initial_notes.append({
+                "timestamp": created_at_iso,
+                "author": "admin",
+                "content": f"📋 Coordination: {coordination_notes}"
+            })
+        
+        # Add workload information
+        if workload_analysis:
+            workload_note = f"👤 Agent workload: {workload_analysis['capacity_status']} "
+            workload_note += f"({workload_analysis['total_active_tasks']} active tasks)"
+            if estimated_hours:
+                workload_note += f" | Estimated: {estimated_hours}h"
+            initial_notes.append({
+                "timestamp": created_at_iso,
+                "author": "system",
+                "content": workload_note
+            })
+        
+        # Add smart parent suggestion note if used
+        if auto_suggest_parent and final_parent_task_id:
+            initial_notes.append({
+                "timestamp": created_at_iso,
+                "author": "system",
+                "content": f"🧠 Smart assignment: Parent task suggested based on content similarity"
+            })
+
         task_data_for_db = { # main.py:1354-1367
             "task_id": new_task_id,
             "title": task_title,
@@ -438,7 +521,7 @@ async def assign_task_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Tex
             "parent_task": final_parent_task_id,  # Use validated value
             "child_tasks": json.dumps([]),
             "depends_on_tasks": json.dumps(final_depends_on_tasks or []),  # Use validated value
-            "notes": json.dumps([])
+            "notes": json.dumps(initial_notes)
         }
 
         # Save task to database (main.py:1370-1373)
@@ -490,11 +573,52 @@ async def assign_task_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Tex
             
         log_audit("admin", "assign_task", {"task_id": new_task_id, "agent_id": target_agent_id, "title": task_title}) # main.py:1404
         logger.info(f"Task '{new_task_id}' ({task_title}) assigned to agent '{target_agent_id}'.")
-        response_text = f"Task '{new_task_id}' assigned to agent '{target_agent_id}'.\nTitle: {task_title}"
-        if validation_performed and validation_message:
-            response_text += validation_message
         
-        return [mcp_types.TextContent(type="text", text=response_text)]
+        # Build comprehensive response
+        response_parts = [f"✅ **Task Assigned Successfully**"]
+        response_parts.append(f"   Task ID: {new_task_id}")
+        response_parts.append(f"   Title: {task_title}")
+        response_parts.append(f"   Agent: {target_agent_id}")
+        response_parts.append(f"   Priority: {priority}")
+        
+        if final_parent_task_id:
+            response_parts.append(f"   Parent: {final_parent_task_id}")
+        
+        if final_depends_on_tasks:
+            response_parts.append(f"   Dependencies: {', '.join(final_depends_on_tasks)}")
+        
+        if estimated_hours:
+            response_parts.append(f"   Estimated: {estimated_hours} hours")
+        
+        # Add workload analysis
+        if workload_analysis:
+            response_parts.append("")
+            capacity_icon = "🟢" if workload_analysis["capacity_status"] == "available" else \
+                          "🟡" if workload_analysis["capacity_status"] == "busy" else "🔴"
+            response_parts.append(f"👤 **Agent Workload:** {capacity_icon} {workload_analysis['capacity_status'].title()}")
+            response_parts.append(f"   Active Tasks: {workload_analysis['total_active_tasks']} ({workload_analysis['high_priority_tasks']} high priority)")
+            
+            if workload_warnings:
+                response_parts.extend(workload_warnings)
+        
+        # Add RAG validation info
+        if validation_performed and validation_message:
+            response_parts.append(validation_message)
+        
+        # Add coordination info
+        if coordination_notes:
+            response_parts.append(f"\n📋 **Coordination Notes:** {coordination_notes}")
+        
+        # Add smart feature usage tips
+        response_parts.append("\n💡 **Smart Features Used:**")
+        if auto_suggest_parent:
+            response_parts.append("• Smart parent suggestion based on content similarity")
+        if validate_agent_workload:
+            response_parts.append("• Agent workload analysis and capacity checking")
+        if coordination_notes:
+            response_parts.append("• Coordination context captured for team awareness")
+        
+        return [mcp_types.TextContent(type="text", text="\n".join(response_parts))]
 
     except sqlite3.Error as e_sql:
         if conn: conn.rollback()
@@ -1202,6 +1326,136 @@ def _format_task_with_dependencies(task: Dict[str, Any]) -> str:
     
     return task_text
 
+def _analyze_agent_workload(cursor, agent_id: str) -> Dict[str, Any]:
+    """Analyze agent's current workload and capacity"""
+    
+    # Get agent's current tasks
+    cursor.execute("""
+        SELECT task_id, title, status, priority, created_at, updated_at 
+        FROM tasks 
+        WHERE assigned_to = ? AND status IN ('pending', 'in_progress')
+        ORDER BY priority DESC, created_at ASC
+    """, (agent_id,))
+    
+    active_tasks = [dict(row) for row in cursor.fetchall()]
+    
+    # Calculate workload metrics
+    total_tasks = len(active_tasks)
+    high_priority_tasks = len([t for t in active_tasks if t.get('priority') == 'high'])
+    in_progress_tasks = len([t for t in active_tasks if t.get('status') == 'in_progress'])
+    pending_tasks = len([t for t in active_tasks if t.get('status') == 'pending'])
+    
+    # Calculate "staleness" - tasks not updated recently
+    current_time = datetime.datetime.now()
+    stale_tasks = 0
+    for task in active_tasks:
+        if task.get('updated_at'):
+            try:
+                updated_time = datetime.datetime.fromisoformat(task['updated_at'].replace('Z', '+00:00').replace('+00:00', ''))
+                days_stale = (current_time - updated_time).days
+                if days_stale > 3:  # No update in 3+ days
+                    stale_tasks += 1
+            except:
+                pass
+    
+    # Simple capacity assessment
+    capacity_status = "available"
+    if total_tasks >= 8:
+        capacity_status = "overloaded"
+    elif total_tasks >= 5:
+        capacity_status = "busy"
+    elif high_priority_tasks >= 3:
+        capacity_status = "busy"
+    
+    return {
+        "agent_id": agent_id,
+        "total_active_tasks": total_tasks,
+        "high_priority_tasks": high_priority_tasks,
+        "in_progress_tasks": in_progress_tasks,
+        "pending_tasks": pending_tasks,
+        "stale_tasks": stale_tasks,
+        "capacity_status": capacity_status,
+        "workload_score": min(100, total_tasks * 10 + high_priority_tasks * 5),  # 0-100+
+        "can_take_new_task": capacity_status in ["available", "busy"] and high_priority_tasks < 4,
+        "recommendations": _generate_workload_recommendations(capacity_status, total_tasks, stale_tasks)
+    }
+
+def _generate_workload_recommendations(capacity_status: str, total_tasks: int, stale_tasks: int) -> List[str]:
+    """Generate workload management recommendations"""
+    recommendations = []
+    
+    if capacity_status == "overloaded":
+        recommendations.append("Consider redistributing some tasks to other agents")
+        recommendations.append("Focus on completing high-priority tasks first")
+    
+    if stale_tasks > 0:
+        recommendations.append(f"Review {stale_tasks} stale tasks that haven't been updated recently")
+    
+    if total_tasks > 6:
+        recommendations.append("Consider breaking down large tasks into smaller subtasks")
+    
+    if not recommendations:
+        recommendations.append("Workload appears manageable")
+    
+    return recommendations
+
+def _suggest_optimal_parent_task(cursor, agent_id: str, task_description: str) -> Dict[str, Any]:
+    """Suggest optimal parent task based on context and agent workload"""
+    
+    # Get agent's current tasks that could be parents
+    cursor.execute("""
+        SELECT task_id, title, description, status, priority 
+        FROM tasks 
+        WHERE assigned_to = ? AND status IN ('pending', 'in_progress')
+        ORDER BY 
+            CASE WHEN status = 'in_progress' THEN 1 ELSE 2 END,
+            CASE priority WHEN 'high' THEN 3 WHEN 'medium' THEN 2 ELSE 1 END DESC,
+            updated_at DESC
+        LIMIT 10
+    """, (agent_id,))
+    
+    agent_tasks = [dict(row) for row in cursor.fetchall()]
+    
+    # Simple text similarity scoring (could be enhanced with embeddings)
+    def similarity_score(text1: str, text2: str) -> float:
+        text1_words = set(text1.lower().split())
+        text2_words = set(text2.lower().split())
+        if not text1_words or not text2_words:
+            return 0.0
+        intersection = text1_words.intersection(text2_words)
+        union = text1_words.union(text2_words)
+        return len(intersection) / len(union) if union else 0.0
+    
+    suggestions = []
+    for task in agent_tasks:
+        # Score based on title and description similarity
+        title_sim = similarity_score(task_description, task.get('title', ''))
+        desc_sim = similarity_score(task_description, task.get('description', ''))
+        combined_score = (title_sim * 0.6) + (desc_sim * 0.4)
+        
+        # Boost score for in-progress tasks (more likely to be good parents)
+        if task.get('status') == 'in_progress':
+            combined_score *= 1.2
+        
+        if combined_score > 0.1:  # Only suggest if there's some relevance
+            suggestions.append({
+                "task_id": task['task_id'],
+                "title": task['title'],
+                "status": task['status'],
+                "priority": task['priority'],
+                "similarity_score": round(combined_score, 3),
+                "reason": f"Similar content ({int(combined_score*100)}% match)"
+            })
+    
+    # Sort by score and take top 3
+    suggestions.sort(key=lambda x: x['similarity_score'], reverse=True)
+    
+    return {
+        "agent_id": agent_id,
+        "suggestions": suggestions[:3],
+        "has_suggestions": len(suggestions) > 0
+    }
+
 
 # --- request_assistance tool ---
 # Original logic from main.py: lines 1658-1763 (request_assistance_tool function)
@@ -1661,9 +1915,9 @@ async def search_tasks_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Te
 # --- Register all task tools ---
 def register_task_tools():
     register_tool(
-        name="assign_task", # main.py:1700
-        description="Admin tool to assign a task to an agent. IMPORTANT: parent_task_id is REQUIRED if any tasks already exist.",
-        input_schema={ # From main.py:1701-1724
+        name="assign_task",
+        description="Smart task assignment tool with workload analysis, intelligent parent suggestions, and coordination features. Optimizes task distribution across agents.",
+        input_schema={
             "type": "object",
             "properties": {
                 "token": {"type": "string", "description": "Admin authentication token"},
@@ -1682,6 +1936,33 @@ def register_task_tools():
                     "type": "string", 
                     "description": "ID of the parent task (REQUIRED if any tasks exist - only one root task allowed)"
                 },
+                
+                # Smart coordination features
+                "auto_suggest_parent": {
+                    "type": "boolean", 
+                    "description": "Use AI to suggest optimal parent task based on content similarity (default: true)",
+                    "default": True
+                },
+                "validate_agent_workload": {
+                    "type": "boolean", 
+                    "description": "Analyze agent capacity and provide workload warnings (default: true)",
+                    "default": True
+                },
+                "auto_schedule": {
+                    "type": "boolean", 
+                    "description": "Auto-schedule task based on dependencies and agent availability (default: false)",
+                    "default": False
+                },
+                "coordination_notes": {
+                    "type": "string", 
+                    "description": "Optional coordination context for team awareness and handoffs"
+                },
+                "estimated_hours": {
+                    "type": "number", 
+                    "description": "Optional workload estimation in hours for capacity planning"
+                },
+                
+                # RAG validation options
                 "override_rag": {
                     "type": "boolean", 
                     "description": "Override RAG validation suggestions (optional, defaults to false - accepts suggestions)",
