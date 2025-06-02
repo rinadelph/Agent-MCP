@@ -425,3 +425,6 @@ Join our Discord community to discuss Agent MCP, share your projects, get help, 
 <div align="center">
   <h3><a href="https://discord.gg/7Jm7nrhjGn">👉 Join the Discord Server 👈</a></h3>
 </div>
+
+[![Verified on MseeP](https://mseep.ai/badge.svg)](https://mseep.ai/app/3350e4c1-32fb-4492-8848-0ae1e87f969b)
+
