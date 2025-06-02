@@ -25,6 +25,19 @@ from ..features.rag.indexing import index_task_data
 # For request_assistance, generate_id was used. Let's use secrets.token_hex for consistency.
 # from main.py:1191 (generate_id - not present, assuming secrets.token_hex was intended)
 
+def estimate_tokens(text: str) -> int:
+    """Accurate token estimation using tiktoken for GPT-4"""
+    try:
+        import tiktoken
+        encoding = tiktoken.encoding_for_model("gpt-4")
+        return len(encoding.encode(text))
+    except ImportError:
+        # Fallback to rough estimation if tiktoken not available
+        return len(text) // 4
+    except Exception:
+        # Fallback for any other tiktoken errors
+        return len(text) // 4
+
 def _generate_task_id() -> str:
     """Generates a unique task ID."""
     return f"task_{secrets.token_hex(6)}"
@@ -643,28 +656,25 @@ async def view_tasks_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Text
     agent_auth_token = arguments.get("token")
     filter_agent_id = arguments.get("agent_id") # Optional agent_id to filter by
     filter_status = arguments.get("status")     # Optional status to filter by
+    max_tokens = arguments.get("max_tokens", 25000)     # Maximum response tokens (default: 25k)
+    start_after = arguments.get("start_after")          # Task ID to start after (for pagination)
+    summary_mode = arguments.get("summary_mode", False) # If True, show only summary info
 
-    requesting_agent_id = get_agent_id(agent_auth_token) # main.py:1590
+    requesting_agent_id = get_agent_id(agent_auth_token)
     if not requesting_agent_id:
         return [mcp_types.TextContent(type="text", text="Unauthorized: Valid token required")]
 
-    is_admin_request = verify_token(agent_auth_token, "admin") # main.py:1596
+    is_admin_request = verify_token(agent_auth_token, "admin")
 
-    # Permission check (main.py:1599-1604)
+    # Permission check
     target_agent_id_for_filter = filter_agent_id
-    if not is_admin_request: # If not admin
-        if filter_agent_id is None: # Non-admin viewing tasks, defaults to their own
+    if not is_admin_request:
+        if filter_agent_id is None:
             target_agent_id_for_filter = requesting_agent_id
-        elif filter_agent_id != requesting_agent_id: # Non-admin trying to view someone else's tasks
+        elif filter_agent_id != requesting_agent_id:
             return [mcp_types.TextContent(type="text", text="Unauthorized: Non-admin agents can only view their own tasks or all tasks assigned to them if no agent_id filter is specified.")]
 
-    # Build query dynamically based on filters
-    # The original code filtered from the in-memory `tasks` dictionary (g.tasks).
-    # For consistency and to ensure up-to-date data, querying the DB is better.
-    # However, for 1-to-1, we can replicate the in-memory filtering if g.tasks is reliably populated at startup.
-    # Let's assume g.tasks is the source of truth for viewing, as per original.
-    # (Original main.py:1607-1616 filters g.tasks)
-    
+    # Filter tasks
     tasks_to_display: List[Dict[str, Any]] = []
     for task_id, task_data in g.tasks.items():
         matches_agent = True
@@ -678,51 +688,132 @@ async def view_tasks_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Text
         if matches_agent and matches_status:
             tasks_to_display.append(task_data)
             
-    # Sort tasks, e.g., by creation date descending (optional improvement)
+    # Sort tasks by creation date descending
     tasks_to_display.sort(key=lambda t: t.get("created_at", ""), reverse=True)
 
-    if not tasks_to_display: # main.py:1619
-        response_text = "No tasks found matching the criteria."
-    else: # main.py:1621-1651 (response formatting)
-        response_parts = ["Tasks:\n"]
-        for task in tasks_to_display:
-            response_parts.append(f"\nID: {task.get('task_id', 'N/A')}")
-            response_parts.append(f"Title: {task.get('title', 'N/A')}")
-            response_parts.append(f"Description: {task.get('description', 'No description')}")
-            response_parts.append(f"Status: {task.get('status', 'N/A')}")
-            response_parts.append(f"Priority: {task.get('priority', 'medium')}")
-            response_parts.append(f"Assigned to: {task.get('assigned_to', 'None')}")
-            response_parts.append(f"Created by: {task.get('created_by', 'N/A')}")
-            response_parts.append(f"Created: {task.get('created_at', 'N/A')}")
-            response_parts.append(f"Updated: {task.get('updated_at', 'N/A')}")
-            if task.get('parent_task'):
-                response_parts.append(f"Parent task: {task['parent_task']}")
-            
-            child_tasks_val = task.get('child_tasks', []) # Expect list from g.tasks
-            if isinstance(child_tasks_val, str): # Should not happen if g.tasks is well-maintained
-                try: child_tasks_val = json.loads(child_tasks_val or "[]")
-                except: child_tasks_val = ["Error decoding child_tasks"]
-            if child_tasks_val:
-                response_parts.append(f"Child tasks: {', '.join(child_tasks_val)}")
+    # Handle pagination with start_after
+    if start_after:
+        start_index = 0
+        for i, task in enumerate(tasks_to_display):
+            if task.get('task_id') == start_after:
+                start_index = i + 1
+                break
+        tasks_to_display = tasks_to_display[start_index:]
 
-            notes_val = task.get('notes', []) # Expect list from g.tasks
-            if isinstance(notes_val, str): # Should not happen
-                try: notes_val = json.loads(notes_val or "[]")
-                except: notes_val = [{"author": "System", "content": "Error decoding notes"}]
-            if notes_val:
-                response_parts.append("Notes:")
-                for note in notes_val:
-                    if isinstance(note, dict):
-                        ts = note.get("timestamp", "Unknown time")
-                        auth = note.get("author", "Unknown")
-                        cont = note.get("content", "No content")
-                        response_parts.append(f"  - [{ts}] {auth}: {cont}")
-                    else:
-                        response_parts.append(f"  - [Invalid Note Format: {str(note)}]")
+    if not tasks_to_display:
+        response_text = "No tasks found matching the criteria."
+    else:
+        # Token-aware dynamic pagination
+        response_parts = [f"Tasks (max {max_tokens} tokens):\n"]
+        current_tokens = estimate_tokens("\n".join(response_parts))
+        tasks_included = 0
+        last_task_id = None
+        truncated = False
+        
+        for task in tasks_to_display:
+            # Format task based on mode
+            if summary_mode:
+                task_text = _format_task_summary(task)
+            else:
+                task_text = _format_task_detailed(task)
+            
+            task_tokens = estimate_tokens(task_text)
+            
+            # Check if adding this task would exceed token limit (with 1000 token safety buffer)
+            safety_buffer = 1000
+            if current_tokens + task_tokens > (max_tokens - safety_buffer) and tasks_included > 0:
+                truncated = True
+                break
+            
+            response_parts.append(f"\n{task_text}")
+            current_tokens += task_tokens
+            tasks_included += 1
+            last_task_id = task.get('task_id')
+        
+        # Add pagination info if truncated
+        if truncated:
+            remaining_count = len(tasks_to_display) - tasks_included
+            response_parts.append(f"\n--- Response truncated to stay under {max_tokens} tokens ---")
+            response_parts.append(f"Showing {tasks_included} of {len(tasks_to_display)} tasks ({remaining_count} remaining)")
+            response_parts.append(f"To see more: view_tasks(start_after='{last_task_id}', max_tokens={max_tokens})")
+            if not summary_mode:
+                response_parts.append(f"For overview: view_tasks(summary_mode=true, max_tokens={max_tokens})")
+        else:
+            response_parts.append(f"\n--- All {tasks_included} matching tasks shown ---")
+        
         response_text = "\n".join(response_parts)
 
-    log_audit(requesting_agent_id, "view_tasks", {"filter_agent_id": filter_agent_id, "filter_status": filter_status}) # main.py:1653
+    log_audit(requesting_agent_id, "view_tasks", {"filter_agent_id": filter_agent_id, "filter_status": filter_status})
     return [mcp_types.TextContent(type="text", text=response_text)]
+
+
+def _format_task_summary(task: Dict[str, Any]) -> str:
+    """Format task in summary mode (minimal tokens)"""
+    task_id = task.get('task_id', 'N/A')
+    title = task.get('title', 'N/A')
+    status = task.get('status', 'N/A')
+    priority = task.get('priority', 'medium')
+    assigned_to = task.get('assigned_to', 'Unassigned')
+    
+    # Truncate description
+    description = task.get('description', 'No description')
+    if len(description) > 100:
+        description = description[:100] + '...'
+    
+    return f"""ID: {task_id}
+Title: {title}
+Status: {status} | Priority: {priority}
+Assigned to: {assigned_to}
+Description: {description}"""
+
+
+def _format_task_detailed(task: Dict[str, Any]) -> str:
+    """Format task in detailed mode (includes notes, full description)"""
+    parts = []
+    parts.append(f"ID: {task.get('task_id', 'N/A')}")
+    parts.append(f"Title: {task.get('title', 'N/A')}")
+    parts.append(f"Description: {task.get('description', 'No description')}")
+    parts.append(f"Status: {task.get('status', 'N/A')}")
+    parts.append(f"Priority: {task.get('priority', 'medium')}")
+    parts.append(f"Assigned to: {task.get('assigned_to', 'None')}")
+    parts.append(f"Created by: {task.get('created_by', 'N/A')}")
+    parts.append(f"Created: {task.get('created_at', 'N/A')}")
+    parts.append(f"Updated: {task.get('updated_at', 'N/A')}")
+    
+    if task.get('parent_task'):
+        parts.append(f"Parent task: {task['parent_task']}")
+    
+    child_tasks_val = task.get('child_tasks', [])
+    if isinstance(child_tasks_val, str):
+        try: 
+            child_tasks_val = json.loads(child_tasks_val or "[]")
+        except: 
+            child_tasks_val = ["Error decoding child_tasks"]
+    if child_tasks_val:
+        parts.append(f"Child tasks: {', '.join(child_tasks_val)}")
+    
+    notes_val = task.get('notes', [])
+    if isinstance(notes_val, str):
+        try: 
+            notes_val = json.loads(notes_val or "[]")
+        except: 
+            notes_val = [{"author": "System", "content": "Error decoding notes"}]
+    if notes_val:
+        parts.append("Notes:")
+        # Limit notes to prevent token explosion
+        recent_notes = notes_val[-5:] if len(notes_val) > 5 else notes_val
+        for note in recent_notes:
+            if isinstance(note, dict):
+                ts = note.get("timestamp", "Unknown time")
+                auth = note.get("author", "Unknown")
+                cont = note.get("content", "No content")
+                parts.append(f"  - [{ts}] {auth}: {cont}")
+            else:
+                parts.append(f"  - [Invalid Note Format: {str(note)}]")
+        if len(notes_val) > 5:
+            parts.append(f"  ... and {len(notes_val) - 5} more notes")
+    
+    return "\n".join(parts)
 
 
 # --- request_assistance tool ---
@@ -869,6 +960,140 @@ async def request_assistance_tool_impl(arguments: Dict[str, Any]) -> List[mcp_ty
             conn.close()
 
 
+# --- search_tasks tool ---
+async def search_tasks_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.TextContent]:
+    agent_auth_token = arguments.get("token")
+    search_query = arguments.get("search_query")
+    status_filter = arguments.get("status_filter")
+    max_results = arguments.get("max_results", 20)
+    include_notes = arguments.get("include_notes", True)
+
+    requesting_agent_id = get_agent_id(agent_auth_token)
+    if not requesting_agent_id:
+        return [mcp_types.TextContent(type="text", text="Unauthorized: Valid token required")]
+
+    if not search_query or not search_query.strip():
+        return [mcp_types.TextContent(type="text", text="Error: search_query is required and cannot be empty.")]
+
+    is_admin_request = verify_token(agent_auth_token, "admin")
+
+    # Prepare search terms
+    search_terms = [term.strip().lower() for term in search_query.split() if len(term.strip()) > 2]
+    if not search_terms:
+        return [mcp_types.TextContent(type="text", text="Error: Search query must contain terms longer than 2 characters.")]
+
+    # Get tasks user can see
+    candidate_tasks = []
+    for task_id, task_data in g.tasks.items():
+        # Permission check
+        if not is_admin_request and task_data.get("assigned_to") != requesting_agent_id:
+            continue
+        
+        # Status filter
+        if status_filter and task_data.get("status") != status_filter:
+            continue
+            
+        candidate_tasks.append(task_data)
+
+    if not candidate_tasks:
+        return [mcp_types.TextContent(type="text", text="No tasks found matching the criteria.")]
+
+    # Score tasks by relevance
+    scored_results = []
+    for task in candidate_tasks:
+        score = 0.0
+        matched_fields = []
+        
+        # Search in title (highest weight)
+        title = (task.get("title") or "").lower()
+        title_matches = sum(1 for term in search_terms if term in title)
+        if title_matches > 0:
+            score += title_matches * 3.0
+            matched_fields.append(f"title ({title_matches} terms)")
+        
+        # Search in description (medium weight)
+        description = (task.get("description") or "").lower()
+        desc_matches = sum(1 for term in search_terms if term in description)
+        if desc_matches > 0:
+            score += desc_matches * 2.0
+            matched_fields.append(f"description ({desc_matches} terms)")
+        
+        # Search in notes (lower weight)
+        if include_notes:
+            notes = task.get("notes", [])
+            if isinstance(notes, str):
+                try:
+                    notes = json.loads(notes)
+                except:
+                    notes = []
+            
+            notes_content = " ".join([note.get("content", "") for note in notes if isinstance(note, dict)]).lower()
+            notes_matches = sum(1 for term in search_terms if term in notes_content)
+            if notes_matches > 0:
+                score += notes_matches * 1.0
+                matched_fields.append(f"notes ({notes_matches} terms)")
+        
+        # Exact phrase bonus
+        full_text = f"{title} {description}".lower()
+        if search_query.lower() in full_text:
+            score += 2.0
+            matched_fields.append("exact phrase")
+        
+        if score > 0:
+            scored_results.append((task, score, matched_fields))
+
+    if not scored_results:
+        return [mcp_types.TextContent(type="text", text=f"No tasks found containing '{search_query}'.")]
+
+    # Sort by relevance (score descending, then by updated_at descending)
+    scored_results.sort(key=lambda x: (x[1], x[0].get("updated_at", "")), reverse=True)
+    
+    # Limit results
+    scored_results = scored_results[:max_results]
+
+    # Format response with token awareness
+    response_parts = [f"Search Results for '{search_query}' ({len(scored_results)} found):\n"]
+    current_tokens = len("\n".join(response_parts)) // 4  # Simple token estimation
+    
+    for i, (task, score, matched_fields) in enumerate(scored_results):
+        if current_tokens >= 20000:  # Leave room for truncation message
+            remaining = len(scored_results) - i
+            response_parts.append(f"\n⚠️  Response truncated - {remaining} more results available")
+            response_parts.append("Use max_results parameter or refine search to see more")
+            break
+            
+        # Format task result
+        task_text = f"\n{i+1}. **{task.get('title', 'Untitled')}** (ID: {task.get('task_id', 'N/A')})"
+        task_text += f"\n   Status: {task.get('status', 'N/A')} | Priority: {task.get('priority', 'medium')} | Assigned: {task.get('assigned_to', 'None')}"
+        task_text += f"\n   Relevance Score: {score:.1f} | Matched: {', '.join(matched_fields)}"
+        
+        # Add truncated description
+        desc = task.get('description', 'No description')
+        if len(desc) > 200:
+            desc = desc[:200] + "..."
+        task_text += f"\n   Description: {desc}"
+        
+        # Check token limit with safety buffer
+        task_tokens = estimate_tokens(task_text)
+        safety_buffer = 1000
+        if current_tokens + task_tokens <= (20000 - safety_buffer):
+            response_parts.append(task_text)
+            current_tokens += task_tokens
+        else:
+            remaining = len(scored_results) - i
+            response_parts.append(f"\n⚠️  Response truncated - {remaining} more results available")
+            break
+
+    # Add usage tips
+    response_parts.append(f"\n\n💡 Tips:")
+    response_parts.append("• Use view_tasks(task_id='ID') for full task details")
+    response_parts.append("• Add status_filter to narrow results")
+    response_parts.append("• Use max_results to control response size")
+
+    log_audit(requesting_agent_id, "search_tasks", {"query": search_query, "results": len(scored_results)})
+    return [mcp_types.TextContent(type="text", text="\n".join(response_parts))]
+
+
 # --- Register all task tools ---
 def register_task_tools():
     register_tool(
@@ -971,7 +1196,7 @@ def register_task_tools():
 
     register_tool(
         name="view_tasks", # main.py:1788
-        description="View tasks. Can be filtered by agent ID and/or status. Non-admins can only view their own tasks if agent_id is specified.",
+        description="View tasks with dynamic token-based pagination. Can be filtered by agent ID and/or status. Automatically handles 25k token limit with smart pagination.",
         input_schema={ # From main.py:1789-1806
             "type": "object",
             "properties": {
@@ -980,12 +1205,36 @@ def register_task_tools():
                 "status": {
                     "type": "string", "description": "Filter tasks by status (optional)",
                     "enum": ["pending", "in_progress", "completed", "cancelled", "failed"] # Added failed
-                }
+                },
+                "max_tokens": {"type": "integer", "description": "Maximum response tokens (default: 25000)", "minimum": 1000, "maximum": 25000},
+                "start_after": {"type": "string", "description": "Task ID to start after (for pagination)"},
+                "summary_mode": {"type": "boolean", "description": "If true, show only summary info to fit more tasks (default: false)"}
             },
             "required": ["token"],
             "additionalProperties": False
         },
         implementation=view_tasks_tool_impl
+    )
+
+    register_tool(
+        name="search_tasks",
+        description="Full-text search across task titles, descriptions, and notes. Critical for finding related work and avoiding duplication.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "token": {"type": "string", "description": "Authentication token"},
+                "search_query": {"type": "string", "description": "Search terms to find in tasks"},
+                "status_filter": {
+                    "type": "string", "description": "Optional status filter",
+                    "enum": ["pending", "in_progress", "completed", "cancelled", "failed"]
+                },
+                "max_results": {"type": "integer", "description": "Maximum results to return (default: 20)", "minimum": 1, "maximum": 100},
+                "include_notes": {"type": "boolean", "description": "Include notes content in search (default: true)"}
+            },
+            "required": ["token", "search_query"],
+            "additionalProperties": False
+        },
+        implementation=search_tasks_tool_impl
     )
 
     register_tool(
