@@ -14,20 +14,27 @@ from dotenv import load_dotenv, dotenv_values
 # Get the directory of the current script
 script_dir = Path(__file__).resolve().parent
 
+# Check if we're in UI mode (no arguments)
+ui_mode = '--help' not in sys.argv and '-h' not in sys.argv and len(sys.argv) == 1
+
 # Try parent directories
 for parent_level in range(3):  # Go up to 3 levels
     env_path = script_dir / ('..' * parent_level) / '.env'
     env_path = env_path.resolve()
-    print(f"Trying to load .env from: {env_path}")
+    if not ui_mode:
+        print(f"Trying to load .env from: {env_path}")
     if env_path.exists():
-        print(f"Found .env at: {env_path}")
+        if not ui_mode:
+            print(f"Found .env at: {env_path}")
         env_vars = dotenv_values(str(env_path))
-        print(f"Loaded variables: {list(env_vars.keys())}")
-        print(f"OPENAI_API_KEY from file: {env_vars.get('OPENAI_API_KEY', 'NOT FOUND')[:10]}...")
+        if not ui_mode:
+            print(f"Loaded variables: {list(env_vars.keys())}")
+            print(f"OPENAI_API_KEY from file: {env_vars.get('OPENAI_API_KEY', 'NOT FOUND')[:10]}...")
         # Manually set the environment variables
         for key, value in env_vars.items():
             os.environ[key] = value
-        print(f"Set OPENAI_API_KEY in environ: {os.environ.get('OPENAI_API_KEY', 'NOT FOUND')[:10]}...")
+        if not ui_mode:
+            print(f"Set OPENAI_API_KEY in environ: {os.environ.get('OPENAI_API_KEY', 'NOT FOUND')[:10]}...")
         break
 
 # Also try normal load_dotenv in case
@@ -91,36 +98,65 @@ def main_cli(port: int, transport: str, project_dir: str, admin_token_cli: Optio
     
     The server uses text-embedding-3-large (1024 dimensions) to index markdown files and context.
     """
-    logger.info("Starting Agent MCP server...")
+    # Set up verbose logging for debugging
+    import logging as cli_logging
+    cli_logger = cli_logging.getLogger('agent_mcp.cli.main_cli')
+    cli_logger.setLevel(cli_logging.DEBUG)
     
+    # Add console handler if not already present
+    if not any(isinstance(h, cli_logging.StreamHandler) for h in cli_logger.handlers):
+        console_handler = cli_logging.StreamHandler(sys.stdout)
+        console_handler.setLevel(cli_logging.DEBUG)
+        formatter = cli_logging.Formatter(
+            '%(asctime)s.%(msecs)03d [%(levelname)s] %(name)s - %(filename)s:%(lineno)d - %(message)s',
+            datefmt='%H:%M:%S'
+        )
+        console_handler.setFormatter(formatter)
+        cli_logger.addHandler(console_handler)
+    
+    cli_logger.info("=" * 80)
+    cli_logger.info("main_cli() CALLED WITH PARAMETERS:")
+    cli_logger.info(f"  port: {port}")
+    cli_logger.info(f"  transport: {transport}")
+    cli_logger.info(f"  project_dir: {project_dir}")
+    cli_logger.info(f"  admin_token_cli: {'[PROVIDED]' if admin_token_cli else 'None'}")
+    cli_logger.info(f"  debug: {debug}")
+    cli_logger.info(f"  no_tui: {no_tui}")
+    cli_logger.info("=" * 80)
+    
+    logger.info("Starting Agent MCP server...")
+    cli_logger.info("Starting Agent MCP server...")
+    
+    # Debug is always on for CLI, but respect the flag for Starlette
     if debug:
-        logger.info("Debug mode enabled via CLI flag or MCP_DEBUG environment variable.")
-        # Logging level might need to be adjusted here if not already handled by config.py
-        # For now, config.py sets the base level. Uvicorn also has its own log level.
-        os.environ["MCP_DEBUG"] = "true" # Ensure env var is set for Starlette debug mode
+        os.environ["MCP_DEBUG"] = "true"  # For Starlette debug mode
+        cli_logger.info("Debug flag passed - enabling Starlette debug mode")
     else:
         os.environ["MCP_DEBUG"] = "false"
 
-    # Determine if the TUI should be active
-    # TUI is active if console logging is generally disabled by config AND --no-tui is NOT passed
-    tui_active = not CONSOLE_LOGGING_ENABLED and not no_tui
+    # TUI is disabled by default since we have console logging always on
+    # Only enable TUI if explicitly requested (which would be via a flag, but we don't have one for that)
+    tui_active = False  # Always use console logging for CLI
     
-    if tui_active:
-        logger.info("TUI display mode is active. Standard console logging is suppressed.")
-    elif CONSOLE_LOGGING_ENABLED:
-        logger.info("Standard console logging is enabled (TUI display mode is off).")
-        print("MCP Server starting with standard console logging...")
-    else:  # Console logging is off, and TUI is also off
-        logger.info("Console logging and TUI display are both disabled. Check log file for server messages.")
+    cli_logger.info(f"Console logging is always enabled for CLI")
+    cli_logger.info(f"no_tui flag: {no_tui}")
+    cli_logger.info(f"TUI active: {tui_active}")
+    
+    logger.info("Standard console logging is enabled.")
+    cli_logger.info("Standard console logging is enabled.")
+    print("MCP Server starting with console logging...")
 
     # Show project directory info
     project_dir_abs = os.path.abspath(project_dir)
+    cli_logger.info(f"Project directory (absolute): {project_dir_abs}")
     if project_dir == ".":
         logger.info(f"Using current directory as project directory: {project_dir_abs}")
+        cli_logger.info(f"Using current directory as project directory: {project_dir_abs}")
         if not no_tui and CONSOLE_LOGGING_ENABLED:
             print(f"Project directory: {project_dir_abs}")
     
     logger.info(f"Attempting to start MCP Server: Port={port}, Transport={transport}, ProjectDir='{project_dir}'")
+    cli_logger.info(f"Attempting to start MCP Server: Port={port}, Transport={transport}, ProjectDir='{project_dir}'")
 
     # --- TUI Display Loop (if not disabled) ---
     async def tui_display_loop(cli_port: int, cli_transport: str, cli_project_dir: str, *, task_status=anyio.TASK_STATUS_IGNORED):
@@ -380,13 +416,26 @@ def main_cli(port: int, transport: str, project_dir: str, admin_token_cli: Optio
     # is now part of the Starlette app's on_startup event, triggered by create_app.
 
     if transport == "sse":
+        cli_logger.info("=" * 80)
+        cli_logger.info("SSE TRANSPORT SELECTED")
+        cli_logger.info("=" * 80)
+        
         # Create the Starlette application instance.
         # `application_startup` will be called by Starlette during its startup phase.
+        cli_logger.info("Creating Starlette application...")
         starlette_app = create_app(project_dir=project_dir, admin_token_cli=admin_token_cli)
+        cli_logger.info(f"Starlette app created: {starlette_app}")
         
         # Uvicorn configuration
         # log_config=None prevents Uvicorn from overriding our logging setup from config.py
         # (Original main.py:2630)
+        cli_logger.info("Configuring Uvicorn server...")
+        cli_logger.info(f"  Host: 0.0.0.0")
+        cli_logger.info(f"  Port: {port}")
+        cli_logger.info(f"  Log config: None (using custom)")
+        cli_logger.info(f"  Access log: False")
+        cli_logger.info(f"  Lifespan: on")
+        
         uvicorn_config = uvicorn.Config(
             starlette_app,
             host="0.0.0.0", # Listen on all available interfaces
@@ -396,6 +445,7 @@ def main_cli(port: int, transport: str, project_dir: str, admin_token_cli: Optio
             lifespan="on" # Ensure Starlette's on_startup/on_shutdown are used
         )
         server = uvicorn.Server(uvicorn_config)
+        cli_logger.info("Uvicorn server configured")
 
         # Run Uvicorn server with background tasks managed by an AnyIO task group
         # This replaces the original run_server_with_background_tasks (main.py:2624)

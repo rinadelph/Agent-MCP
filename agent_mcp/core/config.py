@@ -53,11 +53,20 @@ DB_FILE_NAME: str = "mcp_state.db"  # From main.py:39
 
 # --- Logging Configuration ---
 LOG_FILE_NAME: str = "mcp_server.log" # Based on main.py:46
-LOG_LEVEL: int = logging.INFO        # From main.py:43
-LOG_FORMAT_FILE: str = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-LOG_FORMAT_CONSOLE: str = f'%(asctime)s - %(name)s - %(levelname)s - {TUIColors.DIM}%(message)s{TUIColors.ENDC}'  # Dim message text
 
-CONSOLE_LOGGING_ENABLED = False  # New flag to control console logging globally
+# Always use DEBUG level for CLI tool
+DEBUG_MODE = True  # Always debug mode for CLI
+LOG_LEVEL: int = logging.DEBUG  # Always use DEBUG level
+
+# More verbose logging formats
+LOG_FORMAT_FILE: str = '%(asctime)s.%(msecs)03d - [%(levelname)s] %(name)s - %(filename)s:%(lineno)d - %(funcName)s() - %(message)s'
+LOG_FORMAT_CONSOLE: str = f'%(asctime)s.%(msecs)03d - [%(levelname)s] %(name)s - %(filename)s:%(lineno)d - {TUIColors.DIM}%(message)s{TUIColors.ENDC}'
+
+# Check if we're in UI mode
+import sys
+ui_mode = '--help' not in sys.argv and '-h' not in sys.argv and len(sys.argv) <= 1
+# Console logging enabled only for non-UI mode
+CONSOLE_LOGGING_ENABLED = not ui_mode
 
 def setup_logging():
     """Configures global logging for the application."""
@@ -70,27 +79,42 @@ def setup_logging():
         root_logger.removeHandler(handler)
 
     # 1. File Handler (always add this, no colors)
-    file_formatter = logging.Formatter(LOG_FORMAT_FILE)
+    file_formatter = logging.Formatter(LOG_FORMAT_FILE, datefmt='%Y-%m-%d %H:%M:%S')
     file_handler = logging.FileHandler(LOG_FILE_NAME, mode='a', encoding='utf-8')  # Append mode
     file_handler.setFormatter(file_formatter)
+    file_handler.setLevel(logging.DEBUG)  # Always log DEBUG to file
     root_logger.addHandler(file_handler)
 
     # 2. Console Handler (with colors, conditional)
     if CONSOLE_LOGGING_ENABLED:
-        console_formatter = ColorfulFormatter(LOG_FORMAT_CONSOLE, datefmt='%H:%M:%S')  # Simpler datefmt for console
+        console_formatter = ColorfulFormatter(LOG_FORMAT_CONSOLE, datefmt='%H:%M:%S')
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setFormatter(console_formatter)
-        # Filter out less important messages for console if desired
-        # console_handler.setLevel(logging.INFO)  # Example: only INFO and above for console
+        console_handler.setLevel(LOG_LEVEL)
         root_logger.addHandler(console_handler)
     
-    # Suppress overly verbose logs from specific libraries for both file and console
-    logging.getLogger("watchfiles").setLevel(logging.WARNING)
-    # Uvicorn access logs are handled by Uvicorn's config (access_log=False in cli.py)
-    # but we can also try to manage its error logger if needed.
-    logging.getLogger("uvicorn.error").setLevel(logging.WARNING)
-    logging.getLogger("uvicorn").setLevel(logging.WARNING)  # General uvicorn logger
-    logging.getLogger("mcp.server.lowlevel.server").propagate = False  # Prevent duplication if it logs directly
+    # Set all agent_mcp loggers to DEBUG level (always on for CLI)
+    agent_mcp_logger = logging.getLogger('agent_mcp')
+    agent_mcp_logger.setLevel(logging.DEBUG)
+    # Propagate to all child loggers
+    for name in ['agent_mcp.cli', 'agent_mcp.server_lifecycle', 'agent_mcp.migrations', 
+                 'agent_mcp.db', 'agent_mcp.app', 'agent_mcp.core']:
+        logging.getLogger(name).setLevel(logging.DEBUG)
+    
+    # Suppress overly verbose logs from specific libraries
+    # Keep them at INFO level for debugging
+    logging.getLogger("watchfiles").setLevel(logging.INFO)
+    logging.getLogger("uvicorn.error").setLevel(logging.INFO)
+    logging.getLogger("uvicorn").setLevel(logging.INFO)
+    logging.getLogger("mcp.server.lowlevel.server").propagate = True  # Allow propagation
+    
+    # Log the logging configuration (only to file if in UI mode)
+    if CONSOLE_LOGGING_ENABLED:
+        print(f"[CONFIG] Logging configured:")
+        print(f"  - Log level: {logging.getLevelName(LOG_LEVEL)}")
+        print(f"  - Console logging: ENABLED")
+        print(f"  - Log file: {LOG_FILE_NAME}")
+        print(f"  - Debug mode: ALWAYS ON")
 
 # Initialize logging when this module is imported
 setup_logging()
@@ -106,7 +130,7 @@ AGENT_COLORS: List[str] = [ # From main.py:160-164 (Note: original had 160-165, 
 # --- OpenAI Model Configuration ---
 # Fixed embedding configuration - using simple mode only
 EMBEDDING_MODEL: str = "text-embedding-3-large" # Original embedding model (unchanged)
-EMBEDDING_DIMENSION: int = 1024 # Original dimension (From main.py:180)
+EMBEDDING_DIMENSION: int = 1024 # Using reduced dimensions for efficiency
 
 CHAT_MODEL: str = "gpt-4.1-2025-04-14" # From main.py:179 (Ensure this matches your desired model)
 TASK_ANALYSIS_MODEL: str = "gpt-4.1-2025-04-14" # Same model for consistent task placement analysis
@@ -151,8 +175,9 @@ TASK_DUPLICATION_THRESHOLD: float = float(os.getenv("TASK_DUPLICATION_THRESHOLD"
 ALLOW_RAG_OVERRIDE: bool = os.getenv("ALLOW_RAG_OVERRIDE", "true").lower() == "true"
 TASK_PLACEMENT_RAG_TIMEOUT: int = int(os.getenv("TASK_PLACEMENT_RAG_TIMEOUT", "5"))  # seconds
 
-# Log that configuration is loaded (optional)
-logger.info("Core configuration loaded (with colorful logging setup).")
+# Log that configuration is loaded (only if console logging is enabled)
+if CONSOLE_LOGGING_ENABLED:
+    logger.info("Core configuration loaded (with colorful logging setup).")
 # Example of how other modules will use this logger:
 # from mcp_server_src.core.config import logger
 # logger.info("This is a log message from another module.")

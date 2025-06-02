@@ -354,13 +354,13 @@ async def update_project_context_tool_impl(arguments: Dict[str, Any]) -> List[mc
     if is_bulk_operation:
         if not isinstance(updates_list, list) or len(updates_list) == 0:
             return [mcp_types.TextContent(type="text", text="Error: updates must be a non-empty list for bulk operations.")]
-        return await _handle_bulk_context_update(requesting_agent_id, updates_list)
+        # Reuse bulk update implementation
+        return await bulk_update_project_context_tool_impl(arguments)
     else:
         # Single operation (backward compatibility)
         if not context_key_to_update or context_value_to_set is None:
             return [mcp_types.TextContent(type="text", text="Error: context_key and context_value are required for single updates.")]
-        return await _handle_single_context_update(requesting_agent_id, context_key_to_update, context_value_to_set, description_for_context)
-
+    
     # Log audit (main.py:1477)
     log_audit(requesting_agent_id, "update_project_context", 
               {"context_key": context_key_to_update, "value_type": str(type(context_value_to_set)), "description": description_for_context})

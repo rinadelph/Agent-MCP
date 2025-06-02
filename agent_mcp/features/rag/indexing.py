@@ -88,9 +88,8 @@ async def _get_embeddings_batch_openai(
         async_client = openai.AsyncOpenAI(api_key=openai_api_key)
         response = await async_client.embeddings.create(
             input=validated_chunks,
-            model=EMBEDDING_MODEL
-            # Note: dimensions parameter is not used - model defaults to its natural dimension
-            # text-embedding-3-small: 1536, text-embedding-3-large: 3072
+            model=EMBEDDING_MODEL,
+            dimensions=EMBEDDING_DIMENSION  # Use configured dimension (1024)
         )
         # Store results directly in the provided results list
         for j, item_embedding in enumerate(response.data):
@@ -550,7 +549,8 @@ async def index_task_data(task_id: str, task_data: Dict[str, Any]) -> None:
                 # Generate embedding
                 embedding_response = await client.embeddings.create(
                     model=EMBEDDING_MODEL,
-                    input=chunk_text
+                    input=chunk_text,
+                    dimensions=EMBEDDING_DIMENSION  # Use configured dimension (1024)
                 )
                 embedding_vector = embedding_response.data[0].embedding
                 

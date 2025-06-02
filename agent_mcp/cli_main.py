@@ -14,6 +14,8 @@ import sys
 import os
 from pathlib import Path
 from typing import Optional
+import logging
+import traceback
 
 # Add parent to path for imports when running as script
 if __name__ == "__main__":
@@ -22,19 +24,60 @@ if __name__ == "__main__":
 from agent_mcp import __version__
 from agent_mcp.cli import main_cli
 
+# Set up enhanced logging for CLI routing
+cli_logger = logging.getLogger('agent_mcp.cli_main')
+cli_logger.setLevel(logging.DEBUG)
 
-@click.group(context_settings=dict(help_option_names=['-h', '--help']))
+# Add file handler for CLI-specific logs
+cli_log_file = 'agent_mcp_cli.log'
+cli_file_handler = logging.FileHandler(cli_log_file, mode='a')
+cli_file_handler.setLevel(logging.DEBUG)
+cli_formatter = logging.Formatter(
+    '%(asctime)s.%(msecs)03d [%(levelname)s] %(name)s - %(funcName)s:%(lineno)d - %(message)s',
+    datefmt='%H:%M:%S'
+)
+cli_file_handler.setFormatter(cli_formatter)
+cli_logger.addHandler(cli_file_handler)
+
+cli_logger.info("=" * 80)
+cli_logger.info("CLI MAIN MODULE LOADED")
+cli_logger.info("=" * 80)
+
+
+@click.group(invoke_without_command=True, context_settings=dict(help_option_names=['-h', '--help']))
 @click.version_option(version=__version__, prog_name="agent-mcp")
-def cli():
+@click.pass_context
+def cli(ctx):
     """
     Agent MCP - Multi-Agent Collaboration Platform
     
     A powerful framework for building and managing multi-agent systems
     with intelligent task distribution and RAG capabilities.
     
+    Run without arguments to launch the interactive control center.
+    
     For detailed documentation, visit: https://github.com/your-org/agent-mcp
     """
-    pass
+    cli_logger.info(f"CLI invoked with args: {sys.argv}")
+    cli_logger.info(f"Invoked subcommand: {ctx.invoked_subcommand}")
+    
+    # If no command is provided, launch the unified interface
+    if ctx.invoked_subcommand is None:
+        cli_logger.info("No subcommand provided - launching unified interface")
+        
+        # Disable console logging for UI mode (but keep file logging)
+        import logging
+        root_logger = logging.getLogger()
+        # Remove console handlers to prevent debug logs from showing in UI
+        for handler in root_logger.handlers[:]:
+            if isinstance(handler, logging.StreamHandler) and handler.stream == sys.stdout:
+                root_logger.removeHandler(handler)
+                cli_logger.info("Removed console handler for UI mode")
+        
+        from .cli_commands.unified_interface_v2 import run_enhanced_interface
+        run_enhanced_interface()
+    else:
+        cli_logger.info(f"Subcommand '{ctx.invoked_subcommand}' will be invoked")
 
 
 @cli.command()
@@ -86,37 +129,97 @@ def server(port: int, transport: str, project_dir: Path, admin_token: Optional[s
         # Run in stdio mode for MCP protocol
         agent-mcp server --transport stdio
     """
+    cli_logger.info("=" * 80)
+    cli_logger.info("SERVER COMMAND INVOKED")
+    cli_logger.info("=" * 80)
+    cli_logger.info(f"Parameters:")
+    cli_logger.info(f"  port: {port}")
+    cli_logger.info(f"  transport: {transport}")
+    cli_logger.info(f"  project_dir: {project_dir}")
+    cli_logger.info(f"  admin_token: {'[PROVIDED]' if admin_token else 'None'}")
+    cli_logger.info(f"  debug: {debug}")
+    cli_logger.info(f"  no_tui: {no_tui}")
+    
     # Convert Path to string for compatibility
     project_dir_str = str(project_dir)
     
-    # Import and run the main CLI directly
-    # This avoids the click command decorator issues
-    import sys
+    # Import the actual server running logic
+    import asyncio
+    import uvicorn
+    import anyio
+    from agent_mcp.app.main_app import create_app
+    from agent_mcp.app.server_lifecycle import start_background_tasks
+    from agent_mcp.core.config import logger, CONSOLE_LOGGING_ENABLED
+    from agent_mcp.core import globals as g
+    from agent_mcp.tui.display import TUIDisplay
     
-    # Save original argv
-    original_argv = sys.argv.copy()
+    # Debug is always on for CLI logging, but respect the flag for Starlette
+    if debug:
+        os.environ["MCP_DEBUG"] = "true"  # For Starlette debug mode
+        cli_logger.info("Debug flag passed - enabling Starlette debug mode")
+    else:
+        os.environ["MCP_DEBUG"] = "false"
     
-    try:
-        # Build new argv
-        sys.argv = ['agent-mcp']
-        sys.argv.extend(['--port', str(port)])
-        sys.argv.extend(['--transport', transport])
-        sys.argv.extend(['--project-dir', project_dir_str])
-        if admin_token:
-            sys.argv.extend(['--admin-token', admin_token])
-        if debug:
-            sys.argv.append('--debug')
-        if no_tui:
-            sys.argv.append('--no-tui')
+    # Console logging is always enabled for CLI
+    tui_active = False  # Never use TUI for CLI
+    
+    logger.info("Standard console logging is enabled.")
+    print("MCP Server starting with console logging...")
+    
+    logger.info(f"Attempting to start MCP Server: Port={port}, Transport={transport}, ProjectDir='{project_dir_str}'")
+    
+    if transport == "sse":
+        # Create the Starlette application instance
+        starlette_app = create_app(project_dir=project_dir_str, admin_token_cli=admin_token)
         
-        # Import and call the main function from cli module
-        from agent_mcp.cli import main
-        main()
-    except SystemExit:
-        pass  # Don't propagate SystemExit
-    finally:
-        # Restore original argv
-        sys.argv = original_argv
+        # Uvicorn configuration
+        uvicorn_config = uvicorn.Config(
+            starlette_app,
+            host="0.0.0.0",
+            port=port,
+            log_config=None,
+            access_log=False,
+            lifespan="on"
+        )
+        server = uvicorn.Server(uvicorn_config)
+        
+        async def run_sse_server_with_bg_tasks():
+            try:
+                async with anyio.create_task_group() as tg:
+                    # Start background tasks
+                    await start_background_tasks(tg)
+                    
+                    # Start the Uvicorn server
+                    logger.info(f"Starting Uvicorn server for SSE transport on http://0.0.0.0:{port}")
+                    logger.info(f"Dashboard available at http://localhost:{port}")
+                    
+                    if not tui_active:
+                        print(f"MCP Server running on http://0.0.0.0:{port} (SSE Transport)")
+                        print(f"Dashboard: http://localhost:{port}")
+                        print(f"Admin Token: {g.admin_token}")
+                        print("Press Ctrl+C to quit.")
+                    
+                    await server.serve()
+                    
+                    logger.info("Uvicorn server has stopped.")
+            except Exception as e:
+                logger.critical(f"Fatal error during SSE server execution: {e}", exc_info=True)
+                g.server_running = False
+            finally:
+                logger.info("SSE server and background task group scope exited.")
+        
+        try:
+            anyio.run(run_sse_server_with_bg_tasks)
+        except KeyboardInterrupt:
+            logger.info("Keyboard interrupt received. Server shutting down.")
+        except SystemExit as e:
+            logger.error(f"SystemExit caught: {e}. Server will not start.")
+            if tui_active:
+                tui = TUIDisplay()
+                tui.clear_screen()
+            sys.exit(e.code if isinstance(e.code, int) else 1)
+    else:
+        print(f"Transport type '{transport}' not implemented in this simplified version")
 
 
 @cli.command()
@@ -185,6 +288,23 @@ def migrate(check: bool, force: bool, no_backup: bool, config: bool,
         asyncio.run(run_migration(force=force, no_backup=no_backup))
 
 
+# Legacy commands - kept for compatibility but redirect to unified interface
+@cli.command(hidden=True)  # Hide from help
+def manager():
+    """(Deprecated) Use 'agent-mcp' without arguments instead"""
+    click.echo("Note: 'manager' command is deprecated. Launching control center...")
+    from .cli_commands.unified_interface import run_unified_interface
+    run_unified_interface()
+
+
+@cli.command(hidden=True)  # Hide from help
+def explorer():
+    """(Deprecated) Use 'agent-mcp' without arguments instead"""
+    click.echo("Note: 'explorer' command is deprecated. Launching control center...")
+    from .cli_commands.unified_interface import run_unified_interface
+    run_unified_interface()
+
+
 @cli.command()
 @click.option('--project-dir', type=click.Path(exists=True), default=".",
               help='Project directory to index')
@@ -200,7 +320,15 @@ def index(project_dir: str, force: bool):
         # Force re-index all files
         agent-mcp index --force
     """
+    cli_logger.info("=" * 80)
+    cli_logger.info("INDEX COMMAND INVOKED")
+    cli_logger.info("=" * 80)
+    cli_logger.info(f"Parameters:")
+    cli_logger.info(f"  project_dir: {project_dir}")
+    cli_logger.info(f"  force: {force}")
+    
     os.environ["MCP_PROJECT_DIR"] = str(Path(project_dir).resolve())
+    cli_logger.info(f"Set MCP_PROJECT_DIR to: {os.environ['MCP_PROJECT_DIR']}")
     
     # Import and run indexing
     import asyncio
@@ -228,6 +356,8 @@ def index(project_dir: str, force: bool):
 @cli.command()
 def version():
     """Show version and system information"""
+    cli_logger.info("VERSION COMMAND INVOKED")
+    
     import platform
     
     print(f"Agent MCP v{__version__}")
@@ -302,7 +432,18 @@ OPENAI_API_KEY=your-api-key-here
 
 def main():
     """Main entry point for agent-mcp command"""
-    cli()
+    cli_logger.info("=" * 80)
+    cli_logger.info("AGENT-MCP MAIN ENTRY POINT")
+    cli_logger.info("=" * 80)
+    cli_logger.info(f"Command line: {' '.join(sys.argv)}")
+    cli_logger.info(f"Current directory: {os.getcwd()}")
+    
+    try:
+        cli()
+    except Exception as e:
+        cli_logger.error(f"Unhandled exception in main: {e}")
+        cli_logger.debug(f"Traceback: {traceback.format_exc()}")
+        raise
 
 
 if __name__ == "__main__":

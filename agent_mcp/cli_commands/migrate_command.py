@@ -20,6 +20,8 @@ import argparse
 from pathlib import Path
 from typing import Optional
 from datetime import datetime
+import logging
+import traceback
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -28,17 +30,39 @@ from agent_mcp.db.migrations.migration_manager import MigrationManager, ensure_d
 from agent_mcp.db.migrations.migration_config import migration_config
 from agent_mcp.core.config import logger, get_agent_dir
 
+# Set up enhanced logging for the migration command
+migrate_logger = logging.getLogger('agent_mcp.cli.migrate')
+migrate_logger.setLevel(logging.DEBUG)
+
+# Add file handler for migration-specific logs
+migrate_log_file = 'agent_mcp_migrate.log'
+migrate_file_handler = logging.FileHandler(migrate_log_file, mode='a')
+migrate_file_handler.setLevel(logging.DEBUG)
+migrate_formatter = logging.Formatter(
+    '%(asctime)s.%(msecs)03d [%(levelname)s] %(name)s - %(funcName)s:%(lineno)d - %(message)s',
+    datefmt='%H:%M:%S'
+)
+migrate_file_handler.setFormatter(migrate_formatter)
+migrate_logger.addHandler(migrate_file_handler)
+
+migrate_logger.info("=" * 80)
+migrate_logger.info("MIGRATE COMMAND MODULE LOADED")
+migrate_logger.info("=" * 80)
+
 
 async def check_version():
     """Check and display current database version"""
+    migrate_logger.info("Checking database version...")
     manager = MigrationManager()
     
     try:
         from agent_mcp.db.connection import get_db_connection
+        migrate_logger.debug("Getting database connection...")
         conn = get_db_connection()
         cursor = conn.cursor()
         
         # Ensure migration table exists
+        migrate_logger.debug("Ensuring migration table exists...")
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS schema_migrations (
                 version TEXT PRIMARY KEY,
@@ -284,6 +308,11 @@ async def show_migration_logs():
 
 async def main():
     """Main entry point for migration CLI"""
+    migrate_logger.info("=" * 80)
+    migrate_logger.info("MIGRATION CLI STARTED")
+    migrate_logger.info("=" * 80)
+    migrate_logger.info(f"Arguments: {sys.argv}")
+    
     parser = argparse.ArgumentParser(
         description='Agent MCP Database Migration Tool',
         formatter_class=argparse.RawDescriptionHelpFormatter,

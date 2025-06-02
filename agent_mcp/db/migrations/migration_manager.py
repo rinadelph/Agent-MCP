@@ -39,41 +39,75 @@ class MigrationManager:
     
     async def check_and_migrate(self) -> bool:
         """Check database version and run migrations if needed"""
+        # Set up verbose logging
+        import logging as migration_logging
+        migration_logger = migration_logging.getLogger('agent_mcp.migrations')
+        migration_logger.setLevel(migration_logging.DEBUG)
+        
+        migration_logger.info("=" * 80)
+        migration_logger.info("DATABASE MIGRATION CHECK STARTED")
+        migration_logger.info("=" * 80)
+        
         try:
             # Check if auto-migration is enabled
+            migration_logger.info(f"Checking migration config...")
+            migration_logger.info(f"  auto_migrate: {migration_config.get('auto_migrate', True)}")
+            migration_logger.info(f"  interactive: {migration_config.get('interactive', True)}")
+            migration_logger.info(f"  auto_backup: {migration_config.get('auto_backup', True)}")
+            
             if not migration_config.get('auto_migrate', True):
                 logger.info("Auto-migration is disabled in configuration")
+                migration_logger.info("Auto-migration is disabled in configuration")
                 return True
             
+            migration_logger.info("Getting database connection...")
             self.conn = get_db_connection()
             self.cursor = self.conn.cursor()
+            migration_logger.info("Database connection established")
             
             # Ensure migration tracking table exists
+            migration_logger.info("Ensuring migration tracking table exists...")
             self._ensure_migration_table()
+            migration_logger.info("Migration tracking table ready")
             
             # Get current database version
+            migration_logger.info("Getting current database version...")
             current_version = self._get_current_version()
+            migration_logger.info(f"Current database version: {current_version or 'None (fresh database)'}")
             
             if current_version == self.CURRENT_VERSION:
                 logger.info(f"✅ Database is up to date (version {self.CURRENT_VERSION})")
+                migration_logger.info(f"✅ Database is up to date (version {self.CURRENT_VERSION})")
+                migration_logger.info("Cleaning up old backups...")
                 self._cleanup_old_backups()  # Clean old backups
                 return True
             
             logger.info(f"📊 Database version: {current_version or 'unknown'}")
             logger.info(f"🎯 Target version: {self.CURRENT_VERSION}")
+            migration_logger.info(f"📊 Database version: {current_version or 'unknown'}")
+            migration_logger.info(f"🎯 Target version: {self.CURRENT_VERSION}")
             
             # Determine which migrations to run
+            migration_logger.info("Determining pending migrations...")
             migrations_to_run = self._get_pending_migrations(current_version)
+            migration_logger.info(f"Migrations to run: {[v for v, _ in migrations_to_run]}")
             
             if not migrations_to_run:
                 logger.info("✅ No migrations needed")
+                migration_logger.info("✅ No migrations needed")
                 return True
             
             # Ask for confirmation if interactive mode
+            migration_logger.info(f"Interactive mode: {migration_config.get('interactive', True)}")
+            migration_logger.info(f"Is TTY: {sys.stdin.isatty()}")
             if migration_config.get('interactive', True) and sys.stdin.isatty():
+                migration_logger.info("Asking user for migration confirmation...")
                 if not await self._confirm_migration(current_version, migrations_to_run):
                     logger.info("❌ Migration cancelled by user")
-                    return False
+                    migration_logger.info("❌ Migration cancelled by user")
+                    print("\nExiting...")
+                    migration_logger.info("Exiting due to user cancellation")
+                    sys.exit(0)  # Exit immediately when user cancels
             
             # Create backup if enabled
             backup_path = None
@@ -370,8 +404,25 @@ class MigrationManager:
 
 async def ensure_database_current() -> bool:
     """Ensure database is at current version, migrating if necessary"""
+    import logging as ensure_logging
+    ensure_logger = ensure_logging.getLogger('agent_mcp.migrations.ensure_database_current')
+    ensure_logger.setLevel(ensure_logging.DEBUG)
+    
+    ensure_logger.info("=" * 80)
+    ensure_logger.info("ensure_database_current() called")
+    ensure_logger.info("=" * 80)
+    
+    ensure_logger.info("Creating MigrationManager instance...")
     manager = MigrationManager()
-    return await manager.check_and_migrate()
+    ensure_logger.info(f"MigrationManager created: {manager}")
+    ensure_logger.info(f"  Current version constant: {manager.CURRENT_VERSION}")
+    ensure_logger.info(f"  Available migrations: {list(manager.MIGRATIONS.keys())}")
+    
+    ensure_logger.info("Calling manager.check_and_migrate()...")
+    result = await manager.check_and_migrate()
+    ensure_logger.info(f"Migration check result: {result}")
+    
+    return result
 
 
 # Version check decorator for critical operations

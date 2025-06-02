@@ -32,27 +32,74 @@ async def application_startup(project_dir_path_str: str, admin_token_param: Opti
     - Performs VSS loadability check.
     - Registers signal handlers.
     """
+    # Set up verbose logging
+    import logging as startup_logging
+    startup_logger = startup_logging.getLogger('agent_mcp.server_lifecycle')
+    startup_logger.setLevel(startup_logging.DEBUG)
+    
+    startup_logger.info("=" * 80)
+    startup_logger.info("APPLICATION STARTUP INITIATED")
+    startup_logger.info("=" * 80)
+    startup_logger.info(f"Project directory path: {project_dir_path_str}")
+    startup_logger.info(f"Admin token provided: {'Yes' if admin_token_param else 'No'}")
+    startup_logger.info(f"Current working directory: {os.getcwd()}")
+    startup_logger.info(f"Process ID: {os.getpid()}")
+    
     # Load environment variables from .env file
+    startup_logger.info("Loading environment variables...")
     load_dotenv()
     
     logger.info("MCP Server application starting up...")
+    startup_logger.info("MCP Server application starting up...")
     g.server_start_time = datetime.datetime.now().isoformat() # For uptime calculation
+    startup_logger.info(f"Server start time: {g.server_start_time}")
 
-    # 1. Handle Project Directory (Original main.py:1950-1959)
+    # 0. Load environment variables from .env file FIRST
+    startup_logger.info("STEP 0: Loading project-specific .env file...")
     project_path = Path(project_dir_path_str).resolve()
+    startup_logger.info(f"Resolved project path: {project_path}")
+    env_path = project_path / ".env"
+    startup_logger.info(f"Looking for .env at: {env_path}")
+    if env_path.exists():
+        logger.info(f"Loading environment from: {env_path}")
+        startup_logger.info(f"Loading environment from: {env_path}")
+        load_dotenv(env_path)
+        startup_logger.info("Project .env file loaded successfully")
+    else:
+        logger.warning(f"No .env file found at: {env_path}")
+        startup_logger.warning(f"No .env file found at: {env_path}")
+    
+    # Log key environment variables
+    startup_logger.debug("Key environment variables:")
+    for key in ['OPENAI_API_KEY', 'MCP_DEBUG', 'MCP_PROJECT_DIR', 'PORT']:
+        value = os.environ.get(key)
+        if key.endswith('KEY'):
+            startup_logger.debug(f"  {key}: {'[SET]' if value else '[NOT SET]'}")
+        else:
+            startup_logger.debug(f"  {key}: {value}")
+    
+    # 1. Handle Project Directory (Original main.py:1950-1959)
+    startup_logger.info("STEP 1: Handling project directory...")
     if not project_path.exists():
         logger.info(f"Project directory '{project_path}' does not exist. Creating it.")
+        startup_logger.info(f"Project directory '{project_path}' does not exist. Creating it.")
         try:
             project_path.mkdir(parents=True, exist_ok=True)
+            startup_logger.info(f"Created project directory: {project_path}")
         except OSError as e:
             logger.error(f"CRITICAL: Failed to create project directory '{project_path}': {e}. Exiting.")
+            startup_logger.error(f"CRITICAL: Failed to create project directory '{project_path}': {e}. Exiting.")
             raise SystemExit(f"Failed to create project directory: {e}") from e
     elif not project_path.is_dir():
         logger.error(f"CRITICAL: Project path '{project_path}' is not a directory. Exiting.")
+        startup_logger.error(f"CRITICAL: Project path '{project_path}' is not a directory. Exiting.")
         raise SystemExit(f"Project path '{project_path}' is not a directory.")
+    else:
+        startup_logger.info(f"Project directory exists: {project_path}")
 
     os.environ["MCP_PROJECT_DIR"] = str(project_path) # Critical for other modules using get_project_dir()
     logger.info(f"Using project directory: {project_path}")
+    startup_logger.info(f"Set MCP_PROJECT_DIR environment variable: {project_path}")
 
     # Check if this is a first-time run (no .agent directory exists)
     agent_dir_path = project_path / ".agent"
@@ -71,35 +118,55 @@ async def application_startup(project_dir_path_str: str, admin_token_param: Opti
         logger.info("")
 
     # 2. Initialize .agent directory (Original main.py:1962-1966)
+    startup_logger.info("STEP 2: Initializing .agent directory...")
     agent_dir = init_agent_directory(str(project_path)) # project_utils.init_agent_directory
     if agent_dir is None: # init_agent_directory returns None on critical failure
         logger.error("CRITICAL: Failed to initialize .agent directory structure. Exiting.")
+        startup_logger.error("CRITICAL: Failed to initialize .agent directory structure. Exiting.")
         raise SystemExit("Failed to initialize .agent directory.")
     logger.info(f".agent directory initialized at {agent_dir}")
+    startup_logger.info(f".agent directory initialized at {agent_dir}")
 
     # 3. Initialize Database Schema (Original main.py:1969-1974)
+    startup_logger.info("STEP 3: Initializing database schema...")
     try:
+        startup_logger.info("Calling initialize_database_schema()...")
         initialize_database_schema() # db.schema.init_database
+        startup_logger.info("Database schema initialized successfully")
     except Exception as e:
         logger.error(f"CRITICAL: Failed to initialize database: {e}. Exiting.", exc_info=True)
+        startup_logger.error(f"CRITICAL: Failed to initialize database: {e}. Exiting.", exc_info=True)
         # DB_FILE_NAME is in core.config, get_db_path uses it.
         from ..core.config import get_db_path as get_db_path_for_error
         db_path_err = get_db_path_for_error() # Get path for error message
+        startup_logger.error(f"Database path was: {db_path_err}")
         raise SystemExit(f"Error: Failed to initialize database at {db_path_err}. Check logs and permissions.") from e
 
     # 3.5. Check and Apply Database Migrations
     # This ensures the database is at the current schema version
+    startup_logger.info("STEP 3.5: Checking database migrations...")
     try:
         from ..db.migrations.migration_manager import ensure_database_current
         logger.info("Checking database version...")
+        startup_logger.info("Importing migration manager...")
+        startup_logger.info("Calling ensure_database_current()...")
         migration_result = await ensure_database_current()
+        startup_logger.info(f"Migration result: {migration_result}")
         if not migration_result:
-            logger.error("CRITICAL: Database migration failed. Cannot continue with outdated schema.")
-            raise SystemExit("Database migration required but failed. Please check logs.")
+            logger.error("CRITICAL: Database migration failed or was cancelled. Cannot continue with outdated schema.")
+            startup_logger.error("CRITICAL: Database migration failed or was cancelled. Cannot continue with outdated schema.")
+            raise SystemExit("Database migration required but was not completed. Exiting.")
+        startup_logger.info("Database migration check completed successfully")
+    except SystemExit:
+        # Re-raise SystemExit to ensure proper shutdown
+        startup_logger.warning("SystemExit raised during migration check - re-raising")
+        raise
     except Exception as e:
         logger.error(f"Error during database migration check: {e}", exc_info=True)
+        startup_logger.error(f"Error during database migration check: {e}", exc_info=True)
         # Allow startup to continue if migration check fails (backwards compatibility)
         logger.warning("Continuing startup despite migration check failure...")
+        startup_logger.warning("Continuing startup despite migration check failure...")
 
     # 4. Handle Admin Token Persistence (Original main.py:1977-2012)
     # This logic ensures g.admin_token is set.

@@ -41,16 +41,22 @@ cp .env.example .env
 # Edit .env and add: OPENAI_API_KEY=your-key-here
 ```
 
-### 2. Start the Server
+### 2. Launch Agent MCP
 ```bash
-# Run from any directory after installation
-agent-mcp server --project-dir /path/to/your/project
+# NEW: Just run agent-mcp to access the control center
+agent-mcp
 
-# Or if running from the Agent-MCP directory:
-agent-mcp server --project-dir .
+# From here you can:
+# - Browse and select projects
+# - Initialize new projects
+# - Launch servers with visual configuration
+# - Manage multiple servers at once
+
+# Or start a server directly:
+agent-mcp server --project-dir /path/to/your/project
 ```
 
-Visit http://localhost:8080 to see your dashboard!
+Dashboard will be available at http://localhost:8080!
 
 ### 3. Create Main Context Document (MCD)
 - Create a detailed `MCD.md` file in your project with architecture, API routes, data models, etc.
@@ -104,25 +110,51 @@ The admin token is stored in your project's database:
 ## 🛠️ Commands
 
 ```bash
-# Server Commands
-agent-mcp server                    # Start with web dashboard
-agent-mcp server --transport stdio  # Start in MCP mode
+# Interactive Control Center (NEW!)
+agent-mcp                           # Launch unified control center
+
+# Direct Commands
+agent-mcp server                    # Start server directly
 agent-mcp server --port 9000        # Use custom port
 agent-mcp server --no-tui           # Disable terminal UI
-
-# Project Management
 agent-mcp init <project-name>       # Create new project
-agent-mcp index                     # Index codebase for RAG
-
-# Database Management  
-agent-mcp migrate --check           # Check database version
-agent-mcp migrate                   # Run migrations
-agent-mcp migrate --config          # Show migration settings
+agent-mcp migrate                   # Run database migrations
 
 # Other
 agent-mcp version                   # Show version info
 agent-mcp --help                    # Show all commands
 ```
+
+### 🎮 Interactive Control Center
+
+Just run `agent-mcp` to access everything from one unified interface:
+
+#### Main Menu
+- **Server Dashboard** - Manage all running servers
+- **Quick Launch** - Start server in current directory
+- **Project Browser** - Navigate and initialize projects  
+- **Data Explorer** - View agents, tasks, and context
+- **Database Tools** - Run migrations and backups
+- **Settings** - Configure defaults
+- **Documentation** - Built-in help
+
+#### Key Features
+- **Arrow key navigation** throughout
+- **Number shortcuts** (1-8) on main menu
+- **Contextual controls** shown at bottom
+- **Real-time server monitoring**
+- **One-key operations** (stop/restart/copy)
+- **Visual project detection** (🚀 icons)
+- **Smart path display** with truncation
+- **Color-coded status** indicators
+
+#### Universal Controls
+- `↑↓` or `jk` - Navigate up/down
+- `←→` or `hl` - Navigate back/forward
+- `Enter` - Select/Confirm
+- `q` - Back/Exit
+- `Tab` - Switch between items
+- `c` - Copy to clipboard (context-sensitive)
 
 ## 🔧 Configuration
 
