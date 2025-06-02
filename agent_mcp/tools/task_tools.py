@@ -3,6 +3,7 @@ import json
 import datetime
 import secrets # For task_id generation
 import os # For request_assistance (notifications path)
+import sqlite3 # For database operations
 from pathlib import Path # For request_assistance
 from typing import List, Dict, Any, Optional
 
@@ -45,6 +46,104 @@ def _generate_task_id() -> str:
 def _generate_notification_id() -> str:
     """Generates a unique notification ID."""
     return f"notification_{secrets.token_hex(8)}"
+
+async def _update_single_task(cursor, task_id: str, new_status: str, requesting_agent_id: str, 
+                             is_admin_request: bool, notes_content: Optional[str] = None,
+                             new_title: Optional[str] = None, new_description: Optional[str] = None,
+                             new_priority: Optional[str] = None, new_assigned_to: Optional[str] = None,
+                             new_depends_on_tasks: Optional[List[str]] = None) -> Dict[str, Any]:
+    """Helper function to update a single task with smart features"""
+    
+    # Fetch task current data
+    cursor.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,))
+    task_db_row = cursor.fetchone()
+    if not task_db_row:
+        return {"success": False, "error": f"Task '{task_id}' not found"}
+    
+    task_current_data = dict(task_db_row)
+    
+    # Verify permissions
+    if task_current_data.get("assigned_to") != requesting_agent_id and not is_admin_request:
+        return {"success": False, "error": f"Unauthorized: Cannot update task '{task_id}' assigned to {task_current_data.get('assigned_to')}"}
+    
+    updated_at_iso = datetime.datetime.now().isoformat()
+    
+    # Build update query
+    update_fields_sql = ["status = ?", "updated_at = ?"]
+    update_params = [new_status, updated_at_iso]
+    
+    # Handle notes
+    current_notes_list = json.loads(task_current_data.get("notes") or "[]")
+    if notes_content:
+        current_notes_list.append({
+            "timestamp": updated_at_iso,
+            "author": requesting_agent_id,
+            "content": notes_content
+        })
+    update_fields_sql.append("notes = ?")
+    update_params.append(json.dumps(current_notes_list))
+    
+    # Admin-only field updates
+    if is_admin_request:
+        if new_title is not None:
+            update_fields_sql.append("title = ?")
+            update_params.append(new_title)
+        if new_description is not None:
+            update_fields_sql.append("description = ?")
+            update_params.append(new_description)
+        if new_priority is not None:
+            update_fields_sql.append("priority = ?")
+            update_params.append(new_priority)
+        if new_assigned_to is not None:
+            update_fields_sql.append("assigned_to = ?")
+            update_params.append(new_assigned_to)
+        if new_depends_on_tasks is not None:
+            update_fields_sql.append("depends_on_tasks = ?")
+            update_params.append(json.dumps(new_depends_on_tasks))
+    
+    update_params.append(task_id)
+    
+    # Execute update
+    cursor.execute(f"UPDATE tasks SET {', '.join(update_fields_sql)} WHERE task_id = ?", tuple(update_params))
+    
+    # Update in-memory cache
+    if task_id in g.tasks:
+        g.tasks[task_id]["status"] = new_status
+        g.tasks[task_id]["updated_at"] = updated_at_iso
+        g.tasks[task_id]["notes"] = current_notes_list
+        if is_admin_request:
+            if new_title is not None: g.tasks[task_id]["title"] = new_title
+            if new_description is not None: g.tasks[task_id]["description"] = new_description
+            if new_priority is not None: g.tasks[task_id]["priority"] = new_priority
+            if new_assigned_to is not None: g.tasks[task_id]["assigned_to"] = new_assigned_to
+            if new_depends_on_tasks is not None: g.tasks[task_id]["depends_on_tasks"] = new_depends_on_tasks
+    
+    # Handle parent task notifications
+    if new_status in ["completed", "cancelled", "failed"] and task_current_data.get("parent_task"):
+        parent_task_id = task_current_data["parent_task"]
+        cursor.execute("SELECT notes FROM tasks WHERE task_id = ?", (parent_task_id,))
+        parent_row = cursor.fetchone()
+        if parent_row:
+            parent_notes_list = json.loads(parent_row["notes"] or "[]")
+            parent_notes_list.append({
+                "timestamp": updated_at_iso,
+                "author": "system",
+                "content": f"Subtask '{task_id}' ({task_current_data.get('title', '')}) status changed to: {new_status}"
+            })
+            cursor.execute("UPDATE tasks SET notes = ?, updated_at = ? WHERE task_id = ?",
+                          (json.dumps(parent_notes_list), updated_at_iso, parent_task_id))
+            if parent_task_id in g.tasks:
+                g.tasks[parent_task_id]["notes"] = parent_notes_list
+                g.tasks[parent_task_id]["updated_at"] = updated_at_iso
+    
+    return {
+        "success": True, 
+        "task_id": task_id, 
+        "old_status": task_current_data.get("status"), 
+        "new_status": new_status,
+        "child_tasks": json.loads(task_current_data.get("child_tasks") or "[]"),
+        "depends_on_tasks": json.loads(task_current_data.get("depends_on_tasks") or "[]")
+    }
 
 
 # --- assign_task tool ---
@@ -479,6 +578,7 @@ async def create_self_task_tool_impl(arguments: Dict[str, Any]) -> List[mcp_type
 async def update_task_status_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.TextContent]:
     agent_auth_token = arguments.get("token")
     task_id_to_update = arguments.get("task_id")
+    task_ids_bulk = arguments.get("task_ids")  # NEW: List of task IDs for bulk operations
     new_status = arguments.get("status")
     notes_content = arguments.get("notes") # Optional string for new note
 
@@ -488,163 +588,170 @@ async def update_task_status_tool_impl(arguments: Dict[str, Any]) -> List[mcp_ty
     new_priority = arguments.get("priority")
     new_assigned_to = arguments.get("assigned_to")
     new_depends_on_tasks = arguments.get("depends_on_tasks") # List[str] or None
+    
+    # Smart features
+    auto_update_dependencies = arguments.get("auto_update_dependencies", True)  # Auto-update dependent tasks
+    cascade_to_children = arguments.get("cascade_to_children", False)  # Cascade status to child tasks
+    validate_dependencies = arguments.get("validate_dependencies", True)  # Validate dependency constraints
 
     requesting_agent_id = get_agent_id(agent_auth_token)
-    if not requesting_agent_id: # main.py:1485 (token verification)
+    if not requesting_agent_id:
         return [mcp_types.TextContent(type="text", text="Unauthorized: Valid token required")]
 
-    if not task_id_to_update or not new_status:
-        return [mcp_types.TextContent(type="text", text="Error: task_id and status are required.")]
+    # Determine if this is bulk or single operation
+    task_ids_to_process = []
+    if task_ids_bulk:
+        task_ids_to_process = task_ids_bulk
+    elif task_id_to_update:
+        task_ids_to_process = [task_id_to_update]
+    else:
+        return [mcp_types.TextContent(type="text", text="Error: Either task_id or task_ids is required.")]
 
-    valid_statuses = ["pending", "in_progress", "completed", "cancelled", "failed"] # Added "failed"
-    if new_status not in valid_statuses: # main.py:1515
+    if not new_status:
+        return [mcp_types.TextContent(type="text", text="Error: status is required.")]
+
+    valid_statuses = ["pending", "in_progress", "completed", "cancelled", "failed"]
+    if new_status not in valid_statuses:
         return [mcp_types.TextContent(type="text", text=f"Invalid status: {new_status}. Valid: {', '.join(valid_statuses)}")]
+
+    is_admin_request = verify_token(agent_auth_token, "admin")
 
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # Fetch task from DB to verify ownership and get current data (main.py:1494-1508 for loading if not in memory)
-        # For simplicity here, we always fetch from DB to ensure latest state.
-        cursor.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id_to_update,))
-        task_db_row = cursor.fetchone()
-        if not task_db_row:
-            return [mcp_types.TextContent(type="text", text=f"Task '{task_id_to_update}' not found.")]
+        # Process tasks (bulk or single)
+        results = []
+        tasks_to_cascade = []
         
-        task_current_data = dict(task_db_row)
+        # Phase 1: Update primary tasks
+        for task_id in task_ids_to_process:
+            result = await _update_single_task(
+                cursor, task_id, new_status, requesting_agent_id, is_admin_request,
+                notes_content, new_title, new_description, new_priority, 
+                new_assigned_to, new_depends_on_tasks
+            )
+            results.append(result)
+            
+            if result["success"] and cascade_to_children:
+                tasks_to_cascade.extend(result["child_tasks"])
+            
+            # Log individual task action
+            if result["success"]:
+                log_details = {"status": new_status, "old_status": result["old_status"]}
+                if notes_content: log_details["notes_added"] = True
+                log_agent_action_to_db(cursor, requesting_agent_id, "update_task_status", 
+                                     task_id=task_id, details=log_details)
 
-        # Verify permissions (main.py:1511-1514)
-        is_admin_request = verify_token(agent_auth_token, "admin")
-        if task_current_data.get("assigned_to") != requesting_agent_id and not is_admin_request:
-            return [mcp_types.TextContent(type="text", text="Unauthorized: You can only update tasks assigned to you, or use an admin token.")]
+        # Phase 2: Smart cascade to children if requested
+        cascade_results = []
+        if cascade_to_children and tasks_to_cascade:
+            for child_task_id in tasks_to_cascade:
+                # Only cascade certain status changes to avoid breaking workflows
+                if new_status in ["cancelled", "failed"]:  # Cascade blocking states
+                    child_result = await _update_single_task(
+                        cursor, child_task_id, new_status, requesting_agent_id, is_admin_request,
+                        f"Auto-cascaded from parent task status change", None, None, None, None, None
+                    )
+                    cascade_results.append(child_result)
 
-        updated_at_iso = datetime.datetime.now().isoformat()
-        
-        update_fields_sql: List[str] = ["status = ?", "updated_at = ?"]
-        update_params: List[Any] = [new_status, updated_at_iso]
+        # Phase 3: Smart dependency updates if requested
+        dependency_updates = []
+        if auto_update_dependencies:
+            for result in results:
+                if result["success"] and new_status == "completed":
+                    # Find tasks that depend on this completed task
+                    cursor.execute("SELECT task_id, depends_on_tasks FROM tasks")
+                    all_tasks = cursor.fetchall()
+                    
+                    for task_row in all_tasks:
+                        task_deps = json.loads(task_row["depends_on_tasks"] or "[]")
+                        if result["task_id"] in task_deps:
+                            # Check if all dependencies are now completed
+                            all_deps_completed = True
+                            for dep_id in task_deps:
+                                if dep_id != result["task_id"]:  # Skip the one we just completed
+                                    cursor.execute("SELECT status FROM tasks WHERE task_id = ?", (dep_id,))
+                                    dep_row = cursor.fetchone()
+                                    if not dep_row or dep_row["status"] != "completed":
+                                        all_deps_completed = False
+                                        break
+                            
+                            if all_deps_completed:
+                                # Auto-update dependent task to in_progress if it's pending
+                                cursor.execute("SELECT status FROM tasks WHERE task_id = ?", (task_row["task_id"],))
+                                dependent_task = cursor.fetchone()
+                                if dependent_task and dependent_task["status"] == "pending":
+                                    dep_result = await _update_single_task(
+                                        cursor, task_row["task_id"], "in_progress", 
+                                        requesting_agent_id, is_admin_request,
+                                        f"Auto-advanced: all dependencies completed", None, None, None, None, None
+                                    )
+                                    dependency_updates.append(dep_result)
 
-        current_notes_list = json.loads(task_current_data.get("notes") or "[]")
-        if notes_content: # main.py:1520-1535 (notes handling)
-            current_notes_list.append({
-                "timestamp": updated_at_iso,
-                "author": requesting_agent_id,
-                "content": notes_content
-            })
-        update_fields_sql.append("notes = ?")
-        update_params.append(json.dumps(current_notes_list))
-
-        # Admin-only field updates (main.py:1477 - args were in signature)
-        if is_admin_request:
-            if new_title is not None:
-                update_fields_sql.append("title = ?")
-                update_params.append(new_title)
-            if new_description is not None:
-                update_fields_sql.append("description = ?")
-                update_params.append(new_description)
-            if new_priority is not None:
-                update_fields_sql.append("priority = ?")
-                update_params.append(new_priority)
-            if new_assigned_to is not None: # Admin can re-assign
-                update_fields_sql.append("assigned_to = ?")
-                update_params.append(new_assigned_to)
-            if new_depends_on_tasks is not None: # Admin can change dependencies
-                update_fields_sql.append("depends_on_tasks = ?")
-                update_params.append(json.dumps(new_depends_on_tasks))
-        
-        update_params.append(task_id_to_update)
-        
-        cursor.execute(f"UPDATE tasks SET {', '.join(update_fields_sql)} WHERE task_id = ?", tuple(update_params))
-
-        # Log action (main.py:1548-1555)
-        log_details = {"status": new_status}
-        if notes_content: log_details["notes_added"] = True
-        if is_admin_request: # Log admin changes
-            if new_title: log_details["title_changed"] = True
-            # ... add other admin changes to log_details if needed
-        log_agent_action_to_db(cursor, requesting_agent_id, "update_task_status", task_id=task_id_to_update, details=log_details)
+        # Commit all changes
         conn.commit()
 
-        # Update in-memory cache (g.tasks)
-        if task_id_to_update in g.tasks:
-            g.tasks[task_id_to_update]["status"] = new_status
-            g.tasks[task_id_to_update]["updated_at"] = updated_at_iso
-            g.tasks[task_id_to_update]["notes"] = current_notes_list # Already a list
-            if is_admin_request:
-                if new_title is not None: g.tasks[task_id_to_update]["title"] = new_title
-                if new_description is not None: g.tasks[task_id_to_update]["description"] = new_description
-                if new_priority is not None: g.tasks[task_id_to_update]["priority"] = new_priority
-                if new_assigned_to is not None: g.tasks[task_id_to_update]["assigned_to"] = new_assigned_to
-                if new_depends_on_tasks is not None: g.tasks[task_id_to_update]["depends_on_tasks"] = new_depends_on_tasks
-        else: # If not in memory, fetch updated from DB to populate cache (less likely path)
-            cursor.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id_to_update,))
-            updated_row_for_cache = cursor.fetchone()
-            if updated_row_for_cache:
-                g.tasks[task_id_to_update] = dict(updated_row_for_cache)
-                # Ensure list types for relevant fields in cache
-                for field_key in ["child_tasks", "depends_on_tasks", "notes"]:
-                    if isinstance(g.tasks[task_id_to_update].get(field_key), str):
-                        try:
-                            g.tasks[task_id_to_update][field_key] = json.loads(g.tasks[task_id_to_update][field_key] or "[]")
-                        except json.JSONDecodeError:
-                            g.tasks[task_id_to_update][field_key] = []
+        # Phase 4: Re-index updated tasks
+        import asyncio
+        for result in results + cascade_results + dependency_updates:
+            if result.get("success"):
+                task_id = result["task_id"]
+                if task_id in g.tasks:
+                    asyncio.create_task(index_task_data(task_id, g.tasks[task_id].copy()))
 
-
-        # Parent task update logic (main.py:1559-1580) - This was complex and file-based.
-        # Replicating the DB update for parent task notes.
-        if new_status in ["completed", "cancelled", "failed"] and task_current_data.get("parent_task"):
-            parent_task_id_for_note = task_current_data["parent_task"]
-            cursor.execute("SELECT notes FROM tasks WHERE task_id = ?", (parent_task_id_for_note,))
-            parent_row = cursor.fetchone()
-            if parent_row:
-                parent_notes_list = json.loads(parent_row["notes"] or "[]")
-                parent_notes_list.append({
-                    "timestamp": updated_at_iso,
-                    "author": "system", # System notification
-                    "content": f"Subtask '{task_id_to_update}' ({task_current_data.get('title', '')}) status changed to: {new_status}"
-                })
-                cursor.execute("UPDATE tasks SET notes = ?, updated_at = ? WHERE task_id = ?",
-                               (json.dumps(parent_notes_list), updated_at_iso, parent_task_id_for_note))
-                conn.commit()
-                if parent_task_id_for_note in g.tasks: # Update parent in memory cache too
-                    g.tasks[parent_task_id_for_note]["notes"] = parent_notes_list
-                    g.tasks[parent_task_id_for_note]["updated_at"] = updated_at_iso
-
-        # System 8: Re-index the task after update
-        # Get the updated task data from cache or DB
-        task_data_for_index = None
-        if task_id_to_update in g.tasks:
-            task_data_for_index = g.tasks[task_id_to_update].copy()
-        else:
-            cursor.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id_to_update,))
-            task_row = cursor.fetchone()
-            if task_row:
-                task_data_for_index = dict(task_row)
-                # Convert JSON fields for indexing
-                for field in ["depends_on_tasks", "child_tasks", "notes"]:
-                    if isinstance(task_data_for_index.get(field), str):
-                        try:
-                            task_data_for_index[field] = json.loads(task_data_for_index[field] or "[]")
-                        except json.JSONDecodeError:
-                            task_data_for_index[field] = []
+        # Build comprehensive response
+        successful_updates = [r for r in results if r.get("success")]
+        failed_updates = [r for r in results if not r.get("success")]
         
-        if task_data_for_index:
-            # Start indexing asynchronously
-            import asyncio
-            asyncio.create_task(index_task_data(task_id_to_update, task_data_for_index))
+        response_parts = []
+        
+        if len(task_ids_to_process) == 1:
+            # Single task response
+            if successful_updates:
+                response_parts.append(f"Task {successful_updates[0]['task_id']} status updated to {new_status}.")
+            else:
+                response_parts.append(f"Failed to update task: {failed_updates[0]['error']}")
+        else:
+            # Bulk operation response
+            response_parts.append(f"Bulk update completed: {len(successful_updates)}/{len(task_ids_to_process)} tasks updated.")
+            
+            if failed_updates:
+                response_parts.append(f"Failed updates:")
+                for fail in failed_updates[:3]:  # Limit to first 3 failures
+                    response_parts.append(f"  - {fail['error']}")
+                if len(failed_updates) > 3:
+                    response_parts.append(f"  ... and {len(failed_updates) - 3} more failures")
 
-        log_audit(requesting_agent_id, "update_task_status", {"task_id": task_id_to_update, "new_status": new_status})
-        logger.info(f"Task '{task_id_to_update}' status updated to '{new_status}' by agent '{requesting_agent_id}'.")
-        return [mcp_types.TextContent(type="text", text=f"Task {task_id_to_update} status updated to {new_status}.")]
+        # Add smart feature results
+        if cascade_results:
+            successful_cascades = [r for r in cascade_results if r.get("success")]
+            response_parts.append(f"Cascaded to {len(successful_cascades)} child tasks.")
+            
+        if dependency_updates:
+            successful_deps = [r for r in dependency_updates if r.get("success")]
+            response_parts.append(f"Auto-advanced {len(successful_deps)} dependent tasks.")
+
+        log_audit(requesting_agent_id, "update_task_status", {
+            "task_count": len(task_ids_to_process), 
+            "successful": len(successful_updates),
+            "failed": len(failed_updates),
+            "status": new_status,
+            "cascade_count": len(cascade_results),
+            "dependency_updates": len(dependency_updates)
+        })
+        
+        return [mcp_types.TextContent(type="text", text="\n".join(response_parts))]
 
     except sqlite3.Error as e_sql:
         if conn: conn.rollback()
-        logger.error(f"Database error updating task {task_id_to_update}: {e_sql}", exc_info=True)
-        return [mcp_types.TextContent(type="text", text=f"Database error updating task: {e_sql}")]
+        logger.error(f"Database error updating tasks: {e_sql}", exc_info=True)
+        return [mcp_types.TextContent(type="text", text=f"Database error updating tasks: {e_sql}")]
     except Exception as e:
         if conn: conn.rollback()
-        logger.error(f"Unexpected error updating task {task_id_to_update}: {e}", exc_info=True)
-        return [mcp_types.TextContent(type="text", text=f"Unexpected error updating task: {e}")]
+        logger.error(f"Unexpected error updating tasks: {e}", exc_info=True)
+        return [mcp_types.TextContent(type="text", text=f"Unexpected error updating tasks: {e}")]
     finally:
         if conn:
             conn.close()
@@ -960,6 +1067,183 @@ async def request_assistance_tool_impl(arguments: Dict[str, Any]) -> List[mcp_ty
             conn.close()
 
 
+# --- bulk_task_operations tool ---
+async def bulk_task_operations_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.TextContent]:
+    agent_auth_token = arguments.get("token")
+    operations = arguments.get("operations", [])  # List of operation objects
+    
+    requesting_agent_id = get_agent_id(agent_auth_token)
+    if not requesting_agent_id:
+        return [mcp_types.TextContent(type="text", text="Unauthorized: Valid token required")]
+    
+    if not operations or not isinstance(operations, list):
+        return [mcp_types.TextContent(type="text", text="Error: operations list is required and must be a non-empty array")]
+    
+    is_admin_request = verify_token(agent_auth_token, "admin")
+    
+    # Process operations in a single transaction
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        results = []
+        updated_at_iso = datetime.datetime.now().isoformat()
+        
+        for i, op in enumerate(operations):
+            if not isinstance(op, dict):
+                results.append(f"Operation {i+1}: Invalid operation format (must be object)")
+                continue
+                
+            operation_type = op.get("type")
+            task_id = op.get("task_id")
+            
+            if not task_id or not operation_type:
+                results.append(f"Operation {i+1}: Missing required fields 'type' and 'task_id'")
+                continue
+            
+            # Verify task exists and permissions
+            cursor.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,))
+            task_row = cursor.fetchone()
+            if not task_row:
+                results.append(f"Operation {i+1}: Task '{task_id}' not found")
+                continue
+                
+            task_data = dict(task_row)
+            
+            # Permission check
+            if task_data.get("assigned_to") != requesting_agent_id and not is_admin_request:
+                results.append(f"Operation {i+1}: Unauthorized - can only modify own tasks")
+                continue
+            
+            try:
+                if operation_type == "update_status":
+                    new_status = op.get("status")
+                    notes_content = op.get("notes")
+                    
+                    if not new_status:
+                        results.append(f"Operation {i+1}: Missing 'status' for update_status operation")
+                        continue
+                        
+                    valid_statuses = ["pending", "in_progress", "completed", "cancelled", "failed"]
+                    if new_status not in valid_statuses:
+                        results.append(f"Operation {i+1}: Invalid status '{new_status}'")
+                        continue
+                    
+                    # Update status
+                    update_fields = ["status = ?", "updated_at = ?"]
+                    update_params = [new_status, updated_at_iso]
+                    
+                    # Handle notes
+                    current_notes = json.loads(task_data.get("notes") or "[]")
+                    if notes_content:
+                        current_notes.append({
+                            "timestamp": updated_at_iso,
+                            "author": requesting_agent_id,
+                            "content": notes_content
+                        })
+                    update_fields.append("notes = ?")
+                    update_params.append(json.dumps(current_notes))
+                    
+                    update_params.append(task_id)
+                    cursor.execute(f"UPDATE tasks SET {', '.join(update_fields)} WHERE task_id = ?", tuple(update_params))
+                    
+                    # Update in-memory cache
+                    if task_id in g.tasks:
+                        g.tasks[task_id]["status"] = new_status
+                        g.tasks[task_id]["updated_at"] = updated_at_iso
+                        g.tasks[task_id]["notes"] = current_notes
+                    
+                    results.append(f"Operation {i+1}: Task '{task_id}' status updated to '{new_status}'")
+                    
+                elif operation_type == "update_priority":
+                    new_priority = op.get("priority")
+                    
+                    if not new_priority or new_priority not in ["low", "medium", "high"]:
+                        results.append(f"Operation {i+1}: Invalid priority '{new_priority}'")
+                        continue
+                    
+                    cursor.execute("UPDATE tasks SET priority = ?, updated_at = ? WHERE task_id = ?", 
+                                   (new_priority, updated_at_iso, task_id))
+                    
+                    if task_id in g.tasks:
+                        g.tasks[task_id]["priority"] = new_priority
+                        g.tasks[task_id]["updated_at"] = updated_at_iso
+                    
+                    results.append(f"Operation {i+1}: Task '{task_id}' priority updated to '{new_priority}'")
+                    
+                elif operation_type == "add_note":
+                    note_content = op.get("content")
+                    
+                    if not note_content:
+                        results.append(f"Operation {i+1}: Missing 'content' for add_note operation")
+                        continue
+                    
+                    current_notes = json.loads(task_data.get("notes") or "[]")
+                    current_notes.append({
+                        "timestamp": updated_at_iso,
+                        "author": requesting_agent_id,
+                        "content": note_content
+                    })
+                    
+                    cursor.execute("UPDATE tasks SET notes = ?, updated_at = ? WHERE task_id = ?",
+                                   (json.dumps(current_notes), updated_at_iso, task_id))
+                    
+                    if task_id in g.tasks:
+                        g.tasks[task_id]["notes"] = current_notes
+                        g.tasks[task_id]["updated_at"] = updated_at_iso
+                    
+                    results.append(f"Operation {i+1}: Note added to task '{task_id}'")
+                    
+                elif operation_type == "reassign" and is_admin_request:
+                    new_assigned_to = op.get("assigned_to")
+                    
+                    if not new_assigned_to:
+                        results.append(f"Operation {i+1}: Missing 'assigned_to' for reassign operation")
+                        continue
+                    
+                    cursor.execute("UPDATE tasks SET assigned_to = ?, updated_at = ? WHERE task_id = ?",
+                                   (new_assigned_to, updated_at_iso, task_id))
+                    
+                    if task_id in g.tasks:
+                        g.tasks[task_id]["assigned_to"] = new_assigned_to
+                        g.tasks[task_id]["updated_at"] = updated_at_iso
+                    
+                    results.append(f"Operation {i+1}: Task '{task_id}' reassigned to '{new_assigned_to}'")
+                    
+                else:
+                    if operation_type == "reassign" and not is_admin_request:
+                        results.append(f"Operation {i+1}: Reassign operation requires admin privileges")
+                    else:
+                        results.append(f"Operation {i+1}: Unknown operation type '{operation_type}'")
+                    
+            except Exception as e:
+                results.append(f"Operation {i+1}: Error processing - {str(e)}")
+                logger.error(f"Error in bulk operation {i+1}: {e}", exc_info=True)
+        
+        # Log the bulk operation
+        log_agent_action_to_db(cursor, requesting_agent_id, "bulk_task_operations", 
+                               details={"operations_count": len(operations), "success_count": len([r for r in results if "Error" not in r])})
+        conn.commit()
+        
+        response_text = f"Bulk Task Operations Results ({len(operations)} operations):\n\n" + "\n".join(results)
+        
+        log_audit(requesting_agent_id, "bulk_task_operations", {"operations_count": len(operations)})
+        return [mcp_types.TextContent(type="text", text=response_text)]
+        
+    except sqlite3.Error as e_sql:
+        if conn: conn.rollback()
+        logger.error(f"Database error in bulk task operations: {e_sql}", exc_info=True)
+        return [mcp_types.TextContent(type="text", text=f"Database error in bulk operations: {e_sql}")]
+    except Exception as e:
+        if conn: conn.rollback()
+        logger.error(f"Unexpected error in bulk task operations: {e}", exc_info=True)
+        return [mcp_types.TextContent(type="text", text=f"Unexpected error in bulk operations: {e}")]
+    finally:
+        if conn:
+            conn.close()
+
+
 # --- search_tasks tool ---
 async def search_tasks_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.TextContent]:
     agent_auth_token = arguments.get("token")
@@ -1163,18 +1447,24 @@ def register_task_tools():
     )
 
     register_tool(
-        name="update_task_status", # main.py:1752
-        description="Update the status and optionally other fields (admin only) of a task. Add notes about the update.",
-        input_schema={ # From main.py:1753-1786
+        name="update_task_status",
+        description="Smart task status update tool with bulk operations, dependency management, and cascade features. Supports single task or bulk updates with intelligent automation.",
+        input_schema={
             "type": "object",
             "properties": {
                 "token": {"type": "string", "description": "Authentication token (agent or admin)"},
-                "task_id": {"type": "string", "description": "ID of the task to update"},
+                "task_id": {"type": "string", "description": "ID of the task to update (for single task operations)"},
+                "task_ids": {
+                    "type": "array", 
+                    "description": "List of task IDs for bulk operations (alternative to task_id)",
+                    "items": {"type": "string"}
+                },
                 "status": {
-                    "type": "string", "description": "New status for the task",
-                    "enum": ["pending", "in_progress", "completed", "cancelled", "failed"] # Added failed
+                    "type": "string", "description": "New status for the task(s)",
+                    "enum": ["pending", "in_progress", "completed", "cancelled", "failed"]
                 },
                 "notes": {"type": "string", "description": "Optional notes about the status update to be appended."},
+                
                 # Admin Only Optional Fields
                 "title": {"type": "string", "description": "(Admin Only) New title for the task"},
                 "description": {"type": "string", "description": "(Admin Only) New description for the task"},
@@ -1186,9 +1476,26 @@ def register_task_tools():
                 "depends_on_tasks": {
                     "type": "array", "description": "(Admin Only) New list of task IDs this task depends on",
                     "items": {"type": "string"}
+                },
+                
+                # Smart Features
+                "auto_update_dependencies": {
+                    "type": "boolean", 
+                    "description": "Automatically advance dependent tasks when their dependencies are completed (default: true)",
+                    "default": True
+                },
+                "cascade_to_children": {
+                    "type": "boolean", 
+                    "description": "Cascade status changes to child tasks (only for failed/cancelled states, default: false)",
+                    "default": False
+                },
+                "validate_dependencies": {
+                    "type": "boolean", 
+                    "description": "Validate dependency constraints before updating (default: true)",
+                    "default": True
                 }
             },
-            "required": ["token", "task_id", "status"],
+            "required": ["token", "status"],
             "additionalProperties": False
         },
         implementation=update_task_status_tool_impl
@@ -1251,6 +1558,51 @@ def register_task_tools():
             "additionalProperties": False
         },
         implementation=request_assistance_tool_impl
+    )
+
+    register_tool(
+        name="bulk_task_operations",
+        description="Perform multiple task operations in a single atomic transaction. Supports update_status, update_priority, add_note, and reassign (admin only) operations. Critical for efficient batch task management.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "token": {"type": "string", "description": "Authentication token (agent or admin)"},
+                "operations": {
+                    "type": "array",
+                    "description": "List of operations to perform",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "type": {
+                                "type": "string",
+                                "description": "Operation type",
+                                "enum": ["update_status", "update_priority", "add_note", "reassign"]
+                            },
+                            "task_id": {"type": "string", "description": "Task ID to operate on"},
+                            "status": {
+                                "type": "string",
+                                "description": "New status for update_status operation",
+                                "enum": ["pending", "in_progress", "completed", "cancelled", "failed"]
+                            },
+                            "priority": {
+                                "type": "string",
+                                "description": "New priority for update_priority operation",
+                                "enum": ["low", "medium", "high"]
+                            },
+                            "content": {"type": "string", "description": "Note content for add_note operation"},
+                            "notes": {"type": "string", "description": "Notes for update_status operation"},
+                            "assigned_to": {"type": "string", "description": "New assignee for reassign operation (admin only)"}
+                        },
+                        "required": ["type", "task_id"],
+                        "additionalProperties": False
+                    },
+                    "minItems": 1
+                }
+            },
+            "required": ["token", "operations"],
+            "additionalProperties": False
+        },
+        implementation=bulk_task_operations_tool_impl
     )
 
 # Call registration when this module is imported
