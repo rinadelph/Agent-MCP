@@ -305,16 +305,50 @@ async def assign_task_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Tex
     if not all([target_agent_id, task_title, task_description]):
         return [mcp_types.TextContent(type="text", text="Error: agent_id, task_title, and task_description are required.")]
     
-    # Enforce single root task rule BEFORE any processing
+    # Enhanced phase-aware parent task resolution
     if parent_task_id_arg is None:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) as count, GROUP_CONCAT(task_id) as root_ids FROM tasks WHERE parent_task IS NULL")
-        result = cursor.fetchone()
-        root_count = result['count']
-        root_ids = result['root_ids']
         
-        if root_count > 0:
+        # Check for active phases (phases are special root tasks)
+        cursor.execute("""
+            SELECT task_id, title, status 
+            FROM tasks 
+            WHERE parent_task IS NULL AND task_id LIKE 'phase_%' 
+            ORDER BY task_id ASC
+        """)
+        active_phases = cursor.fetchall()
+        
+        # Check for non-phase root tasks
+        cursor.execute("""
+            SELECT COUNT(*) as count, GROUP_CONCAT(task_id) as root_ids 
+            FROM tasks 
+            WHERE parent_task IS NULL AND task_id NOT LIKE 'phase_%'
+        """)
+        result = cursor.fetchone()
+        non_phase_root_count = result['count']
+        non_phase_root_ids = result['root_ids']
+        
+        if active_phases:
+            # Phase-based workflow: suggest active phases as parents
+            if auto_suggest_parent:
+                suggestion_text = "\n📊 **Phase-Based Assignment:**\n"
+                suggestion_text += f"Found {len(active_phases)} active phases:\n"
+                
+                for phase in active_phases:
+                    phase_status_icon = "✅" if phase['status'] == "completed" else \
+                                      "🟡" if phase['status'] == "in_progress" else "⭐"
+                    suggestion_text += f"  {phase_status_icon} {phase['task_id']}: {phase['title']}\n"
+                
+                suggestion_text += "\n💡 **Recommendation:**\n"
+                suggestion_text += "- Use parent_task_id with one of the phase IDs above\n"
+                suggestion_text += "- Tasks should be assigned to phases for proper linear progression\n"
+                suggestion_text += "- Phases must be 100% complete before advancing to next phase\n"
+                
+                conn.close()
+                return [mcp_types.TextContent(type="text", text=f"❌ **Phase-Based Assignment Required**{suggestion_text}")]
+        
+        elif non_phase_root_count > 0:
             if auto_suggest_parent:
                 # Use smart parent suggestion
                 parent_suggestions = _suggest_optimal_parent_task(cursor, target_agent_id, task_description)
@@ -430,6 +464,41 @@ async def assign_task_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Tex
                 if workload_analysis["recommendations"]:
                     workload_warnings.extend([f"   💡 {rec}" for rec in workload_analysis["recommendations"][:2]])
         
+        # Phase validation when parent task is provided
+        if parent_task_id_arg and parent_task_id_arg.startswith("phase_"):
+            # Validate phase assignment
+            cursor.execute("SELECT task_id, title, status FROM tasks WHERE task_id = ?", (parent_task_id_arg,))
+            phase_row = cursor.fetchone()
+            
+            if not phase_row:
+                conn.close()
+                return [mcp_types.TextContent(type="text", text=f"❌ Phase '{parent_task_id_arg}' not found. Use create_phase to create it first.")]
+            
+            if phase_row["status"] == "completed":
+                conn.close()
+                return [mcp_types.TextContent(type="text", text=f"❌ Cannot assign tasks to completed phase '{parent_task_id_arg}'. Phase has already been advanced.")]
+            
+            # Check linear phase progression - ensure prerequisite phases are complete
+            from .phase_management_tools import _get_phase_hierarchy, _analyze_phase_completion
+            
+            phase_hierarchy = _get_phase_hierarchy()
+            current_phase_def = None
+            for phase_def in phase_hierarchy["phases"]:
+                if phase_def["phase_id"] == parent_task_id_arg:
+                    current_phase_def = phase_def
+                    break
+            
+            if current_phase_def and current_phase_def["prerequisites"]:
+                for prereq_phase_id in current_phase_def["prerequisites"]:
+                    prereq_completion = _analyze_phase_completion(cursor, prereq_phase_id)
+                    if not prereq_completion["can_advance"]:
+                        conn.close()
+                        return [mcp_types.TextContent(
+                            type="text",
+                            text=f"❌ Cannot assign to phase '{parent_task_id_arg}'. Prerequisite phase '{prereq_phase_id}' is only {prereq_completion['completion_percentage']}% complete.\n"
+                                 f"Linear phase progression requires 100% completion of previous phases."
+                        )]
+
         # System 8: RAG Pre-Check for Task Placement
         final_parent_task_id = parent_task_id_arg
         final_depends_on_tasks = depends_on_tasks_list
@@ -582,7 +651,17 @@ async def assign_task_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Tex
         response_parts.append(f"   Priority: {priority}")
         
         if final_parent_task_id:
-            response_parts.append(f"   Parent: {final_parent_task_id}")
+            if final_parent_task_id.startswith("phase_"):
+                # Enhanced phase information
+                cursor.execute("SELECT title, status FROM tasks WHERE task_id = ?", (final_parent_task_id,))
+                phase_info = cursor.fetchone()
+                if phase_info:
+                    response_parts.append(f"   📊 Phase: {final_parent_task_id} - {phase_info['title']}")
+                    response_parts.append(f"        Status: {phase_info['status']}")
+                else:
+                    response_parts.append(f"   📊 Phase: {final_parent_task_id}")
+            else:
+                response_parts.append(f"   Parent: {final_parent_task_id}")
         
         if final_depends_on_tasks:
             response_parts.append(f"   Dependencies: {', '.join(final_depends_on_tasks)}")

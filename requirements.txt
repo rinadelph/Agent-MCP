@@ -11,3 +11,4 @@ tabulate
 pyperclip
 mcp
 requests
+tiktoken

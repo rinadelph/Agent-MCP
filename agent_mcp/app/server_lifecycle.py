@@ -71,6 +71,17 @@ async def application_startup(project_dir_path_str: str, admin_token_param: Opti
         db_path_err = get_db_path_for_error() # Get path for error message
         raise SystemExit(f"Error: Failed to initialize database at {db_path_err}. Check logs and permissions.") from e
 
+    # 3.5. Run Automatic Granular Migration (if needed)
+    # This detects old Agent MCP versions and uses granular step-by-step analysis to create optimal phase structure
+    try:
+        from ..core.granular_migration import run_granular_migration
+        import asyncio
+        migration_success = asyncio.run(run_granular_migration())
+        if not migration_success:
+            logger.warning("Granular migration encountered issues but continuing startup...")
+    except Exception as e:
+        logger.error(f"Error during automatic granular migration: {e}. Continuing with startup...", exc_info=True)
+
     # 4. Handle Admin Token Persistence (Original main.py:1977-2012)
     # This logic ensures g.admin_token is set.
     admin_token_key_in_db = "config_admin_token" # As used in original
