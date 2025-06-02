@@ -145,6 +145,141 @@ async def _update_single_task(cursor, task_id: str, new_status: str, requesting_
         "depends_on_tasks": json.loads(task_current_data.get("depends_on_tasks") or "[]")
     }
 
+def _analyze_task_dependencies(task: Dict[str, Any], all_tasks: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    """Analyze task dependencies and blocking conditions"""
+    task_id = task.get("task_id")
+    status = task.get("status")
+    depends_on = task.get("depends_on_tasks", [])
+    
+    if isinstance(depends_on, str):
+        try:
+            depends_on = json.loads(depends_on)
+        except:
+            depends_on = []
+    
+    analysis = {
+        "is_blocked": False,
+        "blocking_dependencies": [],
+        "completed_dependencies": [],
+        "missing_dependencies": [],
+        "can_start": True,
+        "blocks_tasks": [],
+        "dependency_health": "healthy"
+    }
+    
+    # Check dependencies
+    for dep_id in depends_on:
+        if dep_id in all_tasks:
+            dep_task = all_tasks[dep_id]
+            dep_status = dep_task.get("status")
+            
+            if dep_status == "completed":
+                analysis["completed_dependencies"].append(dep_id)
+            elif dep_status in ["failed", "cancelled"]:
+                analysis["blocking_dependencies"].append(dep_id)
+                analysis["is_blocked"] = True
+                analysis["can_start"] = False
+            elif dep_status in ["pending", "in_progress"]:
+                analysis["blocking_dependencies"].append(dep_id)
+                if status == "pending":
+                    analysis["can_start"] = False
+        else:
+            analysis["missing_dependencies"].append(dep_id)
+            analysis["is_blocked"] = True
+            analysis["can_start"] = False
+    
+    # Find tasks that depend on this one
+    for other_id, other_task in all_tasks.items():
+        other_deps = other_task.get("depends_on_tasks", [])
+        if isinstance(other_deps, str):
+            try:
+                other_deps = json.loads(other_deps)
+            except:
+                other_deps = []
+        
+        if task_id in other_deps:
+            analysis["blocks_tasks"].append(other_id)
+    
+    # Determine health
+    if analysis["missing_dependencies"]:
+        analysis["dependency_health"] = "critical"
+    elif analysis["is_blocked"] and status == "in_progress":
+        analysis["dependency_health"] = "warning"
+    elif not analysis["can_start"] and status == "pending":
+        analysis["dependency_health"] = "waiting"
+    
+    return analysis
+
+def _calculate_task_health_metrics(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Calculate overall task health metrics"""
+    if not tasks:
+        return {"total": 0, "status": "no_data"}
+    
+    total = len(tasks)
+    status_counts = {}
+    priority_counts = {}
+    blocked_count = 0
+    overdue_count = 0
+    stale_count = 0
+    
+    current_time = datetime.datetime.now()
+    
+    for task in tasks:
+        # Status distribution
+        status = task.get("status", "unknown")
+        status_counts[status] = status_counts.get(status, 0) + 1
+        
+        # Priority distribution
+        priority = task.get("priority", "medium")
+        priority_counts[priority] = priority_counts.get(priority, 0) + 1
+        
+        # Check for blocked tasks (has dependencies but can't proceed)
+        deps = task.get("depends_on_tasks", [])
+        if isinstance(deps, str):
+            try:
+                deps = json.loads(deps)
+            except:
+                deps = []
+        
+        if deps and status == "pending":
+            blocked_count += 1
+        
+        # Check for stale tasks (no updates in 7+ days)
+        updated_at = task.get("updated_at")
+        if updated_at:
+            try:
+                updated_time = datetime.datetime.fromisoformat(updated_at.replace('Z', '+00:00').replace('+00:00', ''))
+                days_since_update = (current_time - updated_time).days
+                if days_since_update > 7 and status in ["in_progress", "pending"]:
+                    stale_count += 1
+            except:
+                pass
+    
+    # Calculate health score (0-100)
+    completed_ratio = status_counts.get("completed", 0) / total
+    active_ratio = (status_counts.get("in_progress", 0) + status_counts.get("pending", 0)) / total
+    blocked_ratio = blocked_count / total if total > 0 else 0
+    stale_ratio = stale_count / total if total > 0 else 0
+    
+    health_score = max(0, min(100, 
+        completed_ratio * 30 +  # 30% weight for completion
+        active_ratio * 40 +     # 40% weight for active work
+        (1 - blocked_ratio) * 20 +  # 20% penalty for blocked tasks
+        (1 - stale_ratio) * 10      # 10% penalty for stale tasks
+    ))
+    
+    return {
+        "total": total,
+        "status_distribution": status_counts,
+        "priority_distribution": priority_counts,
+        "blocked_tasks": blocked_count,
+        "stale_tasks": stale_count,
+        "health_score": round(health_score, 1),
+        "health_status": "excellent" if health_score >= 80 else 
+                        "good" if health_score >= 60 else
+                        "needs_attention" if health_score >= 40 else "critical"
+    }
+
 
 # --- assign_task tool ---
 # Original logic from main.py: lines 1319-1384 (assign_task_tool function)
@@ -766,6 +901,14 @@ async def view_tasks_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Text
     max_tokens = arguments.get("max_tokens", 25000)     # Maximum response tokens (default: 25k)
     start_after = arguments.get("start_after")          # Task ID to start after (for pagination)
     summary_mode = arguments.get("summary_mode", False) # If True, show only summary info
+    
+    # Smart filtering and analysis options
+    show_dependencies = arguments.get("show_dependencies", False)  # Show dependency graph info
+    show_health_analysis = arguments.get("show_health_analysis", False)  # Show task health metrics
+    filter_priority = arguments.get("filter_priority")  # Filter by priority
+    filter_parent_task = arguments.get("filter_parent_task")  # Filter by parent task
+    show_blocked_tasks = arguments.get("show_blocked_tasks", False)  # Show only blocked tasks
+    sort_by = arguments.get("sort_by", "created_at")  # Sort by: created_at, updated_at, priority, status
 
     requesting_agent_id = get_agent_id(agent_auth_token)
     if not requesting_agent_id:
@@ -781,22 +924,63 @@ async def view_tasks_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Text
         elif filter_agent_id != requesting_agent_id:
             return [mcp_types.TextContent(type="text", text="Unauthorized: Non-admin agents can only view their own tasks or all tasks assigned to them if no agent_id filter is specified.")]
 
-    # Filter tasks
+    # Advanced filtering with dependency analysis
     tasks_to_display: List[Dict[str, Any]] = []
+    
+    # Pre-analyze all tasks for dependency checking
+    all_tasks_dict = dict(g.tasks)
+    
     for task_id, task_data in g.tasks.items():
+        # Basic permission filtering
         matches_agent = True
         if target_agent_id_for_filter and task_data.get("assigned_to") != target_agent_id_for_filter:
             matches_agent = False
         
+        # Status filtering
         matches_status = True
         if filter_status and task_data.get("status") != filter_status:
             matches_status = False
-            
-        if matches_agent and matches_status:
-            tasks_to_display.append(task_data)
-            
-    # Sort tasks by creation date descending
-    tasks_to_display.sort(key=lambda t: t.get("created_at", ""), reverse=True)
+        
+        # Priority filtering
+        matches_priority = True
+        if filter_priority and task_data.get("priority") != filter_priority:
+            matches_priority = False
+        
+        # Parent task filtering
+        matches_parent = True
+        if filter_parent_task and task_data.get("parent_task") != filter_parent_task:
+            matches_parent = False
+        
+        # Blocked tasks filtering
+        matches_blocked = True
+        if show_blocked_tasks:
+            dependency_analysis = _analyze_task_dependencies(task_data, all_tasks_dict)
+            matches_blocked = dependency_analysis["is_blocked"] or not dependency_analysis["can_start"]
+        
+        if matches_agent and matches_status and matches_priority and matches_parent and matches_blocked:
+            # Add dependency analysis if requested
+            if show_dependencies:
+                task_data_copy = task_data.copy()
+                task_data_copy["_dependency_analysis"] = _analyze_task_dependencies(task_data, all_tasks_dict)
+                tasks_to_display.append(task_data_copy)
+            else:
+                tasks_to_display.append(task_data)
+    
+    # Smart sorting
+    def get_sort_key(task):
+        if sort_by == "priority":
+            priority_order = {"high": 3, "medium": 2, "low": 1}
+            return priority_order.get(task.get("priority", "medium"), 2)
+        elif sort_by == "status":
+            status_order = {"failed": 5, "in_progress": 4, "pending": 3, "completed": 2, "cancelled": 1}
+            return status_order.get(task.get("status", "pending"), 3)
+        elif sort_by == "updated_at":
+            return task.get("updated_at", "")
+        else:  # created_at (default)
+            return task.get("created_at", "")
+    
+    reverse_sort = sort_by in ["created_at", "updated_at", "priority", "status"]
+    tasks_to_display.sort(key=get_sort_key, reverse=reverse_sort)
 
     # Handle pagination with start_after
     if start_after:
@@ -810,43 +994,87 @@ async def view_tasks_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Text
     if not tasks_to_display:
         response_text = "No tasks found matching the criteria."
     else:
-        # Token-aware dynamic pagination
-        response_parts = [f"Tasks (max {max_tokens} tokens):\n"]
+        # Generate health analysis if requested
+        health_analysis = None
+        if show_health_analysis:
+            health_analysis = _calculate_task_health_metrics(tasks_to_display)
+        
+        # Build response with smart headers
+        filter_info = []
+        if filter_status: filter_info.append(f"status={filter_status}")
+        if filter_priority: filter_info.append(f"priority={filter_priority}")
+        if filter_agent_id: filter_info.append(f"agent={filter_agent_id}")
+        if filter_parent_task: filter_info.append(f"parent={filter_parent_task}")
+        if show_blocked_tasks: filter_info.append("blocked_only=true")
+        
+        header = f"Tasks ({len(tasks_to_display)} found"
+        if filter_info:
+            header += f", filtered by: {', '.join(filter_info)}"
+        header += f", sorted by: {sort_by})"
+        
+        response_parts = [header + "\n"]
+        
+        # Add health analysis at the top if requested
+        if health_analysis:
+            health_status = health_analysis["health_status"]
+            health_score = health_analysis["health_score"]
+            
+            health_icon = "🟢" if health_status == "excellent" else \
+                         "🟡" if health_status == "good" else \
+                         "🟠" if health_status == "needs_attention" else "🔴"
+            
+            response_parts.append(f"📊 **Health Analysis:** {health_icon} {health_status.title()} ({health_score}/100)")
+            response_parts.append(f"   Status: {health_analysis['status_distribution']}")
+            response_parts.append(f"   Issues: {health_analysis['blocked_tasks']} blocked, {health_analysis['stale_tasks']} stale")
+            response_parts.append("")
+        
         current_tokens = estimate_tokens("\n".join(response_parts))
         tasks_included = 0
         last_task_id = None
         truncated = False
         
         for task in tasks_to_display:
-            # Format task based on mode
-            if summary_mode:
+            # Format task with dependency info if requested
+            if show_dependencies and "_dependency_analysis" in task:
+                task_text = _format_task_with_dependencies(task)
+            elif summary_mode:
                 task_text = _format_task_summary(task)
             else:
                 task_text = _format_task_detailed(task)
             
             task_tokens = estimate_tokens(task_text)
             
-            # Check if adding this task would exceed token limit (with 1000 token safety buffer)
+            # Check token limit with safety buffer
             safety_buffer = 1000
             if current_tokens + task_tokens > (max_tokens - safety_buffer) and tasks_included > 0:
                 truncated = True
                 break
             
-            response_parts.append(f"\n{task_text}")
+            response_parts.append(f"{task_text}\n")
             current_tokens += task_tokens
             tasks_included += 1
             last_task_id = task.get('task_id')
         
-        # Add pagination info if truncated
+        # Add smart pagination and usage tips
         if truncated:
             remaining_count = len(tasks_to_display) - tasks_included
-            response_parts.append(f"\n--- Response truncated to stay under {max_tokens} tokens ---")
+            response_parts.append(f"--- Response truncated to stay under {max_tokens} tokens ---")
             response_parts.append(f"Showing {tasks_included} of {len(tasks_to_display)} tasks ({remaining_count} remaining)")
-            response_parts.append(f"To see more: view_tasks(start_after='{last_task_id}', max_tokens={max_tokens})")
+            response_parts.append(f"Continue: view_tasks(start_after='{last_task_id}', max_tokens={max_tokens})")
             if not summary_mode:
-                response_parts.append(f"For overview: view_tasks(summary_mode=true, max_tokens={max_tokens})")
+                response_parts.append(f"Overview: view_tasks(summary_mode=true)")
         else:
-            response_parts.append(f"\n--- All {tasks_included} matching tasks shown ---")
+            response_parts.append(f"--- All {tasks_included} matching tasks shown ---")
+        
+        # Add smart usage tips
+        response_parts.append("\n💡 Smart Tips:")
+        if not show_dependencies:
+            response_parts.append("• Add show_dependencies=true to see dependency chains")
+        if not show_health_analysis:
+            response_parts.append("• Add show_health_analysis=true for health metrics")
+        if not show_blocked_tasks:
+            response_parts.append("• Add show_blocked_tasks=true to see only blocked tasks")
+        response_parts.append("• Use sort_by=[priority|status|updated_at] for different sorting")
         
         response_text = "\n".join(response_parts)
 
@@ -921,6 +1149,58 @@ def _format_task_detailed(task: Dict[str, Any]) -> str:
             parts.append(f"  ... and {len(notes_val) - 5} more notes")
     
     return "\n".join(parts)
+
+def _format_task_with_dependencies(task: Dict[str, Any]) -> str:
+    """Format task with dependency analysis information"""
+    # Start with detailed format
+    task_text = _format_task_detailed(task)
+    
+    # Add dependency analysis
+    dep_analysis = task.get("_dependency_analysis", {})
+    if dep_analysis:
+        dep_parts = ["\n🔗 Dependency Analysis:"]
+        
+        # Health status
+        health = dep_analysis.get("dependency_health", "unknown")
+        health_icon = "🟢" if health == "healthy" else \
+                     "🟡" if health == "waiting" else \
+                     "🟠" if health == "warning" else "🔴"
+        dep_parts.append(f"   Status: {health_icon} {health}")
+        
+        # Blocking info
+        if dep_analysis.get("is_blocked"):
+            dep_parts.append("   ⚠️  BLOCKED - Cannot proceed")
+        elif not dep_analysis.get("can_start"):
+            dep_parts.append("   ⏳ WAITING - Dependencies not ready")
+        else:
+            dep_parts.append("   ✅ READY - Can proceed")
+        
+        # Dependencies details
+        completed_deps = dep_analysis.get("completed_dependencies", [])
+        blocking_deps = dep_analysis.get("blocking_dependencies", [])
+        missing_deps = dep_analysis.get("missing_dependencies", [])
+        
+        if completed_deps:
+            dep_parts.append(f"   ✅ Completed: {', '.join(completed_deps[:3])}" + 
+                           (f" (+{len(completed_deps)-3} more)" if len(completed_deps) > 3 else ""))
+        
+        if blocking_deps:
+            dep_parts.append(f"   🔴 Blocking: {', '.join(blocking_deps[:3])}" + 
+                           (f" (+{len(blocking_deps)-3} more)" if len(blocking_deps) > 3 else ""))
+        
+        if missing_deps:
+            dep_parts.append(f"   ❌ Missing: {', '.join(missing_deps[:3])}" + 
+                           (f" (+{len(missing_deps)-3} more)" if len(missing_deps) > 3 else ""))
+        
+        # What this task blocks
+        blocks_tasks = dep_analysis.get("blocks_tasks", [])
+        if blocks_tasks:
+            dep_parts.append(f"   🔒 Blocks: {', '.join(blocks_tasks[:3])}" + 
+                           (f" (+{len(blocks_tasks)-3} more)" if len(blocks_tasks) > 3 else ""))
+        
+        task_text += "\n".join(dep_parts)
+    
+    return task_text
 
 
 # --- request_assistance tool ---
@@ -1502,20 +1782,39 @@ def register_task_tools():
     )
 
     register_tool(
-        name="view_tasks", # main.py:1788
-        description="View tasks with dynamic token-based pagination. Can be filtered by agent ID and/or status. Automatically handles 25k token limit with smart pagination.",
-        input_schema={ # From main.py:1789-1806
+        name="view_tasks",
+        description="Smart task viewer with dependency analysis, health metrics, and advanced filtering. Provides comprehensive task insights with intelligent pagination.",
+        input_schema={
             "type": "object",
             "properties": {
                 "token": {"type": "string", "description": "Authentication token"},
                 "agent_id": {"type": "string", "description": "Filter tasks by agent ID (optional). If non-admin, can only be self."},
                 "status": {
                     "type": "string", "description": "Filter tasks by status (optional)",
-                    "enum": ["pending", "in_progress", "completed", "cancelled", "failed"] # Added failed
+                    "enum": ["pending", "in_progress", "completed", "cancelled", "failed"]
                 },
                 "max_tokens": {"type": "integer", "description": "Maximum response tokens (default: 25000)", "minimum": 1000, "maximum": 25000},
                 "start_after": {"type": "string", "description": "Task ID to start after (for pagination)"},
-                "summary_mode": {"type": "boolean", "description": "If true, show only summary info to fit more tasks (default: false)"}
+                "summary_mode": {"type": "boolean", "description": "If true, show only summary info to fit more tasks (default: false)"},
+                
+                # Smart filtering options
+                "filter_priority": {
+                    "type": "string", "description": "Filter by priority level",
+                    "enum": ["low", "medium", "high"]
+                },
+                "filter_parent_task": {"type": "string", "description": "Filter by parent task ID"},
+                "show_blocked_tasks": {"type": "boolean", "description": "Show only blocked/waiting tasks (default: false)"},
+                
+                # Analysis and insights
+                "show_dependencies": {"type": "boolean", "description": "Include dependency chain analysis for each task (default: false)"},
+                "show_health_analysis": {"type": "boolean", "description": "Include overall task health metrics and analysis (default: false)"},
+                
+                # Sorting options
+                "sort_by": {
+                    "type": "string", "description": "Sort tasks by specified field (default: created_at)",
+                    "enum": ["created_at", "updated_at", "priority", "status"],
+                    "default": "created_at"
+                }
             },
             "required": ["token"],
             "additionalProperties": False
