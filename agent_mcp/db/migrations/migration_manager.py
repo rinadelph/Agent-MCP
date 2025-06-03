@@ -16,7 +16,9 @@ from typing import Dict, List, Any, Optional, Tuple
 from pathlib import Path
 from ..connection import get_db_connection
 from ...core.config import logger, get_agent_dir
+from ...core import globals as g
 from .migration_config import migration_config
+from .migration_lock import migration_lock
 
 
 class MigrationManager:
@@ -47,6 +49,34 @@ class MigrationManager:
         migration_logger.info("=" * 80)
         migration_logger.info("DATABASE MIGRATION CHECK STARTED")
         migration_logger.info("=" * 80)
+        
+        # Try to acquire migration lock
+        try:
+            with migration_lock(timeout=120.0):  # 2 minute timeout
+                logger.info("🔒 Acquired migration lock")
+                migration_logger.info("🔒 Acquired migration lock")
+                
+                # Set global flag to prevent other database operations
+                g.migration_in_progress = True
+                try:
+                    return await self._do_migration()
+                finally:
+                    # Always clear the flag
+                    g.migration_in_progress = False
+                    
+        except RuntimeError as e:
+            if "Failed to acquire migration lock" in str(e):
+                logger.error("❌ Another migration process is already running")
+                logger.error("Please wait for it to complete or check for stale locks")
+                migration_logger.error("❌ Failed to acquire migration lock - another process may be running")
+                return False
+            raise
+    
+    async def _do_migration(self) -> bool:
+        """Internal method to perform migration (called with lock held)"""
+        # Import logging again for internal method
+        import logging as migration_logging
+        migration_logger = migration_logging.getLogger('agent_mcp.migrations')
         
         try:
             # Check if auto-migration is enabled
@@ -125,6 +155,10 @@ class MigrationManager:
                     self._record_migration(version)
                     logger.info(f"✅ Successfully migrated to version {version}")
                     self._log_migration(f"Migration to {version} completed successfully")
+                    
+                    # Small delay between migrations to ensure connections are released
+                    import asyncio
+                    await asyncio.sleep(0.5)
                 except Exception as e:
                     logger.error(f"❌ Migration to {version} failed: {e}", exc_info=True)
                     self._log_migration(f"Migration to {version} failed: {str(e)}")
@@ -274,9 +308,24 @@ class MigrationManager:
     
     async def _migrate_to_2_0_0(self):
         """Migrate to version 2.0.0 (multi-root task architecture)"""
+        # Close the migration manager's connection to avoid lock conflicts
+        if self.conn:
+            logger.debug("[MIGRATION] Closing migration manager connection before granular migration")
+            self.conn.close()
+            self.conn = None
+            self.cursor = None
+            
         # Use our granular migration system
         from ...core.granular_migration import run_granular_migration
         success = await run_granular_migration()
+        
+        # Re-open connection for post-migration operations
+        if not self.conn:
+            logger.debug("[MIGRATION] Re-opening migration manager connection after granular migration")
+            from ..connection import get_db_connection
+            self.conn = get_db_connection()
+            self.cursor = self.conn.cursor()
+            
         if not success:
             raise Exception("Granular migration failed")
     

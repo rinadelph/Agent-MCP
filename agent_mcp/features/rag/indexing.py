@@ -117,7 +117,10 @@ async def run_rag_indexing_periodically(interval_seconds: int = 300, *, task_sta
     # Signal that the task has started successfully for the TaskGroup
     task_status.started()
 
-    await anyio.sleep(10) # Initial sleep to allow server startup (main.py:515)
+    # Wait longer if migration might be in progress
+    initial_delay = 30 if g.migration_in_progress else 10
+    logger.info(f"RAG indexer waiting {initial_delay}s before first run...")
+    await anyio.sleep(initial_delay) # Initial sleep to allow server startup and migrations
 
     # Get OpenAI client. The service initializes it and stores in g.openai_client_instance
     # The API key itself is also needed for the truly async batch embedding function.
@@ -134,6 +137,12 @@ async def run_rag_indexing_periodically(interval_seconds: int = 300, *, task_sta
         return
 
     while g.server_running: # Uses global flag (main.py:521)
+        # Check if migration is in progress
+        if g.migration_in_progress:
+            logger.info("Migration in progress, skipping RAG indexing cycle")
+            await anyio.sleep(10)  # Check again in 10 seconds
+            continue
+            
         cycle_start_time = time.time()
         
         # Log what content will be indexed

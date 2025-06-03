@@ -81,6 +81,18 @@ def get_db_connection() -> sqlite3.Connection:
     Establishes and returns a connection to the SQLite database.
     If `is_vss_loadable()` is true, it attempts to load the sqlite-vec extension for this connection.
     """
+    import traceback
+    import threading
+    
+    # Log the caller to trace who's opening connections
+    stack = traceback.extract_stack()
+    caller_info = []
+    for frame in stack[-4:-1]:  # Get a few frames from the call stack
+        caller_info.append(f"{frame.filename}:{frame.lineno} in {frame.name}")
+    
+    logger.debug(f"[DB CONNECTION] Opening new connection from thread {threading.current_thread().name}")
+    logger.debug(f"[DB CONNECTION] Called from: {' -> '.join(caller_info)}")
+    
     db_file_path = get_db_path() # Uses the function from core.config
 
     # Ensure the directory for the database exists
@@ -93,10 +105,12 @@ def get_db_connection() -> sqlite3.Connection:
     conn = None
     try:
         # From main.py:225 (original line numbers)
-        conn = sqlite3.connect(str(db_file_path), check_same_thread=False, timeout=10.0) # Added timeout
+        conn = sqlite3.connect(str(db_file_path), check_same_thread=False, timeout=30.0) # Increased timeout
         # From main.py:226 (original line numbers)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL;")  # Improve concurrency and performance
+        conn.execute("PRAGMA busy_timeout = 30000;")  # 30 second timeout for locks
+        conn.execute("PRAGMA synchronous = NORMAL;")  # Better performance with WAL
         conn.execute("PRAGMA foreign_keys = ON;") # Enforce foreign key constraints
 
         # Attempt to load VSS extension if it was deemed loadable globally and sqlite_vec is imported
@@ -153,4 +167,12 @@ def get_db_connection() -> sqlite3.Connection:
     if conn is None: # Should not happen if exceptions are raised, but as a safeguard.
         raise RuntimeError(f"Failed to establish database connection to {db_file_path}.")
 
+    # Add a unique ID to track this connection
+    import uuid
+    conn_id = str(uuid.uuid4())[:8]
+    logger.debug(f"[DB CONNECTION] Successfully opened connection {conn_id}")
+    
+    # Simple connection logging - can't use weakref with sqlite3.Connection
+    logger.debug(f"[DB CONNECTION] Connection opened, ID: {conn_id}")
+    
     return conn

@@ -240,6 +240,13 @@ def init_database() -> None:
 
         conn.commit()
         logger.info("Database schema initialized successfully.")
+        
+        # Force a WAL checkpoint to consolidate any pending changes
+        try:
+            conn.execute("PRAGMA wal_checkpoint(TRUNCATE);")
+            logger.debug("WAL checkpoint completed after schema initialization")
+        except Exception as e:
+            logger.debug(f"WAL checkpoint failed (may be normal): {e}")
 
     except sqlite3.Error as e:
         logger.error(f"A database error occurred during schema initialization: {e}", exc_info=True)

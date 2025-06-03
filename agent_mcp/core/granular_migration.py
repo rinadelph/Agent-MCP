@@ -14,6 +14,7 @@ import re
 from typing import Dict, List, Any, Optional, Set, Tuple
 from .config import logger
 from ..db.connection import get_db_connection
+from ..db.db_utils import with_retry, configure_connection_for_migration, check_database_health, DatabaseLockError
 from .relationship_aware_migration import RelationshipAwareMigration
 
 
@@ -1054,47 +1055,213 @@ class GranularMigrationManager:
             return []
     
     async def _execute_granular_migration(self, phase_structure: Dict[str, Any]) -> bool:
-        """Execute the granular migration"""
+        """Execute the granular migration with robust error handling and retries"""
+        conn = None
+        
+        # First, check database health
         try:
+            # Log lock diagnostics before starting
+            logger.info("[MIGRATION] Running pre-migration lock diagnostics...")
+            from ..db.lock_diagnostics import log_database_lock_diagnostics
+            log_database_lock_diagnostics()
+            
+            test_conn = get_db_connection()
+            health = check_database_health(test_conn)
+            test_conn.close()
+            
+            if health['status'] != 'healthy':
+                logger.error(f"Database health check failed: {health}")
+                if health.get('locked'):
+                    logger.error("Database appears to be locked. Please ensure no other processes are accessing it.")
+                    logger.error("You may need to:")
+                    logger.error("1. Stop all other MCP servers")
+                    logger.error("2. Close any database browser tools")
+                    logger.error("3. Restart the migration process")
+                return False
+                
+            logger.info(f"Database health check passed: journal_mode={health['journal_mode']}, busy_timeout={health['busy_timeout']}")
+            
+        except Exception as e:
+            logger.error(f"Failed to check database health: {e}")
+            return False
+        
+        try:
+            # Get connection and configure for migration
             conn = get_db_connection()
+            configure_connection_for_migration(conn)
             cursor = conn.cursor()
             
-            # Create phases
+            # Phase creation with retries
+            logger.info("Creating phase structure...")
+            phases_created = 0
             for phase_info in phase_structure['phases_to_create']:
-                await self._create_phase(cursor, phase_info)
+                @with_retry(max_retries=3, initial_delay=0.5)
+                async def create_phase_with_retry():
+                    phase_id = phase_info.get('phase_id', 'unknown')
+                    logger.debug(f"[MIGRATION] Starting transaction for phase {phase_id}")
+                    
+                    # Try different transaction modes if IMMEDIATE fails
+                    for attempt, mode in enumerate(["IMMEDIATE", "DEFERRED", ""]):
+                        try:
+                            if mode:
+                                conn.execute(f"BEGIN {mode};")
+                            else:
+                                conn.execute("BEGIN;")
+                            break
+                        except sqlite3.OperationalError as e:
+                            if "database is locked" in str(e) and attempt < 2:
+                                logger.debug(f"[MIGRATION] BEGIN {mode} failed, trying next mode...")
+                                await asyncio.sleep(0.1)
+                                continue
+                            raise
+                    
+                    try:
+                        logger.debug(f"[MIGRATION] Creating phase {phase_id}")
+                        await self._create_phase(cursor, phase_info)
+                        logger.debug(f"[MIGRATION] Committing phase {phase_id}")
+                        conn.commit()
+                        logger.debug(f"[MIGRATION] Phase {phase_id} committed successfully")
+                        return True
+                    except Exception as e:
+                        logger.debug(f"[MIGRATION] Rolling back phase {phase_id} due to error: {e}")
+                        conn.rollback()
+                        raise
+                
+                if await create_phase_with_retry():
+                    phases_created += 1
+                    
+            logger.info(f"   ✅ Created {phases_created} phases")
             
-            # Create workstream root tasks (only if they have tasks)
+            # Create workstream root tasks with retries
+            logger.info("Creating workstream root tasks...")
             workstream_mappings = phase_structure.get('workstream_mappings', {})
             created_workstreams = 0
             skipped_workstreams = 0
             
-            for workstream_root_id, workstream_info in workstream_mappings.items():
-                # Only create workstream if it has tasks to migrate
-                if len(workstream_info.get('tasks', [])) > 0:
-                    await self._create_workstream_root(cursor, workstream_root_id, workstream_info)
-                    created_workstreams += 1
-                else:
-                    logger.warning(f"   Skipping empty workstream: {workstream_info.get('title', workstream_root_id)}")
-                    skipped_workstreams += 1
+            # Process workstreams in smaller batches
+            workstream_items = list(workstream_mappings.items())
+            workstream_batch_size = 3
             
-            # Migrate tasks
-            migrated_count = 0
-            for task_id, parent_id in phase_structure['task_assignments'].items():
-                if await self._migrate_task(cursor, task_id, parent_id):
-                    migrated_count += 1
-            
-            conn.commit()
-            conn.close()
+            for i in range(0, len(workstream_items), workstream_batch_size):
+                @with_retry(max_retries=3, initial_delay=0.5)
+                async def create_workstream_batch():
+                    conn.execute("BEGIN IMMEDIATE;")
+                    try:
+                        batch = workstream_items[i:i + workstream_batch_size]
+                        batch_created = 0
+                        batch_skipped = 0
+                        
+                        for workstream_root_id, workstream_info in batch:
+                            if len(workstream_info.get('tasks', [])) > 0:
+                                await self._create_workstream_root(cursor, workstream_root_id, workstream_info)
+                                batch_created += 1
+                            else:
+                                logger.warning(f"   Skipping empty workstream: {workstream_info.get('title', workstream_root_id)}")
+                                batch_skipped += 1
+                        
+                        conn.commit()
+                        return batch_created, batch_skipped
+                    except Exception as e:
+                        conn.rollback()
+                        raise
+                
+                batch_created, batch_skipped = await create_workstream_batch()
+                created_workstreams += batch_created
+                skipped_workstreams += batch_skipped
+                
+                # Small delay between batches
+                await asyncio.sleep(0.1)
             
             logger.info(f"   ✅ Created {created_workstreams} workstream root tasks")
             if skipped_workstreams > 0:
                 logger.info(f"   ⚠️  Skipped {skipped_workstreams} empty workstreams")
-            logger.info(f"   ✅ Migrated {migrated_count} tasks to workstreams")
-            return True
+            
+            # Migrate tasks in batches with retries
+            logger.info("Migrating tasks to new structure...")
+            migrated_count = 0
+            failed_count = 0
+            task_items = list(phase_structure['task_assignments'].items())
+            task_batch_size = 5  # Smaller batches for better concurrency
+            
+            for i in range(0, len(task_items), task_batch_size):
+                @with_retry(max_retries=3, initial_delay=0.5)
+                async def migrate_task_batch():
+                    conn.execute("BEGIN IMMEDIATE;")
+                    try:
+                        batch = task_items[i:i + task_batch_size]
+                        batch_migrated = 0
+                        
+                        for task_id, parent_id in batch:
+                            if await self._migrate_task(cursor, task_id, parent_id):
+                                batch_migrated += 1
+                            else:
+                                logger.warning(f"Failed to migrate task {task_id}")
+                        
+                        conn.commit()
+                        return batch_migrated
+                    except Exception as e:
+                        conn.rollback()
+                        raise
+                
+                try:
+                    batch_migrated = await migrate_task_batch()
+                    migrated_count += batch_migrated
+                    
+                    # Progress update
+                    progress = ((i + task_batch_size) / len(task_items)) * 100
+                    logger.info(f"   Migration progress: {min(progress, 100):.1f}% ({migrated_count}/{len(task_items)} tasks)")
+                    
+                    # Small delay between batches
+                    await asyncio.sleep(0.05)
+                    
+                except DatabaseLockError as e:
+                    logger.error(f"Failed to migrate batch after retries: {e}")
+                    failed_count += len(task_items[i:i + task_batch_size])
+            
+            # Final summary
+            logger.info(f"   ✅ Successfully migrated {migrated_count} tasks")
+            if failed_count > 0:
+                logger.warning(f"   ⚠️  Failed to migrate {failed_count} tasks")
+            
+            # Run a final integrity check
+            cursor.execute("PRAGMA integrity_check;")
+            integrity = cursor.fetchone()
+            if integrity and integrity[0] != 'ok':
+                logger.error(f"Database integrity check failed: {integrity}")
+                return False
+            elif not integrity:
+                logger.warning("Could not verify database integrity (no result)")
+                # Continue anyway - the migration succeeded
+            
+            return migrated_count > 0 and failed_count == 0
+            
+        except DatabaseLockError as e:
+            logger.error(f"Database lock could not be resolved after retries: {e}")
+            logger.error("Please ensure no other processes are accessing the database and try again.")
+            if conn:
+                try:
+                    conn.rollback()
+                except:
+                    pass
+            return False
             
         except Exception as e:
-            logger.error(f"Error executing granular migration: {e}")
+            logger.error(f"Unexpected error during granular migration: {e}", exc_info=True)
+            if conn:
+                try:
+                    conn.rollback()
+                except:
+                    pass
             return False
+            
+        finally:
+            if conn:
+                try:
+                    # Ensure WAL checkpoint runs to consolidate changes
+                    conn.execute("PRAGMA wal_checkpoint(TRUNCATE);")
+                    conn.close()
+                except Exception as e:
+                    logger.warning(f"Error during connection cleanup: {e}")
     
     async def _create_workstream_root(self, cursor, workstream_root_id: str, workstream_info: Dict[str, Any]) -> None:
         """Create a workstream root task"""

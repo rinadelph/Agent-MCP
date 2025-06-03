@@ -47,6 +47,9 @@ agent_color_index: int = 0 # For cycling through AGENT_COLORS from config.py
 # From main.py:169
 server_running: bool = True # Flag to control main server loop and background tasks, handled by signal_utils.py
 
+# Flag to indicate if a database migration is in progress
+migration_in_progress: bool = False
+
 # --- External Service Clients (Placeholders) ---
 # From main.py:185
 # The actual OpenAI client instance will be initialized and managed by external/openai_service.py.

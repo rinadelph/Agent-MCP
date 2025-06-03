@@ -145,6 +145,11 @@ async def application_startup(project_dir_path_str: str, admin_token_param: Opti
     # 3.5. Check and Apply Database Migrations
     # This ensures the database is at the current schema version
     startup_logger.info("STEP 3.5: Checking database migrations...")
+    
+    # Small delay to ensure all schema initialization connections are closed
+    import asyncio
+    await asyncio.sleep(0.5)
+    
     try:
         from ..db.migrations.migration_manager import ensure_database_current
         logger.info("Checking database version...")
@@ -175,7 +180,9 @@ async def application_startup(project_dir_path_str: str, admin_token_param: Opti
     effective_admin_token: Optional[str] = None
     token_source_description: str = ""
 
+    startup_logger.info("STEP 4: Handling admin token persistence...")
     try:
+        startup_logger.debug("[STARTUP] Opening database connection for admin token")
         conn_admin_token = get_db_connection()
         cursor = conn_admin_token.cursor()
         if admin_token_param:
@@ -227,6 +234,7 @@ async def application_startup(project_dir_path_str: str, admin_token_param: Opti
         logger.warning(f"Using temporary admin token due to unexpected error: {g.admin_token}")
     finally:
         if conn_admin_token:
+            startup_logger.debug("[STARTUP] Closing admin token database connection")
             conn_admin_token.close()
     
     if not g.admin_token: # Should not happen if logic above is correct
@@ -235,8 +243,10 @@ async def application_startup(project_dir_path_str: str, admin_token_param: Opti
 
     # 5. Load existing state from Database (Original main.py:2015-2045)
     logger.info("Loading existing state from database...")
+    startup_logger.info("STEP 5: Loading existing state from database...")
     conn_load_state = None
     try:
+        startup_logger.debug("[STARTUP] Opening database connection for state loading")
         conn_load_state = get_db_connection()
         cursor = conn_load_state.cursor()
 
@@ -294,6 +304,7 @@ async def application_startup(project_dir_path_str: str, admin_token_param: Opti
         raise SystemExit(f"Unexpected error loading state: {e_load}") from e_load
     finally:
         if conn_load_state:
+            startup_logger.debug("[STARTUP] Closing state loading database connection")
             conn_load_state.close()
     logger.info("State loading from database complete.")
 
@@ -320,6 +331,12 @@ async def application_startup(project_dir_path_str: str, admin_token_param: Opti
 async def start_background_tasks(task_group: anyio.abc.TaskGroup):
     """Starts long-running background tasks like the RAG indexer."""
     logger.info("Starting background tasks...")
+    
+    # Delay starting RAG indexer to avoid conflicts with initial migration
+    if g.migration_in_progress:
+        logger.info("Migration in progress, delaying RAG indexer startup")
+        # The RAG indexer will check the flag and wait anyway
+    
     # Start RAG Indexer (Original main.py: 2625-2627)
     # The interval can be made configurable if needed.
     rag_interval = int(os.environ.get("MCP_RAG_INDEX_INTERVAL_SECONDS", "300"))
