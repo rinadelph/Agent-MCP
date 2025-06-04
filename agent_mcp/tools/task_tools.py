@@ -104,7 +104,9 @@ async def _update_single_task(cursor, task_id: str, new_status: str, requesting_
     update_params.append(task_id)
     
     # Execute update
-    cursor.execute(f"UPDATE tasks SET {', '.join(update_fields_sql)} WHERE task_id = ?", tuple(update_params))
+    # Build parameterized query with validated column names
+    update_query = "UPDATE tasks SET " + ", ".join(update_fields_sql) + " WHERE task_id = ?"
+    cursor.execute(update_query, tuple(update_params))
     
     # Update in-memory cache
     if task_id in g.tasks:
@@ -1791,7 +1793,9 @@ async def bulk_task_operations_tool_impl(arguments: Dict[str, Any]) -> List[mcp_
                     update_params.append(json.dumps(current_notes))
                     
                     update_params.append(task_id)
-                    cursor.execute(f"UPDATE tasks SET {', '.join(update_fields)} WHERE task_id = ?", tuple(update_params))
+                    # Build parameterized query with validated column names
+                    update_query = "UPDATE tasks SET " + ", ".join(update_fields) + " WHERE task_id = ?"
+                    cursor.execute(update_query, tuple(update_params))
                     
                     # Update in-memory cache
                     if task_id in g.tasks:

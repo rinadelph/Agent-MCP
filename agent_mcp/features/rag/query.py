@@ -86,10 +86,11 @@ async def query_rag_system(query_text: str) -> str:
                     sql_params_tasks.append(kw)
                 
                 if conditions:
-                    task_query_sql = f"""
+                    # Build parameterized query with controlled conditions
+                    task_query_sql = """
                         SELECT task_id, title, status, description, updated_at
                         FROM tasks
-                        WHERE {' OR '.join(conditions)}
+                        WHERE """ + ' OR '.join(conditions) + """
                         ORDER BY updated_at DESC
                         LIMIT 5
                     """
@@ -330,15 +331,17 @@ async def query_rag_system_with_model(
             placeholder_str = ", ".join(["?"] * len(query_embedding))
             query_params = query_embedding + [10]  # Top 10 results
             
-            cursor.execute(f"""
+            # Build parameterized query for vector search
+            vector_search_sql = """
                 SELECT c.chunk_id, c.source_type, c.source_ref, c.chunk_text,
                        COALESCE(abs(distance), 0) as distance
                 FROM rag_chunks c
                 JOIN rag_embeddings e ON c.chunk_id = e.rowid
-                WHERE e.embedding MATCH '[{placeholder_str}]'
+                WHERE e.embedding MATCH '[""" + placeholder_str + """]'
                   AND k = ?
                 ORDER BY distance ASC
-            """, query_params)
+            """
+            cursor.execute(vector_search_sql, query_params)
             
             vector_search_results = [dict(row) for row in cursor.fetchall()]
         

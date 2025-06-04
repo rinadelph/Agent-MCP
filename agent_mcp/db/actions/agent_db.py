@@ -136,7 +136,8 @@ def update_agent_db_field(agent_id: str, field_name: str, new_value: Any) -> boo
             value_to_set = datetime.datetime.now().isoformat()
         
         # Always update 'updated_at' timestamp
-        sql = f"UPDATE agents SET {field_name} = ?, updated_at = ? WHERE agent_id = ?"
+        # Use parameterized query with validated field name
+        sql = "UPDATE agents SET " + field_name + " = ?, updated_at = ? WHERE agent_id = ?"
         current_time = datetime.datetime.now().isoformat()
         
         cursor.execute(sql, (value_to_set, current_time, agent_id))

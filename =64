@@ -1,10 +1,16 @@
-Defaulting to user installation because normal site-packages is not writeable
-Requirement already satisfied: pip in /usr/lib/python3/dist-packages (22.0.2)
+Requirement already satisfied: pip in /usr/lib/python3/dist-packages (24.0)
 Collecting pip
-  Downloading pip-25.1.1-py3-none-any.whl (1.8 MB)
-     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.8/1.8 MB 2.8 MB/s eta 0:00:00
-Requirement already satisfied: setuptools in /usr/lib/python3/dist-packages (59.6.0)
+  Downloading pip-25.1.1-py3-none-any.whl.metadata (3.6 kB)
+Requirement already satisfied: setuptools in /usr/lib/python3/dist-packages (68.1.2)
 Collecting setuptools
-  Using cached setuptools-80.9.0-py3-none-any.whl (1.2 MB)
+  Using cached setuptools-80.9.0-py3-none-any.whl.metadata (6.6 kB)
+Downloading pip-25.1.1-py3-none-any.whl (1.8 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.8/1.8 MB 4.5 MB/s eta 0:00:00
+Using cached setuptools-80.9.0-py3-none-any.whl (1.2 MB)
 Installing collected packages: setuptools, pip
-Successfully installed pip-25.1.1 setuptools-80.9.0
+  Attempting uninstall: setuptools
+    Found existing installation: setuptools 68.1.2
+    Uninstalling setuptools-68.1.2:
+      Successfully uninstalled setuptools-68.1.2
+  Attempting uninstall: pip
+    Found existing installation: pip 24.0

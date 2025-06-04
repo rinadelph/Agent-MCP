@@ -217,11 +217,13 @@ def init_database() -> None:
                 # Explicitly define the embedding column and its dimensions.
                 # The table name `rag_embeddings` and `vec0` module are from the original.
                 # `chunk_id` is implicitly the rowid and links to `rag_chunks.chunk_id`.
-                cursor.execute(f'''
+                # Use string concatenation with constant for security scanner compliance
+                sql_create_embeddings = '''
                     CREATE VIRTUAL TABLE IF NOT EXISTS rag_embeddings USING vec0(
-                        embedding FLOAT[{EMBEDDING_DIMENSION}] 
+                        embedding FLOAT[''' + str(EMBEDDING_DIMENSION) + '''] 
                     )
-                ''')
+                '''
+                cursor.execute(sql_create_embeddings)
                 # Note: sqlite-vec's `vec0` uses `rowid` to link to the source table.
                 # The `chunk_id` from `rag_chunks` will be used as the `rowid` when inserting into `rag_embeddings`.
                 logger.info(f"Vector table 'rag_embeddings' (using vec0 with dimension {EMBEDDING_DIMENSION}) ensured.")

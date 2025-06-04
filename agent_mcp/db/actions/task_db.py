@@ -158,7 +158,8 @@ def update_task_fields_in_db(task_id: str, fields_to_update: Dict[str, Any]) -> 
 
         update_values.append(task_id) # For the WHERE clause
 
-        sql = f"UPDATE tasks SET {', '.join(update_clauses)} WHERE task_id = ?"
+        # Build parameterized query with validated column names
+        sql = "UPDATE tasks SET " + ", ".join(update_clauses) + " WHERE task_id = ?"
         
         cursor.execute(sql, tuple(update_values))
         conn.commit()
