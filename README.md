@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/domestic_sheep_ionibe.jpg)](https://mseep.ai/app/rinadelph-agent-mcp)
+
 # Agent MCP
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/rinadelph/Agent-MCP)
