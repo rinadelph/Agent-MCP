@@ -71,7 +71,9 @@ cd agent_mcp/dashboard && npm install && npm run dev
 
 The MCD is your **"application blueprint"** - think of it as writing a detailed book about your app before building it.
 
-**Create `MCD.md` in your project:**
+**📋 [Complete MCD Creation Guide](./docs/mcd-guide.md)** - Master the art of creating comprehensive MCDs with real examples, templates, and best practices.
+
+**Quick MCD Template:**
 ```markdown
 # My Project MCD
 
@@ -102,7 +104,7 @@ The MCD is your **"application blueprint"** - think of it as writing a detailed 
 6. **Deployment**: Launch and monitor
 ```
 
-> 💡 **Pro Tip**: Use **Gemini 2.0 Flash** or **Claude** for deep research. Ask them: *"Help me create a comprehensive MCD for [your project]. Research the latest best practices for [your tech stack] and break down implementation into granular, actionable tasks."*
+> 💡 **Pro Tip**: Use **Gemini 2.0 Flash** or **Claude** for deep research. Our [MCD Guide](./docs/mcd-guide.md) includes prompts and techniques for creating MCDs that produce exceptional results.
 
 ### Phase 2: Initialize Admin Agent (The Conductor)
 
@@ -285,24 +287,31 @@ Agent-MCP features an **intelligent responsive banner system** that adapts to an
 
 ---
 
-## 🎓 Learning Resources
+## 📚 Comprehensive Documentation
+
+### 🧠 **Theoretical Foundation**
+- **[Chapter 1: Cognitive Empathy](./docs/chapter-1-cognitive-empathy.md)** - Understanding AI's non-human perspective
+- **[Chapter 2: Context Foundation](./docs/chapter-2-context-foundation.md)** - MCDs as operational blueprints
+- **[Chapter 3: Tools as Extensions](./docs/chapter-3-tools-extensions.md)** - AI embodiment through tools
+- **[Chapter 4: Intelligent Judgment](./docs/chapter-4-intelligent-judgment.md)** - Programming as theory building
+
+### 🛠️ **Practical Guides**
+- **[The Complete MCD Guide](./docs/mcd-guide.md)** ⭐ - Master MCD creation with real examples
+- **[Getting Started Guide](./docs/getting-started.md)** - Your first multi-agent project
+- **[API Reference](./docs/api-reference.md)** - Complete technical documentation
 
 ### 📹 **Video Tutorials**
 - [How to add MCD context to Agent MCP](https://www.loom.com/share/16407661b19b477185fe9570c3a6aa3b)
 - [Multi-agent coordination walkthrough](https://github.com/rinadelph/Agent-MCP/discussions)
 
 ### 📚 **Example Projects**
-- **E-commerce Platform**: Complete online store with payment processing
+- **[Example MCDs](./docs/example-mcds/README.md)** - Real-world project blueprints
 - **Task Management SaaS**: Team collaboration with real-time sync  
 - **API Microservices**: Scalable backend with multiple services
 - **React Dashboard**: Analytics platform with complex visualizations
 
-### 🎯 **Prompt Library**
-Ready-to-use prompts for:
-- **Admin agent initialization** and MCD integration
-- **Worker agent creation** and task assignment
-- **Debugging workflows** and error resolution
-- **Team coordination** and conflict resolution
+### 🎯 **All Documentation**
+**[📖 Browse Complete Documentation →](./docs/README.md)**
 
 ---
 
