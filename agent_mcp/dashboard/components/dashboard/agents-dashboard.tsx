@@ -64,9 +64,11 @@ const CompactAgentRow = ({ agent, onTerminate, onSelect, onTaskClick }: {
   const currentTask = agentTasks.find(t => t.task_id === agent.current_task)
   const recentActions = getAgentActions(agent.agent_id).slice(0, 3)
   
-  // Calculate task stats - separate assigned vs worked on
-  const assignedTasks = agentTasks.filter(t => t.assigned_to === agent.agent_id)
-  const workedOnTasks = agentTasks.filter(t => t.assigned_to !== agent.agent_id)
+  // Calculate task stats - separate assigned vs worked on  
+  // Use the data store's logic for consistent ID matching
+  const cleanAgentId = agent.agent_id.startsWith('agent_') ? agent.agent_id.substring(6) : agent.agent_id
+  const assignedTasks = agentTasks.filter(t => t.assigned_to === cleanAgentId)
+  const workedOnTasks = agentTasks.filter(t => t.assigned_to !== cleanAgentId)
   
   const taskStats = {
     total: agentTasks.length,
@@ -345,6 +347,15 @@ export function AgentsDashboard() {
   
   const agents = data?.agents || []
   const isConnected = !!activeServerId && activeServer?.status === 'connected'
+  
+  // Debug logging
+  useEffect(() => {
+    if (agents.length > 0) {
+      console.log('🤖 Agents data received:', agents.map(a => ({ agent_id: a.agent_id, current_task: a.current_task })))
+      console.log('📋 Tasks data received:', data?.tasks?.slice(0, 5).map(t => ({ task_id: t.task_id, assigned_to: t.assigned_to, status: t.status })))
+      console.log('🎯 Actions data received:', data?.actions?.slice(0, 5).map(a => ({ agent_id: a.agent_id, action_type: a.action_type, task_id: a.task_id })))
+    }
+  }, [agents.length, data?.tasks, data?.actions])
   
   const handleTaskClick = (task: Task) => {
     setSelectedTask(task)

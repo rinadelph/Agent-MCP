@@ -155,23 +155,28 @@ export const useDataStore = create<DataStore>((set, get) => ({
     // Strip prefix if present for consistent matching
     const cleanAgentId = agentId.startsWith('agent_') ? agentId.substring(6) : agentId
     
+    console.log(`🔍 getAgentTasks for agentId: "${agentId}" -> cleanAgentId: "${cleanAgentId}"`)
+    
     // Get tasks assigned to this agent
     const assignedTasks = state.data.tasks.filter(t => t.assigned_to === cleanAgentId)
+    console.log(`📋 Found ${assignedTasks.length} assigned tasks for ${cleanAgentId}:`, assignedTasks.map(t => `${t.task_id} (${t.status})`))
     
     // Get tasks this agent has worked on (via actions)
     const workedOnTaskIds = new Set<string>()
-    state.data.actions
-      .filter(a => a.agent_id === cleanAgentId)
-      .forEach(action => {
-        if (action.task_id) {
-          workedOnTaskIds.add(action.task_id)
-        }
-      })
+    const agentActions = state.data.actions.filter(a => a.agent_id === cleanAgentId)
+    console.log(`🎯 Found ${agentActions.length} actions for ${cleanAgentId}`)
+    
+    agentActions.forEach(action => {
+      if (action.task_id) {
+        workedOnTaskIds.add(action.task_id)
+      }
+    })
     
     // Get tasks worked on but not assigned
     const workedOnTasks = state.data.tasks.filter(t => 
       workedOnTaskIds.has(t.task_id) && t.assigned_to !== cleanAgentId
     )
+    console.log(`🔧 Found ${workedOnTasks.length} worked-on (non-assigned) tasks for ${cleanAgentId}:`, workedOnTasks.map(t => `${t.task_id} (${t.status})`))
     
     // Combine and deduplicate
     const allTasks = [...assignedTasks, ...workedOnTasks]
@@ -179,6 +184,7 @@ export const useDataStore = create<DataStore>((set, get) => ({
       arr.findIndex(t => t.task_id === task.task_id) === index
     )
     
+    console.log(`✅ Total unique tasks for ${cleanAgentId}: ${uniqueTasks.length}`)
     return uniqueTasks
   },
 

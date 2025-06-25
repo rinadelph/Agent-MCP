@@ -498,30 +498,36 @@ export function NodeDetailPanel({ nodeId, nodeType, isOpen, onClose, nodeData }:
 
   return (
     <div className={cn(
-      "h-full bg-background border-l shadow-xl transition-all duration-300 flex-shrink-0",
-      isOpen ? "w-96" : "w-0 overflow-hidden"
+      "fixed right-0 top-16 h-[calc(100vh-4rem)] bg-background border-l transform transition-all duration-500 z-30",
+      "shadow-lg",
+      isOpen ? "translate-x-0 w-[384px]" : "translate-x-full w-0"
     )}>
       {isOpen && (
-        <div className="h-full flex flex-col bg-background w-96">
-          <div className="flex flex-row items-center justify-between p-4 border-b">
-            <h3 className="text-base font-medium">
-              {nodeType === 'agent' || nodeType === 'admin' ? 'Agent Details' : 
-               nodeType === 'task' ? 'Task Details' : 
-               nodeType === 'context' ? 'Context Details' :
-               'Node Details'}
-            </h3>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onClose}
-              className="h-8 w-8"
-            >
-              <X className="h-4 w-4" />
-            </Button>
+        <div className="h-full flex flex-col">
+          {/* Header - Compact like agents dashboard */}
+          <div className="bg-card border-b px-4 py-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-semibold">
+                  {nodeType === 'agent' || nodeType === 'admin' ? 'Agent Details' : 
+                   nodeType === 'task' ? 'Task Details' : 
+                   nodeType === 'context' ? 'Context Details' :
+                   'Node Details'}
+                </h2>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onClose}
+                className="h-7 w-7"
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </div>
           </div>
 
           <ScrollArea className="flex-1">
-            <div className="p-4">{" "}
+            <div className="px-6 py-4 space-y-4">
             {loading && (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />

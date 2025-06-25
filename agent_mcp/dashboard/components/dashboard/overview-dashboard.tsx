@@ -62,34 +62,38 @@ export function OverviewDashboard() {
   }
 
   return (
-    <div className="w-full h-full flex flex-col" style={{
-      paddingRight: isPanelOpen ? `calc(384px)` : '0px',
-      transition: 'padding-right 0.5s ease-in-out'
-    }}>
-      {/* Minimal Header */}
-      <div className="flex items-center justify-between p-4 border-b">
-        <div className="flex items-center gap-2">
-          <Network className="h-5 w-5 text-primary" />
-          <h1 className="text-xl font-semibold">Multi-Agent Collaboration Network</h1>
+    <div className="w-full space-y-[var(--space-fluid-lg)]">
+      {/* Header - following tasks dashboard pattern */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-fluid-2xl font-bold text-foreground">Multi-Agent Collaboration Network</h1>
+          <p className="text-muted-foreground text-fluid-base mt-1">Real-time visualization of agent-task relationships</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30">
-            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse mr-2" />
-            Connected to {activeServer?.name}
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <Badge variant="outline" className="text-xs bg-green-500/15 text-green-600 border-green-500/30 font-medium">
+            <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse" />
+            {activeServer?.name}
           </Badge>
+          {data?.timestamp && (
+            <span className="text-xs text-muted-foreground">
+              Last updated: {new Date(data.timestamp).toLocaleTimeString()}
+            </span>
+          )}
           <Button 
-            variant="ghost" 
+            variant="outline" 
             size="sm" 
             onClick={() => fetchAllData(true)}
             disabled={loading || isRefreshing}
+            className="text-xs"
           >
-            <RefreshCw className={`h-4 w-4 ${(loading || isRefreshing) ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${(loading || isRefreshing) ? 'animate-spin' : ''}`} />
+            Refresh
           </Button>
         </div>
       </div>
 
-      {/* Full Screen Graph Container */}
-      <div className="flex-1 min-h-0 overflow-hidden">
+      {/* Graph Container - taking full available space like tasks table */}
+      <div className="bg-card/30 border border-border/50 rounded-lg backdrop-blur-sm overflow-hidden" style={{ height: 'calc(100vh - 280px)' }}>
         <VisGraph 
           fullscreen 
           selectedNodeId={selectedNodeId}
@@ -106,7 +110,7 @@ export function OverviewDashboard() {
         />
       </div>
       
-      {/* Node Detail Panel - Fixed positioned like agents dashboard */}
+      {/* Node Detail Panel - Fixed positioned */}
       <NodeDetailPanel
         nodeId={selectedNodeId}
         nodeType={selectedNodeType}

@@ -11,7 +11,6 @@ import { apiClient } from '@/lib/api'
 import { useServerStore } from '@/lib/stores/server-store'
 import { useDataStore } from '@/lib/stores/data-store'
 import { cn } from '@/lib/utils'
-import { NodeDetailPanel } from './node-detail-panel'
 
 // Physics options with better spacing and clustering
 const physicsOptions = {
@@ -212,7 +211,15 @@ interface VisGraphProps {
   onClosePanel?: () => void
 }
 
-export function VisGraph({ fullscreen = false }: VisGraphProps) {
+export function VisGraph({ 
+  fullscreen = false, 
+  selectedNodeId, 
+  selectedNodeType, 
+  selectedNodeData, 
+  isPanelOpen, 
+  onNodeSelect, 
+  onClosePanel 
+}: VisGraphProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const networkRef = useRef<Network | null>(null)
   const nodesDataSetRef = useRef<DataSet<any>>(new DataSet())
@@ -228,12 +235,6 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
   const [nodeCount, setNodeCount] = useState(0)
   const [edgeCount, setEdgeCount] = useState(0)
   const [isMounted, setIsMounted] = useState(false)
-  
-  // Selected node state for detail panel
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
-  const [selectedNodeType, setSelectedNodeType] = useState<'agent' | 'task' | 'context' | 'file' | 'admin' | null>(null)
-  const [selectedNodeData, setSelectedNodeData] = useState<any>(null)
-  const [isPanelOpen, setIsPanelOpen] = useState(false)
   
   // Track mounted state
   useEffect(() => {
@@ -546,22 +547,16 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
       
       // Add click event handler
       network.on('click', (params) => {
-        if (params.nodes.length > 0) {
+        if (params.nodes.length > 0 && onNodeSelect) {
           const nodeId = params.nodes[0]
           const node = nodesDataSetRef.current.get(nodeId)
           
           if (node) {
             if (node.group === 'admin') {
               // Special handling for admin node
-              setSelectedNodeId('admin')
-              setSelectedNodeType('admin' as any)
-              setSelectedNodeData(node)
-              setIsPanelOpen(true)
+              onNodeSelect('admin', 'admin' as any, node)
             } else if (node.group === 'agent' || node.group === 'task' || node.group === 'context' || node.group === 'file') {
-              setSelectedNodeId(nodeId)
-              setSelectedNodeType(node.group as 'agent' | 'task' | 'context' | 'file')
-              setSelectedNodeData(node)
-              setIsPanelOpen(true)
+              onNodeSelect(nodeId, node.group as 'agent' | 'task' | 'context' | 'file', node)
             }
           }
         }
@@ -651,12 +646,6 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
     }
   }, [])
 
-  const handleClosePanel = useCallback(() => {
-    setIsPanelOpen(false)
-    setSelectedNodeId(null)
-    setSelectedNodeType(null)
-    setSelectedNodeData(null)
-  }, [])
 
   return (
     <div className={cn("w-full h-full flex", fullscreen ? "" : "graph-container rounded-lg border")}>
@@ -753,15 +742,6 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
           />
         )}
       </div>
-      
-      {/* Node Detail Panel - As a flex sibling */}
-      <NodeDetailPanel
-        nodeId={selectedNodeId}
-        nodeType={selectedNodeType}
-        nodeData={selectedNodeData}
-        isOpen={isPanelOpen}
-        onClose={handleClosePanel}
-      />
     </div>
   )
 }
