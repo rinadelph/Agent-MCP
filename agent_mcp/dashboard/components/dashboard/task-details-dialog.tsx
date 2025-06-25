@@ -19,6 +19,21 @@ interface TaskDetailsDialogProps {
 export function TaskDetailsDialog({ task, open, onOpenChange }: TaskDetailsDialogProps) {
   if (!task) return null
 
+  // Helper function to parse JSON fields safely
+  const parseJsonField = (field: any): any[] => {
+    if (!field) return []
+    if (Array.isArray(field)) return field
+    if (typeof field === 'string') {
+      try {
+        const parsed = JSON.parse(field)
+        return Array.isArray(parsed) ? parsed : []
+      } catch {
+        return []
+      }
+    }
+    return []
+  }
+
   const getStatusColor = (status: Task['status']) => {
     const colors = {
       pending: 'bg-warning/15 text-warning border-warning/30',
@@ -89,58 +104,67 @@ export function TaskDetailsDialog({ task, open, onOpenChange }: TaskDetailsDialo
             )}
 
             {/* Notes */}
-            {task.notes && task.notes.length > 0 && (
-              <div>
-                <h4 className="text-sm font-semibold mb-3">Notes</h4>
-                <div className="space-y-3">
-                  {task.notes.map((note, index) => (
-                    <div key={index} className="bg-muted rounded-lg p-3">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-medium">{note.author}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {new Date(note.timestamp).toLocaleString()}
-                        </span>
+            {(() => {
+              const notes = parseJsonField(task.notes)
+              return notes.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-semibold mb-3">Notes</h4>
+                  <div className="space-y-3">
+                    {notes.map((note, index) => (
+                      <div key={index} className="bg-muted rounded-lg p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-medium">{note.author}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(note.timestamp).toLocaleString()}
+                          </span>
+                        </div>
+                        <p className="text-sm">{note.content}</p>
                       </div>
-                      <p className="text-sm">{note.content}</p>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )
+            })()}
 
             {/* Dependencies */}
-            {task.depends_on_tasks && task.depends_on_tasks.length > 0 && (
-              <>
-                <Separator />
-                <div>
-                  <h4 className="text-sm font-semibold mb-2">Dependencies</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {task.depends_on_tasks.map((depId, index) => (
-                      <Badge key={index} variant="outline" className="text-xs">
-                        {depId}
-                      </Badge>
-                    ))}
+            {(() => {
+              const dependencies = parseJsonField(task.depends_on_tasks)
+              return dependencies.length > 0 && (
+                <>
+                  <Separator />
+                  <div>
+                    <h4 className="text-sm font-semibold mb-2">Dependencies</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {dependencies.map((depId, index) => (
+                        <Badge key={index} variant="outline" className="text-xs">
+                          {depId}
+                        </Badge>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              </>
-            )}
+                </>
+              )
+            })()}
 
             {/* Child Tasks */}
-            {task.child_tasks && task.child_tasks.length > 0 && (
-              <>
-                <Separator />
-                <div>
-                  <h4 className="text-sm font-semibold mb-2">Subtasks</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {task.child_tasks.map((childId, index) => (
-                      <Badge key={index} variant="outline" className="text-xs">
-                        {childId}
-                      </Badge>
-                    ))}
+            {(() => {
+              const childTasks = parseJsonField(task.child_tasks)
+              return childTasks.length > 0 && (
+                <>
+                  <Separator />
+                  <div>
+                    <h4 className="text-sm font-semibold mb-2">Subtasks</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {childTasks.map((childId, index) => (
+                        <Badge key={index} variant="outline" className="text-xs">
+                          {childId}
+                        </Badge>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              </>
-            )}
+                </>
+              )
+            })()}
           </div>
         </ScrollArea>
       </DialogContent>
