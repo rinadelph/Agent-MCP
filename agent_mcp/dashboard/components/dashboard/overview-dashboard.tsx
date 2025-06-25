@@ -75,8 +75,11 @@ const useSystemData = () => {
       setError(null)
       setLastFetch(now)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch system status')
-      console.error('Error fetching system status:', err)
+      // Don't set error state for no server connection - that's handled by DashboardWrapper
+      if (err instanceof Error && err.message !== 'NO_SERVER_CONNECTED') {
+        setError(err.message)
+        console.error('Error fetching system status:', err)
+      }
     } finally {
       setLoading(false)
     }

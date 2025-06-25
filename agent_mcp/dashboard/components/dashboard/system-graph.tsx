@@ -42,7 +42,7 @@ import type { GraphNode, GraphEdge } from '@/lib/api'
 // Custom Node Types
 const AgentNode = ({ data, selected }: NodeProps) => {
   console.log('Rendering AgentNode:', data.label, data)
-  const statusColors = {
+  const statusColors: {[key: string]: string} = {
     active: 'bg-green-500',
     created: 'bg-blue-500',
     terminated: 'bg-gray-500'
@@ -72,7 +72,7 @@ const AgentNode = ({ data, selected }: NodeProps) => {
 
 const TaskNode = ({ data, selected }: NodeProps) => {
   console.log('Rendering TaskNode:', data.label, data)
-  const statusColors = {
+  const statusColors: {[key: string]: string} = {
     pending: 'bg-yellow-500',
     in_progress: 'bg-blue-500',
     completed: 'bg-green-500',
@@ -80,7 +80,7 @@ const TaskNode = ({ data, selected }: NodeProps) => {
     cancelled: 'bg-gray-500'
   }
 
-  const priorityColors = {
+  const priorityColors: {[key: string]: string} = {
     high: 'text-red-600 bg-red-50',
     medium: 'text-yellow-600 bg-yellow-50',
     low: 'text-blue-600 bg-blue-50'
@@ -132,7 +132,7 @@ const ContextNode = ({ data, selected }: NodeProps) => {
 }
 
 const FileNode = ({ data, selected }: NodeProps) => {
-  const statusColors = {
+  const statusColors: {[key: string]: string} = {
     reading: 'text-blue-600',
     editing: 'text-orange-600',
     locked: 'text-red-600'
@@ -213,6 +213,9 @@ const edgeTypes: EdgeTypes = {
   custom: CustomEdge,
 }
 
+// Simple default node types for testing
+const defaultNodeTypes: NodeTypes = {}
+
 // Main System Graph Component
 export function SystemGraph() {
   const { } = useTheme() // theme available if needed
@@ -227,6 +230,7 @@ export function SystemGraph() {
   const [layoutType, setLayoutType] = useState<'physics' | 'hierarchical'>('physics')
   const [showLabels, setShowLabels] = useState(true)
   const [autoRefresh, setAutoRefresh] = useState(false)
+  const [debugMode, setDebugMode] = useState(false)
 
   // Convert API data to React Flow format
   const convertToFlowData = useCallback((graphData: { nodes: GraphNode[], edges: GraphEdge[] }, isDebugMode: boolean) => {
@@ -246,21 +250,26 @@ export function SystemGraph() {
         let position = { x: 0, y: 0 }
 
         // Determine node type and initial position based on group
-        if (node.group === 'agent') {
-          type = 'agent'
-          position = { x: 100 + (index % 3) * 300, y: 100 }
-        } else if (node.group === 'task') {
-          type = 'task'
-          position = { x: 100 + (index % 4) * 250, y: 300 + Math.floor(index / 4) * 150 }
-        } else if (node.group === 'context') {
-          type = 'context'
-          position = { x: 800, y: 100 + index * 80 }
-        } else if (node.group === 'file') {
-          type = 'file'
-          position = { x: 600, y: 500 + index * 60 }
-        } else if (node.group === 'admin') {
-          type = 'agent' // Use agent type for admin
-          position = { x: 400, y: 50 }
+        if (!isDebugMode) {
+          if (node.group === 'agent') {
+            type = 'agent'
+            position = { x: 100 + (index % 3) * 300, y: 100 }
+          } else if (node.group === 'task') {
+            type = 'task'
+            position = { x: 100 + (index % 4) * 250, y: 300 + Math.floor(index / 4) * 150 }
+          } else if (node.group === 'context') {
+            type = 'context'
+            position = { x: 800, y: 100 + index * 80 }
+          } else if (node.group === 'file') {
+            type = 'file'
+            position = { x: 600, y: 500 + index * 60 }
+          } else if (node.group === 'admin') {
+            type = 'agent' // Use agent type for admin
+            position = { x: 400, y: 50 }
+          }
+        } else {
+          // Simple layout for debug mode
+          position = { x: 200 + (index % 5) * 150, y: 100 + Math.floor(index / 5) * 100 }
         }
 
         const flowNode = {
@@ -268,12 +277,8 @@ export function SystemGraph() {
           type,
           position,
           data: {
+            ...node,
             label: node.label || node.id,
-            status: node.status,
-            priority: node.priority,
-            assignedTo: node.assigned_to,
-            currentTask: node.current_task,
-            ...node
           }
         }
         
@@ -425,8 +430,7 @@ export function SystemGraph() {
     } finally {
       setLoading(false)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeServerId, activeServer, convertToFlowData, setNodes, setEdges])
+  }, [activeServerId, activeServer, convertToFlowData, setNodes, setEdges, debugMode])
 
   // Initial load and auto-refresh
   useEffect(() => {
@@ -438,12 +442,6 @@ export function SystemGraph() {
       return () => clearInterval(interval)
     }
   }, [fetchGraphData, autoRefresh])
-  
-  // Re-fetch when debug mode changes
-  useEffect(() => {
-    fetchGraphData()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchGraphData])
   
   // Debug: Check if nodes have valid positions
   useEffect(() => {
@@ -670,8 +668,8 @@ export function SystemGraph() {
                   onNodesChange={onNodesChange}
                   onEdgesChange={onEdgesChange}
                   onNodeClick={onNodeClick}
-                  nodeTypes={nodeTypes}
-                  edgeTypes={edgeTypes}
+                  nodeTypes={debugMode ? defaultNodeTypes : nodeTypes}
+                  edgeTypes={debugMode ? {} : edgeTypes}
                   connectionMode={ConnectionMode.Loose}
                   fitView={false}
                   minZoom={0.1}
@@ -688,12 +686,8 @@ export function SystemGraph() {
                     setTimeout(() => {
                       instance.fitView({ padding: 0.2, maxZoom: 1 })
                       console.log('After fit view - Viewport:', instance.getViewport())
-                      console.log('Bounds:', instance.getNodesBounds(instance.getNodes()))
+                      // console.log('Bounds:', instance.getNodesBounds(instance.getNodes()))
                     }, 500)
-                  }}
-                  onNodesInitialized={(nodes) => {
-                    console.log('Nodes initialized:', nodes.length)
-                    console.log('First few nodes:', nodes.slice(0, 3))
                   }}
                   onError={(id, message) => {
                     console.error('React Flow error:', id, message)
@@ -726,6 +720,13 @@ export function SystemGraph() {
                     >
                       <GitBranch className="h-4 w-4 mr-1" />
                       Hierarchy
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={debugMode ? 'default' : 'outline'}
+                      onClick={() => setDebugMode(!debugMode)}
+                    >
+                      Debug
                     </Button>
                   </div>
                 </Panel>

@@ -1,6 +1,7 @@
 "use client"
 
 import { MainLayout } from "@/components/layout/main-layout"
+import { DashboardWrapper } from "@/components/dashboard/dashboard-wrapper"
 import { OverviewDashboard } from "@/components/dashboard/overview-dashboard"
 import { AgentsDashboard } from "@/components/dashboard/agents-dashboard"
 import { TasksDashboard } from "@/components/dashboard/tasks-dashboard"
@@ -27,7 +28,9 @@ export default function HomePage() {
 
   return (
     <MainLayout>
-      {renderCurrentView()}
+      <DashboardWrapper>
+        {renderCurrentView()}
+      </DashboardWrapper>
     </MainLayout>
   )
 }

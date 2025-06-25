@@ -67,8 +67,11 @@ const useTasksData = () => {
       setError(null)
       setLastFetch(now)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch tasks')
-      console.error('Error fetching tasks:', err)
+      // Don't set error state for no server connection - that's handled by DashboardWrapper
+      if (err instanceof Error && err.message !== 'NO_SERVER_CONNECTED') {
+        setError(err.message)
+        console.error('Error fetching tasks:', err)
+      }
     } finally {
       setLoading(false)
     }

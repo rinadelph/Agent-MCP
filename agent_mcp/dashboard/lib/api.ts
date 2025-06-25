@@ -85,7 +85,7 @@ class ApiClient {
   ): Promise<T> {
     // Check if a server is connected
     if (!this.baseUrl) {
-      throw new Error('No server connected. Please select a server from the dropdown.')
+      throw new Error('NO_SERVER_CONNECTED')
     }
     
     const url = `${this.baseUrl}/api${endpoint}`
