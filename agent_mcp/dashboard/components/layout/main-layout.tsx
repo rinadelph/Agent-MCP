@@ -47,22 +47,18 @@ export function MainLayout({ children }: MainLayoutProps) {
 
   return (
     <SidebarProvider>
-      <div className="min-h-screen bg-background">
-        {/* Header */}
-        <Header />
+      <div className="min-h-screen bg-background flex">
+        {/* Sidebar */}
+        <AppSidebar />
         
-        <div className="flex">
-          {/* Sidebar */}
-          <AppSidebar />
+        {/* Main Content Area */}
+        <div className="flex-1 flex flex-col">
+          {/* Header */}
+          <Header />
           
           {/* Main Content */}
-          <main 
-            className={cn(
-              "flex-1 transition-all duration-300 pt-0",
-              isCollapsed ? "ml-16" : "ml-64"
-            )}
-          >
-            <div className="container-fluid p-6 animate-fade-in">
+          <main className="flex-1 overflow-auto">
+            <div className="p-6 animate-fade-in">
               {children}
             </div>
           </main>

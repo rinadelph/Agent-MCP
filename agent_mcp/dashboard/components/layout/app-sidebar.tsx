@@ -22,7 +22,7 @@ export function AppSidebar() {
       variant="sidebar" 
       collapsible="icon"
       className={cn(
-        "fixed left-0 top-16 h-[calc(100vh-4rem)] z-40 transition-all duration-300",
+        "flex flex-col h-screen z-40 transition-all duration-300",
         isCollapsed ? "w-16" : "w-64"
       )}
     >

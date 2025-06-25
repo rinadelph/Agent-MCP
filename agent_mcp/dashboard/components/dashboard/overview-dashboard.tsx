@@ -7,14 +7,31 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Button } from "@/components/ui/button"
 
-// Mock data - this will be replaced with real API data
-const mockData = {
-  totalAgents: 12,
-  activeAgents: 8,
-  totalTasks: 45,
-  completedTasks: 32,
-  pendingTasks: 13,
-  systemUptime: "99.8%"
+// Real data hooks - will be populated by API calls
+const useSystemData = () => {
+  const [data, setData] = useState({
+    totalAgents: 0,
+    activeAgents: 0,
+    totalTasks: 0,
+    completedTasks: 0,
+    pendingTasks: 0,
+    systemUptime: "0%"
+  })
+
+  useEffect(() => {
+    // TODO: Fetch real data from API
+    // This will be replaced with actual API calls
+    setData({
+      totalAgents: 0,
+      activeAgents: 0,
+      totalTasks: 0,
+      completedTasks: 0,
+      pendingTasks: 0,
+      systemUptime: "0%"
+    })
+  }, [])
+
+  return data
 }
 
 const StatCard = ({ 
@@ -62,14 +79,15 @@ const StatCard = ({
 export function OverviewDashboard() {
   const [lastUpdate, setLastUpdate] = useState<string>("")
   const [mounted, setMounted] = useState(false)
+  const systemData = useSystemData()
   
   useEffect(() => {
     setMounted(true)
     setLastUpdate(new Date().toLocaleString())
   }, [])
   
-  const completionRate = Math.round((mockData.completedTasks / mockData.totalTasks) * 100)
-  const agentUtilization = Math.round((mockData.activeAgents / mockData.totalAgents) * 100)
+  const completionRate = systemData.totalTasks > 0 ? Math.round((systemData.completedTasks / systemData.totalTasks) * 100) : 0
+  const agentUtilization = systemData.totalAgents > 0 ? Math.round((systemData.activeAgents / systemData.totalAgents) * 100) : 0
 
   return (
     <div className="space-y-6">
@@ -97,35 +115,27 @@ export function OverviewDashboard() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <StatCard
           title="Total Agents"
-          value={mockData.totalAgents}
+          value={systemData.totalAgents}
           description="Registered in system"
           icon={Users}
-          change="+2 this week"
-          changeType="positive"
         />
         <StatCard
           title="Active Agents"
-          value={mockData.activeAgents}
+          value={systemData.activeAgents}
           description="Currently running"
           icon={Zap}
-          change={`${agentUtilization}% utilization`}
-          changeType="neutral"
         />
         <StatCard
           title="Total Tasks"
-          value={mockData.totalTasks}
+          value={systemData.totalTasks}
           description="All time created"
           icon={CheckSquare}
-          change="+8 today"
-          changeType="positive"
         />
         <StatCard
           title="Completion Rate"
           value={`${completionRate}%`}
           description="Tasks completed"
           icon={TrendingUp}
-          change="+5% this week"
-          changeType="positive"
         />
       </div>
 
@@ -159,9 +169,9 @@ export function OverviewDashboard() {
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span>System Uptime</span>
-                <span>{mockData.systemUptime}</span>
+                <span>{systemData.systemUptime}</span>
               </div>
-              <Progress value={99.8} className="h-2" />
+              <Progress value={parseFloat(systemData.systemUptime)} className="h-2" />
             </div>
           </CardContent>
         </Card>
@@ -204,40 +214,10 @@ export function OverviewDashboard() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
-            {[
-              { 
-                action: "Agent 'data-processor' completed task",
-                time: "2 minutes ago",
-                type: "success"
-              },
-              { 
-                action: "New task 'analyze-metrics' created",
-                time: "5 minutes ago",
-                type: "info"
-              },
-              { 
-                action: "Agent 'web-scraper' started",
-                time: "12 minutes ago",
-                type: "info"
-              },
-              { 
-                action: "Task 'backup-database' failed",
-                time: "1 hour ago",
-                type: "error"
-              }
-            ].map((activity, index) => (
-              <div key={index} className="flex items-center justify-between py-2 border-b last:border-b-0">
-                <div className="flex items-center space-x-3">
-                  <div className={`w-2 h-2 rounded-full ${
-                    activity.type === 'success' ? 'bg-green-500' :
-                    activity.type === 'error' ? 'bg-red-500' : 'bg-blue-500'
-                  }`} />
-                  <span className="text-sm">{activity.action}</span>
-                </div>
-                <span className="text-xs text-muted-foreground">{activity.time}</span>
-              </div>
-            ))}
+          <div className="text-center py-8 text-muted-foreground">
+            <Activity className="h-8 w-8 mx-auto mb-2 opacity-50" />
+            <p>No recent activity available</p>
+            <p className="text-sm">Activity will appear here when agents start working</p>
           </div>
         </CardContent>
       </Card>
