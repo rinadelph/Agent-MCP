@@ -16,12 +16,12 @@ const physicsOptions = {
   physics: {
     enabled: true,
     barnesHut: {
-      gravitationalConstant: -8000, // Increased for better separation
-      centralGravity: 0.1, // Reduced to allow more spread
-      springLength: 200, // Increased for more spacing
-      springConstant: 0.05, // Reduced for softer connections
-      damping: 0.15,
-      avoidOverlap: 0.8 // Increased to prevent overlapping
+      gravitationalConstant: -12000, // Strong repulsion for better separation
+      centralGravity: 0.05, // Very low to prevent clustering at center
+      springLength: 250, // Longer springs for more space
+      springConstant: 0.02, // Softer springs
+      damping: 0.2,
+      avoidOverlap: 1 // Maximum overlap avoidance
     },
     maxVelocity: 50,
     minVelocity: 0.1,
@@ -32,7 +32,8 @@ const physicsOptions = {
       updateInterval: 25,
       fit: true
     },
-    adaptiveTimestep: true
+    adaptiveTimestep: true,
+    timestep: 0.5
   },
   layout: {
     hierarchical: { enabled: false }
@@ -85,8 +86,12 @@ const physicsOptions = {
     },
     context: {
       shape: 'diamond',
-      borderWidth: 2,
-      color: { background: '#9C27B0', border: '#7B1FA2' }
+      borderWidth: 3,
+      color: { background: '#9C27B0', border: '#7B1FA2' },
+      shapeProperties: {
+        borderDashes: false
+      },
+      size: 30
     },
     file: {
       shape: 'triangle',
@@ -241,21 +246,59 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
       return nodeIdsWithConnections.has(node.id) // Only show agents with connections
     })
 
-    // Convert nodes
-    const visNodes = filteredNodes.map((node: any) => {
+    // Separate nodes by type for better organization
+    const contextNodes = filteredNodes.filter((n: any) => n.group === 'context')
+    const taskNodes = filteredNodes.filter((n: any) => n.group === 'task')
+    const otherNodes = filteredNodes.filter((n: any) => n.group !== 'context' && n.group !== 'task')
+    
+    // Convert nodes with organized positioning
+    const visNodes = filteredNodes.map((node: any, index: number) => {
       const styling = getNodeStyling(node)
       
-      // Fixed position for admin node
-      const fixedPosition = node.group === 'admin' ? {
-        fixed: { x: true, y: true },
-        x: 0,
-        y: 0
-      } : {}
+      // Fixed position for admin node at center
+      if (node.group === 'admin') {
+        return {
+          id: node.id,
+          label: node.label || node.id,
+          title: node.title || `${node.group}: ${node.label}`,
+          group: node.group,
+          fixed: { x: true, y: true },
+          x: 0,
+          y: 0,
+          physics: false, // Disable physics for admin node
+          ...styling,
+          ...node
+        }
+      }
       
-      // Position context nodes in a separate area
+      // Position context nodes in a crown/circle around admin
       if (node.group === 'context') {
-        const angle = Math.random() * Math.PI * 2
-        const radius = 300 + Math.random() * 100
+        const contextIndex = contextNodes.findIndex((n: any) => n.id === node.id)
+        const angleStep = (2 * Math.PI) / contextNodes.length
+        const angle = contextIndex * angleStep
+        const radius = 400 // Fixed radius for the crown
+        
+        return {
+          id: node.id,
+          label: node.label || node.id,
+          title: node.title || `${node.group}: ${node.label}`,
+          group: node.group,
+          x: Math.cos(angle) * radius,
+          y: Math.sin(angle) * radius,
+          fixed: { x: true, y: true }, // Fix context nodes in crown position
+          physics: false, // Disable physics for context nodes
+          ...styling,
+          ...node
+        }
+      }
+      
+      // Position task nodes in an outer ring
+      if (node.group === 'task') {
+        const taskIndex = taskNodes.findIndex((n: any) => n.id === node.id)
+        const angleStep = (2 * Math.PI) / taskNodes.length
+        const angle = taskIndex * angleStep + (Math.PI / taskNodes.length) // Offset to avoid alignment
+        const radius = 600 + (taskIndex % 2) * 100 // Alternate between two radii
+        
         return {
           id: node.id,
           label: node.label || node.id,
@@ -264,18 +307,18 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
           x: Math.cos(angle) * radius,
           y: Math.sin(angle) * radius,
           ...styling,
-          ...node, // Include all original properties
+          ...node
         }
       }
       
+      // Let other nodes use physics
       return {
         id: node.id,
         label: node.label || node.id,
         title: node.title || `${node.group}: ${node.label}`,
         group: node.group,
-        ...fixedPosition,
         ...styling,
-        ...node // Include all original properties
+        ...node
       }
     })
 
@@ -314,10 +357,11 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
       
       // Special styling for edges to/from context nodes
       if (edge.from.includes('context') || edge.to.includes('context')) {
-        edgeStyle.color = { color: '#9333ea', opacity: 0.5 }
+        edgeStyle.color = { color: '#9333ea', opacity: 0.3 }
         edgeStyle.width = 1
-        edgeStyle.dashes = [5, 5]
-        edgeStyle.smooth = { enabled: true, type: 'diagonalCross' }
+        edgeStyle.dashes = [3, 6]
+        edgeStyle.smooth = { enabled: true, type: 'continuous', roundness: 0.8 }
+        edgeStyle.arrows = { to: { enabled: true, scaleFactor: 0.3 } }
       }
 
       // Apply any custom edge properties from the API
