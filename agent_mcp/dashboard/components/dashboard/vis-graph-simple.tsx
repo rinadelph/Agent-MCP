@@ -9,7 +9,6 @@ import {
 } from 'lucide-react'
 import { apiClient } from '@/lib/api'
 import { useServerStore } from '@/lib/stores/server-store'
-import { useDataStore } from '@/lib/stores/data-store'
 import { cn } from '@/lib/utils'
 
 // Physics options with better spacing and clustering
@@ -278,10 +277,9 @@ export function VisGraph({
     // Separate nodes by type for better organization
     const contextNodes = filteredNodes.filter((n: any) => n.group === 'context')
     const taskNodes = filteredNodes.filter((n: any) => n.group === 'task')
-    const otherNodes = filteredNodes.filter((n: any) => n.group !== 'context' && n.group !== 'task')
     
     // Convert nodes with organized positioning
-    const visNodes = filteredNodes.map((node: any, index: number) => {
+    const visNodes = filteredNodes.map((node: any) => {
       const styling = getNodeStyling(node)
       
       // Fixed position for admin node at center
@@ -362,7 +360,7 @@ export function VisGraph({
       }
       return true
     }).map((edge: any, index: number) => {
-      let edgeStyle: any = {
+      const edgeStyle: any = {
         from: edge.from,
         to: edge.to,
         id: edge.id || `edge-${index}`,

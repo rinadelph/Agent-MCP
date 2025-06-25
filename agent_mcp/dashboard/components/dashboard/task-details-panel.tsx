@@ -1,11 +1,10 @@
 "use client"
 
-import React, { useState, useEffect } from 'react'
-import { X, Clock, FileText, User, Hash, AlertCircle, CheckCircle2, Activity, Calendar, MessageSquare, GitBranch, Target, Zap, ChevronRight } from 'lucide-react'
+import React, { useState } from 'react'
+import { X, Clock, User, Hash, AlertCircle, CheckCircle2, Activity, MessageSquare, GitBranch, Target, Zap, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import { Task } from '@/lib/api'
 import { useDataStore } from '@/lib/stores/data-store'
@@ -16,7 +15,7 @@ interface TaskDetailsPanelProps {
 }
 
 export function TaskDetailsPanel({ task, onClose }: TaskDetailsPanelProps) {
-  const { data, getAgentTaskAnalysis } = useDataStore()
+  const { data } = useDataStore()
   const [activeTab, setActiveTab] = useState<'details' | 'history'>('details')
 
   // Get task history and related actions

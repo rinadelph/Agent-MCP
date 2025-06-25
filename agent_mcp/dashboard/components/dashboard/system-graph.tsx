@@ -79,19 +79,6 @@ const AgentNode = ({ data, selected }: NodeProps) => {
 
 const TaskNode = ({ data, selected }: NodeProps) => {
   console.log('Rendering TaskNode:', data.label, data)
-  const statusColors: {[key: string]: string} = {
-    pending: 'bg-yellow-500',
-    in_progress: 'bg-blue-500',
-    completed: 'bg-green-500',
-    failed: 'bg-red-500',
-    cancelled: 'bg-gray-500'
-  }
-
-  const priorityColors: {[key: string]: string} = {
-    high: 'text-red-600 bg-red-50',
-    medium: 'text-yellow-600 bg-yellow-50',
-    low: 'text-blue-600 bg-blue-50'
-  }
 
   const getTaskColor = (status: string) => {
     switch(status) {

@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState } from 'react'
 import { X, User, FileText, Activity, Clock, AlertCircle, CheckCircle, XCircle, Loader2, ChevronRight, Zap, Target, GitBranch, FileCode, Hash, Shield, Database, Copy } from 'lucide-react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -262,8 +261,10 @@ export function NodeDetailPanel({ nodeId, nodeType, isOpen, onClose, nodeData }:
               <FileText className="h-5 w-5 text-primary" />
             </div>
             <div className="flex-1">
-              <h3 className="text-lg font-semibold line-clamp-2">{task.title}</h3>
-              <p className="text-sm text-muted-foreground">Task #{task.task_id.slice(0, 8)}</p>
+              <h3 className="text-lg font-semibold line-clamp-2">{task.title || 'Untitled Task'}</h3>
+              <p className="text-sm text-muted-foreground">
+                Task #{task.task_id ? task.task_id.slice(0, 8) : 'unknown'}
+              </p>
             </div>
           </div>
         </div>

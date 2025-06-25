@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { 
   Network as NetworkIcon, Workflow, Eye, RefreshCw, 
-  AlertCircle, GitBranch, Activity, Zap
+  AlertCircle, GitBranch, Activity
 } from 'lucide-react'
 import { apiClient } from '@/lib/api'
 import { useServerStore } from '@/lib/stores/server-store'
@@ -266,7 +266,7 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
 
     // Convert edges
     const visEdges = graphData.edges.map((edge: any, index: number) => {
-      let edgeStyle: any = {
+      const edgeStyle: any = {
         from: edge.from,
         to: edge.to,
         id: edge.id || `edge-${index}`,

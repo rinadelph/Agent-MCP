@@ -12,7 +12,6 @@ interface MainLayoutProps {
 }
 
 export function MainLayout({ children }: MainLayoutProps) {
-  const { isCollapsed } = useSidebar()
   const { setTheme, theme } = useTheme()
 
   // Initialize theme on mount

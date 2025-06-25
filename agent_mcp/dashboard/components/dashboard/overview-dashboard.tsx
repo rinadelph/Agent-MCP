@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
-import { Network, RefreshCw, Server } from "lucide-react"
+import { RefreshCw, Server } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -11,7 +11,6 @@ import { VisGraph } from "./vis-graph-simple"
 import { NodeDetailPanel } from "./node-detail-panel"
 
 export function OverviewDashboard() {
-  const [mounted, setMounted] = useState(false)
   const { servers, activeServerId } = useServerStore()
   const activeServer = servers.find(s => s.id === activeServerId)
   const { data, loading, fetchAllData, isRefreshing } = useDataStore()
@@ -23,7 +22,6 @@ export function OverviewDashboard() {
   const [isPanelOpen, setIsPanelOpen] = useState(false)
   
   useEffect(() => {
-    setMounted(true)
     // Fetch data on mount
     if (activeServerId && activeServer?.status === 'connected') {
       fetchAllData()
