@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from "react"
 import { 
-  CheckSquare, Clock, AlertCircle, Users, Hash, Calendar, Tag,
-  Search, Filter, Plus, MoreVertical, Eye, ChevronDown, Play, Pause,
+  CheckSquare, Clock, AlertCircle, Users,
+  Search, Plus, MoreVertical, Eye, Play, Pause,
   ArrowUp, ArrowDown, Minus, CheckCircle2, Target, Zap, GitBranch, RefreshCw
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
@@ -99,13 +99,13 @@ const useTasksData = () => {
   }), [tasks, loading, error, refresh, lastFetch, activeServerId, activeServer])
 }
 
-const StatusDot = ({ status }: { status: Task['status'] }) => {
+const StatusDot = React.memo(({ status }: { status: Task['status'] }) => {
   const config = {
-    in_progress: "bg-primary shadow-primary/50 shadow-md animate-pulse",
-    pending: "bg-warning shadow-warning/50 shadow-md",
-    completed: "bg-success shadow-success/50 shadow-md",
-    cancelled: "bg-muted-foreground shadow-muted-foreground/50 shadow-md",
-    failed: "bg-destructive shadow-destructive/50 shadow-md animate-pulse",
+    in_progress: "bg-teal-400 shadow-teal-400/50 shadow-md animate-pulse",
+    pending: "bg-amber-400 shadow-amber-400/50 shadow-md",
+    completed: "bg-emerald-400 shadow-emerald-400/50 shadow-md",
+    cancelled: "bg-slate-500 shadow-slate-500/50 shadow-md",
+    failed: "bg-orange-400 shadow-orange-400/50 shadow-md animate-pulse",
   }
   
   return (
@@ -114,28 +114,30 @@ const StatusDot = ({ status }: { status: Task['status'] }) => {
       config[status] || config.pending
     )} />
   )
-}
+})
+StatusDot.displayName = 'StatusDot'
 
-const PriorityIcon = ({ priority }: { priority: Task['priority'] }) => {
+const PriorityIcon = React.memo(({ priority }: { priority: Task['priority'] }) => {
   const config = {
-    high: { icon: ArrowUp, className: "text-destructive" },
-    medium: { icon: Minus, className: "text-warning" },
-    low: { icon: ArrowDown, className: "text-muted-foreground" },
+    high: { icon: ArrowUp, className: "text-orange-400" },
+    medium: { icon: Minus, className: "text-amber-400" },
+    low: { icon: ArrowDown, className: "text-slate-400" },
   }
   
   const configItem = config[priority] || config.medium // fallback to medium if priority is undefined
   const { icon: Icon, className } = configItem
   return <Icon className={cn("h-4 w-4", className)} />
-}
+})
+PriorityIcon.displayName = 'PriorityIcon'
 
-const CompactTaskRow = ({ task }: { task: Task }) => {
+const CompactTaskRow = React.memo(({ task }: { task: Task }) => {
   const [mounted, setMounted] = useState(false)
   
   useEffect(() => {
     setMounted(true)
   }, [])
 
-  const formatDate = (dateString: string) => {
+  const formatDate = useCallback((dateString: string) => {
     if (!mounted) return "..."
     return new Date(dateString).toLocaleDateString('en-US', { 
       month: 'short', 
@@ -143,7 +145,7 @@ const CompactTaskRow = ({ task }: { task: Task }) => {
       hour: '2-digit',
       minute: '2-digit'
     })
-  }
+  }, [mounted])
 
   return (
     <TableRow className="border-border/50 hover:bg-muted/30 group transition-colors">
@@ -163,11 +165,11 @@ const CompactTaskRow = ({ task }: { task: Task }) => {
           variant="outline" 
           className={cn(
             "text-xs font-semibold border-0 px-3 py-1.5 rounded-md",
-            task.status === 'in_progress' && "bg-primary/15 text-primary ring-1 ring-primary/20",
-            task.status === 'pending' && "bg-warning/15 text-warning ring-1 ring-warning/20",
-            task.status === 'completed' && "bg-success/15 text-success ring-1 ring-success/20",
-            task.status === 'cancelled' && "bg-muted/50 text-muted-foreground ring-1 ring-border",
-            task.status === 'failed' && "bg-destructive/15 text-destructive ring-1 ring-destructive/20"
+            task.status === 'in_progress' && "bg-teal-500/15 text-teal-400 dark:text-teal-300 ring-1 ring-teal-500/20",
+            task.status === 'pending' && "bg-amber-500/15 text-amber-500 dark:text-amber-300 ring-1 ring-amber-500/20",
+            task.status === 'completed' && "bg-emerald-500/15 text-emerald-500 dark:text-emerald-300 ring-1 ring-emerald-500/20",
+            task.status === 'cancelled' && "bg-slate-500/15 text-slate-500 dark:text-slate-300 ring-1 ring-slate-500/20",
+            task.status === 'failed' && "bg-orange-500/15 text-orange-500 dark:text-orange-300 ring-1 ring-orange-500/20"
           )}
         >
           {task.status.replace('_', ' ').toUpperCase()}
@@ -191,9 +193,9 @@ const CompactTaskRow = ({ task }: { task: Task }) => {
           variant="outline" 
           className={cn(
             "text-xs font-medium px-2 py-0.5",
-            task.priority === 'high' && "bg-destructive/10 text-destructive border-destructive/20",
-            task.priority === 'medium' && "bg-warning/10 text-warning border-warning/20",
-            task.priority === 'low' && "bg-muted/50 text-muted-foreground border-border"
+            task.priority === 'high' && "bg-orange-500/10 text-orange-500 dark:text-orange-300 border-orange-500/20",
+            task.priority === 'medium' && "bg-amber-500/10 text-amber-500 dark:text-amber-300 border-amber-500/20",
+            task.priority === 'low' && "bg-slate-500/10 text-slate-500 dark:text-slate-300 border-slate-500/20"
           )}
         >
           {task.priority.toUpperCase()}
@@ -203,13 +205,13 @@ const CompactTaskRow = ({ task }: { task: Task }) => {
       <TableCell className="py-3">
         <div className="flex flex-wrap gap-1">
           {task.parent_task && (
-            <Badge variant="outline" className="text-xs px-2 py-0.5 bg-accent/10 text-accent-foreground border-accent/20">
+            <Badge variant="outline" className="text-xs px-2 py-0.5 bg-purple-500/10 text-purple-500 dark:text-purple-300 border-purple-500/20">
               <GitBranch className="h-3 w-3 mr-1" />
               Subtask
             </Badge>
           )}
           {task.child_tasks && task.child_tasks.length > 0 && (
-            <Badge variant="outline" className="text-xs px-2 py-0.5 bg-info/10 text-info border-info/20">
+            <Badge variant="outline" className="text-xs px-2 py-0.5 bg-blue-500/10 text-blue-500 dark:text-blue-300 border-blue-500/20">
               {task.child_tasks.length} children
             </Badge>
           )}
@@ -233,7 +235,7 @@ const CompactTaskRow = ({ task }: { task: Task }) => {
             <Button 
               variant="ghost" 
               size="sm" 
-              className="h-7 w-7 p-0 text-primary hover:text-primary/80 hover:bg-primary/10"
+              className="h-7 w-7 p-0 text-teal-400 hover:text-teal-300 hover:bg-teal-500/10"
             >
               <Play className="h-3.5 w-3.5" />
             </Button>
@@ -242,7 +244,7 @@ const CompactTaskRow = ({ task }: { task: Task }) => {
             <Button 
               variant="ghost" 
               size="sm" 
-              className="h-7 w-7 p-0 text-warning hover:text-warning/80 hover:bg-warning/10"
+              className="h-7 w-7 p-0 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
             >
               <Pause className="h-3.5 w-3.5" />
             </Button>
@@ -258,29 +260,33 @@ const CompactTaskRow = ({ task }: { task: Task }) => {
       </TableCell>
     </TableRow>
   )
-}
+}, (prevProps, nextProps) => {
+  // Only re-render if the task actually changed
+  return JSON.stringify(prevProps.task) === JSON.stringify(nextProps.task)
+})
+CompactTaskRow.displayName = 'CompactTaskRow'
 
-const StatsCard = ({ icon: Icon, label, value, change, trend }: {
+const StatsCard = React.memo(({ icon: Icon, label, value, change, trend }: {
   icon: any
   label: string
   value: number
   change?: string
   trend?: 'up' | 'down' | 'neutral'
 }) => (
-  <div className="bg-card/80 border border-border/60 rounded-xl p-5 backdrop-blur-sm hover:bg-card transition-all duration-200 group">
+  <div className="bg-slate-900/60 dark:bg-slate-900/60 bg-white/80 border border-slate-800/60 dark:border-slate-800/60 border-slate-200 rounded-xl p-5 backdrop-blur-sm hover:bg-slate-900/80 dark:hover:bg-slate-900/80 hover:bg-white/90 transition-all duration-200 group">
     <div className="flex items-center justify-between">
       <div>
         <div className="flex items-center gap-2 mb-2">
-          <Icon className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
-          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{label}</span>
+          <Icon className="h-4 w-4 text-slate-400 dark:text-slate-400 text-slate-600 group-hover:text-slate-300 dark:group-hover:text-slate-300 group-hover:text-slate-700 transition-colors" />
+          <span className="text-xs font-semibold text-slate-400 dark:text-slate-400 text-slate-600 uppercase tracking-wider">{label}</span>
         </div>
-        <div className="text-2xl font-bold text-foreground mb-1">{value}</div>
+        <div className="text-2xl font-bold text-white dark:text-white text-slate-900 mb-1">{value}</div>
         {change && (
           <div className={cn(
             "text-xs font-medium",
-            trend === 'up' && "text-primary",
-            trend === 'down' && "text-destructive",
-            trend === 'neutral' && "text-muted-foreground"
+            trend === 'up' && "text-teal-400",
+            trend === 'down' && "text-orange-400",
+            trend === 'neutral' && "text-slate-400"
           )}>
             {change}
           </div>
@@ -288,9 +294,10 @@ const StatsCard = ({ icon: Icon, label, value, change, trend }: {
       </div>
     </div>
   </div>
-)
+))
+StatsCard.displayName = 'StatsCard'
 
-const CreateTaskModal = ({ onCreateTask }: { onCreateTask: (data: any) => void }) => {
+const CreateTaskModal = React.memo(({ onCreateTask }: { onCreateTask: (data: any) => void }) => {
   const [open, setOpen] = useState(false)
   const [formData, setFormData] = useState({
     title: '',
@@ -317,7 +324,7 @@ const CreateTaskModal = ({ onCreateTask }: { onCreateTask: (data: any) => void }
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-primary/25 transition-all duration-200">
+        <Button size="sm" className="bg-teal-600 hover:bg-teal-700 text-white shadow-lg hover:shadow-teal-500/25 transition-all duration-200">
           <Plus className="h-4 w-4 mr-1.5" />
           Create Task
         </Button>
@@ -385,7 +392,7 @@ const CreateTaskModal = ({ onCreateTask }: { onCreateTask: (data: any) => void }
             <Button type="button" variant="outline" onClick={() => setOpen(false)} size="sm">
               Cancel
             </Button>
-            <Button type="submit" size="sm" className="bg-primary hover:bg-primary/90 shadow-lg hover:shadow-primary/25 transition-all">
+            <Button type="submit" size="sm" className="bg-teal-600 hover:bg-teal-700 shadow-lg hover:shadow-teal-500/25 transition-all">
               Create Task
             </Button>
           </DialogFooter>
@@ -393,7 +400,8 @@ const CreateTaskModal = ({ onCreateTask }: { onCreateTask: (data: any) => void }
       </DialogContent>
     </Dialog>
   )
-}
+})
+CreateTaskModal.displayName = 'CreateTaskModal'
 
 export function TasksDashboard() {
   const { tasks, loading, error, refresh, lastFetch, isConnected } = useTasksData()
@@ -477,8 +485,8 @@ export function TasksDashboard() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Task Operations</h1>
-          <p className="text-slate-400 text-sm">Orchestrate and monitor autonomous tasks</p>
+          <h1 className="text-2xl font-bold text-white dark:text-white text-slate-900">Task Operations</h1>
+          <p className="text-slate-400 dark:text-slate-400 text-slate-600 text-sm">Orchestrate and monitor autonomous tasks</p>
         </div>
         <div className="flex items-center gap-3">
           <Badge variant="outline" className="text-xs bg-teal-500/15 text-teal-300 border-teal-500/30 font-medium">
@@ -551,14 +559,14 @@ export function TasksDashboard() {
             placeholder="Search tasks..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10 bg-slate-900/60 border-slate-700/60 text-white placeholder:text-slate-400 focus:border-teal-500/50 focus:ring-teal-500/20 transition-all"
+            className="pl-10 bg-slate-900/60 dark:bg-slate-900/60 bg-white/80 border-slate-700/60 dark:border-slate-700/60 border-slate-300 text-white dark:text-white text-slate-900 placeholder:text-slate-400 focus:border-teal-500/50 focus:ring-teal-500/20 transition-all"
           />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-36 bg-slate-900/60 border-slate-700/60 text-white">
+          <SelectTrigger className="w-36 bg-slate-900/60 dark:bg-slate-900/60 bg-white/80 border-slate-700/60 dark:border-slate-700/60 border-slate-300 text-white dark:text-white text-slate-900">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent className="bg-slate-900 border-slate-800">
+          <SelectContent className="bg-slate-900 dark:bg-slate-900 bg-white border-slate-800 dark:border-slate-800 border-slate-200">
             <SelectItem value="all">All Status</SelectItem>
             <SelectItem value="pending">Pending</SelectItem>
             <SelectItem value="in_progress">In Progress</SelectItem>
@@ -568,10 +576,10 @@ export function TasksDashboard() {
           </SelectContent>
         </Select>
         <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-          <SelectTrigger className="w-32 bg-slate-900/60 border-slate-700/60 text-white">
+          <SelectTrigger className="w-32 bg-slate-900/60 dark:bg-slate-900/60 bg-white/80 border-slate-700/60 dark:border-slate-700/60 border-slate-300 text-white dark:text-white text-slate-900">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent className="bg-slate-900 border-slate-800">
+          <SelectContent className="bg-slate-900 dark:bg-slate-900 bg-white border-slate-800 dark:border-slate-800 border-slate-200">
             <SelectItem value="all">All Priority</SelectItem>
             <SelectItem value="high">High</SelectItem>
             <SelectItem value="medium">Medium</SelectItem>

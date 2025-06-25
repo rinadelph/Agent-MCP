@@ -147,7 +147,8 @@ const StatCard = React.memo(({
       </CardContent>
     </Card>
   )
-}
+})
+StatCard.displayName = 'StatCard'
 
 export function OverviewDashboard() {
   const [mounted, setMounted] = useState(false)
