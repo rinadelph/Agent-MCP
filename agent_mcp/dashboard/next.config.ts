@@ -4,8 +4,8 @@ const nextConfig: NextConfig = {
   // Enable static export for serving through Python backend
   output: 'export',
   
-  // Configure output directory to be the static folder
-  distDir: '../static',
+  // Configure output directory to be the static folder (only for production builds)
+  distDir: process.env.NODE_ENV === 'production' ? '../static' : '.next',
   
   // Disable image optimization for static export
   images: {
