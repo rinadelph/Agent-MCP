@@ -198,6 +198,7 @@ const CustomEdge = ({
   )
 }
 
+// Define nodeTypes and edgeTypes outside the component to prevent recreation
 const nodeTypes: NodeTypes = {
   agent: AgentNode,
   task: TaskNode,
@@ -530,9 +531,10 @@ export function SystemGraph() {
             </TabsTrigger>
           </TabsList>
           
-          <TabsContent value="graph" className="h-[600px] m-0">
-            <ReactFlowProvider>
-              <ReactFlow
+          <TabsContent value="graph" className="relative h-[600px] m-0">
+            <div className="absolute inset-0">
+              <ReactFlowProvider>
+                <ReactFlow
                 nodes={nodes}
                 edges={edges}
                 onNodesChange={onNodesChange}
@@ -595,7 +597,8 @@ export function SystemGraph() {
                   </div>
                 </Panel>
               </ReactFlow>
-            </ReactFlowProvider>
+              </ReactFlowProvider>
+            </div>
           </TabsContent>
           
           <TabsContent value="details" className="p-6">
