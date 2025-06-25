@@ -192,6 +192,12 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
   const [autoRefresh, setAutoRefresh] = useState(false)
   const [nodeCount, setNodeCount] = useState(0)
   const [edgeCount, setEdgeCount] = useState(0)
+  
+  // Debug effect
+  useEffect(() => {
+    console.log('🚀 VisGraph mounted with props:', { fullscreen })
+    return () => console.log('🔚 VisGraph unmounted')
+  }, [])
 
   // Convert API data to vis.js format
   const convertToVisData = useCallback((graphData: any) => {
@@ -254,17 +260,30 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
     })
 
     // Update datasets
+    console.log('📝 Clearing and updating datasets...')
     nodesDataSetRef.current.clear()
     nodesDataSetRef.current.add(visNodes)
     edgesDataSetRef.current.clear()
     edgesDataSetRef.current.add(visEdges)
+    
+    console.log('✅ Datasets updated:')
+    console.log('  - Nodes in dataset:', nodesDataSetRef.current.length)
+    console.log('  - Edges in dataset:', edgesDataSetRef.current.length)
+    console.log('  - Sample nodes:', nodesDataSetRef.current.get().slice(0, 3))
 
     setNodeCount(visNodes.length)
     setEdgeCount(visEdges.length)
 
     // Fit network to view
     setTimeout(() => {
-      networkRef.current?.fit({ animation: true })
+      if (networkRef.current) {
+        networkRef.current.fit({ animation: true })
+        console.log('🎯 Fit to view executed')
+        const positions = networkRef.current.getPositions()
+        console.log('Network positions sample:', Object.keys(positions).slice(0, 3).map(id => ({ id, pos: positions[id] })))
+      } else {
+        console.error('❌ Network ref is null during fit!')
+      }
     }, 100)
   }, [])
 
@@ -286,6 +305,12 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
         throw new Error('No data received from server')
       }
       
+      console.log('📊 Graph data received:', {
+        nodes: graphData.nodes?.length || 0,
+        edges: graphData.edges?.length || 0,
+        sampleNode: graphData.nodes?.[0],
+        sampleEdge: graphData.edges?.[0]
+      })
       convertToVisData(graphData)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch graph data'
@@ -298,22 +323,34 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
 
   // Initialize vis.js network
   useEffect(() => {
-    if (!containerRef.current) return
+    console.log('🔧 Initializing vis.js network...')
+    console.log('Container ref:', containerRef.current)
+    console.log('Container dimensions:', containerRef.current?.offsetWidth, 'x', containerRef.current?.offsetHeight)
+    
+    if (!containerRef.current) {
+      console.error('❌ Container ref is null!')
+      return
+    }
 
     const options = layoutMode === 'physics' ? physicsOptions : hierarchicalOptions
+    console.log('Layout mode:', layoutMode)
 
     const data = {
       nodes: nodesDataSetRef.current,
       edges: edgesDataSetRef.current
     }
+    console.log('Initial nodes count:', nodesDataSetRef.current.length)
+    console.log('Initial edges count:', edgesDataSetRef.current.length)
 
     // Create network
     const network = new Network(containerRef.current, data, options)
     networkRef.current = network
+    console.log('✅ Network created:', network)
     
     // Force physics to start
     if (layoutMode === 'physics') {
       network.startSimulation()
+      console.log('🏃 Physics simulation started')
     }
 
     // Cleanup
@@ -436,7 +473,12 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
           </div>
         </div>
       ) : (
-        <div ref={containerRef} className="w-full h-full bg-muted/20" />
+        <div 
+          ref={containerRef} 
+          className="w-full h-full bg-muted/20" 
+          style={{ minHeight: '400px' }}
+          onMouseEnter={() => console.log('🖱️ Mouse entered graph container')}
+        />
       )}
     </div>
   )

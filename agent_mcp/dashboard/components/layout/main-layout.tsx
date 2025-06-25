@@ -47,18 +47,18 @@ export function MainLayout({ children }: MainLayoutProps) {
 
   return (
     <SidebarProvider>
-      <div className="min-h-screen bg-background flex">
+      <div className="h-screen bg-background flex overflow-hidden">
         {/* Sidebar */}
         <AppSidebar />
         
         {/* Main Content Area */}
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col h-full overflow-hidden">
           {/* Header */}
           <Header />
           
           {/* Main Content */}
-          <main className="flex-1 overflow-auto">
-            <div className="p-3 sm:p-4 md:p-6 animate-fade-in">
+          <main className="flex-1 overflow-auto min-h-0">
+            <div className="p-3 sm:p-4 md:p-6 h-full animate-fade-in">
               {children}
             </div>
           </main>

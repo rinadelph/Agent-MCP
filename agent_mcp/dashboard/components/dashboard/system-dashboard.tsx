@@ -8,7 +8,7 @@ import { Activity } from 'lucide-react'
 // Main System Dashboard
 export function SystemDashboard() {
   return (
-    <div className="flex flex-col -m-3 sm:-m-4 md:-m-6 h-[calc(100vh-3.5rem)]">
+    <div className="flex flex-col h-full">
       {/* Header */}
       <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b bg-background/95 backdrop-blur">
         <div>

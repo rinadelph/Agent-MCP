@@ -19,5 +19,5 @@ export function DashboardWrapper({ children }: DashboardWrapperProps) {
     return <ServerConnection />
   }
   
-  return <>{children}</>
+  return <div className="h-full">{children}</div>
 }

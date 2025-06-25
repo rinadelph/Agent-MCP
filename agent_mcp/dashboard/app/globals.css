@@ -159,6 +159,7 @@
   
   html {
     @apply scroll-smooth;
+    height: 100%;
   }
   
   body {
@@ -166,6 +167,12 @@
     font-feature-settings: 'cv01', 'cv02', 'cv03', 'cv04';
     line-height: 1.6;
     text-rendering: optimizeLegibility;
+    height: 100%;
+    min-height: 100vh;
+  }
+  
+  #__next {
+    height: 100%;
   }
   
   /* Premium typography hierarchy */
