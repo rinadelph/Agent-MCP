@@ -2,13 +2,10 @@
 
 import React, { useEffect, useRef, useCallback, useState } from 'react'
 import { Network, DataSet } from 'vis-network/standalone'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { 
-  Network as NetworkIcon, Workflow, Eye, RefreshCw, 
-  AlertCircle, GitBranch, Activity, Zap
+  RefreshCw, GitBranch, Activity, Layers
 } from 'lucide-react'
 import { apiClient } from '@/lib/api'
 import { useServerStore } from '@/lib/stores/server-store'
@@ -117,68 +114,24 @@ const hierarchicalOptions = {
       shakeTowards: 'roots'
     }
   },
-  nodes: {
-    shape: 'box',
-    borderWidth: 2,
-    shadow: true,
-    font: {
-      size: 14,
-      face: 'Segoe UI, sans-serif',
-      color: '#ffffff'
-    }
-  },
+  nodes: physicsOptions.nodes,
   edges: {
-    width: 2,
-    shadow: true,
+    ...physicsOptions.edges,
     smooth: {
       enabled: true,
       type: 'cubicBezier',
       forceDirection: 'vertical',
       roundness: 0.5
-    },
-    font: {
-      size: 12,
-      align: 'middle',
-      background: 'rgba(40, 44, 52, 0.8)'
-    },
-    arrows: {
-      to: { enabled: true, scaleFactor: 0.8 }
     }
   },
-  groups: {
-    agent: {
-      shape: 'ellipse',
-      borderWidth: 3,
-      color: { background: '#4CAF50', border: '#2E7D32' }
-    },
-    task: {
-      shape: 'box',
-      borderWidth: 2,
-      color: { background: '#FFC107', border: '#FFA000' }
-    },
-    context: {
-      shape: 'diamond',
-      borderWidth: 2,
-      color: { background: '#9C27B0', border: '#7B1FA2' }
-    },
-    file: {
-      shape: 'triangle',
-      borderWidth: 2,
-      color: { background: '#795548', border: '#5D4037' }
-    },
-    admin: {
-      shape: 'star',
-      borderWidth: 3,
-      color: { background: '#607D8B', border: '#455A64' }
-    }
-  }
+  groups: physicsOptions.groups
 }
 
-// Helper function to get node styling based on status
+// Get node styling based on type
 const getNodeStyling = (node: any) => {
-  const baseSize = 15
+  const baseSize = 25
   let size = baseSize
-  let color = undefined
+  let color: any = {}
   let shape = 'box'
 
   if (node.group === 'agent') {
@@ -187,13 +140,13 @@ const getNodeStyling = (node: any) => {
     if (node.status === 'terminated') {
       color = { background: '#F44336', border: '#D32F2F' }
     } else if (node.color) {
-      color = { background: node.color, border: node.color }
+      color = { background: node.color, border: '#2E7D32' }
     } else {
       color = { background: '#4CAF50', border: '#2E7D32' }
     }
   } else if (node.group === 'task') {
     size = baseSize + 5
-    shape = 'square'
+    shape = 'box'
     if (node.status === 'completed') {
       color = { background: '#9E9E9E', border: '#757575' }
     } else if (node.status === 'cancelled' || node.status === 'failed') {
@@ -237,7 +190,6 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
   const [error, setError] = useState<string | null>(null)
   const [layoutMode, setLayoutMode] = useState<'physics' | 'hierarchical'>('physics')
   const [autoRefresh, setAutoRefresh] = useState(false)
-  const [selectedNode, setSelectedNode] = useState<any>(null)
   const [nodeCount, setNodeCount] = useState(0)
   const [edgeCount, setEdgeCount] = useState(0)
 
@@ -291,10 +243,6 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
           edgeStyle.color = { color: '#3b82f6' }
           edgeStyle.width = 2
           edgeStyle.smooth = { enabled: true, type: 'continuous' }
-        } else if (edge.title.includes('accessing')) {
-          edgeStyle.color = { color: '#ef4444' }
-          edgeStyle.width = 1.5
-          edgeStyle.label = edge.title.split(' ')[1]
         }
       }
 
@@ -305,14 +253,19 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
       return edgeStyle
     })
 
-    // Update the DataSets
+    // Update datasets
     nodesDataSetRef.current.clear()
     nodesDataSetRef.current.add(visNodes)
     edgesDataSetRef.current.clear()
     edgesDataSetRef.current.add(visEdges)
-    
+
     setNodeCount(visNodes.length)
     setEdgeCount(visEdges.length)
+
+    // Fit network to view
+    setTimeout(() => {
+      networkRef.current?.fit({ animation: true })
+    }, 100)
   }, [])
 
   // Fetch graph data
@@ -363,19 +316,6 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
       network.startSimulation()
     }
 
-    // Event handlers
-    network.on('selectNode', (params) => {
-      if (params.nodes.length > 0) {
-        const nodeId = params.nodes[0]
-        const node = nodesDataSetRef.current.get(nodeId)
-        setSelectedNode(node)
-      }
-    })
-
-    network.on('deselectNode', () => {
-      setSelectedNode(null)
-    })
-
     // Cleanup
     return () => {
       network.destroy()
@@ -410,153 +350,91 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
     }
   }, [])
 
-  if (!activeServerId || !activeServer || activeServer.status !== 'connected') {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>System Graph</CardTitle>
-          <CardDescription>Visual representation of agents, tasks, and their relationships</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-center h-[600px] text-muted-foreground">
-            <div className="text-center space-y-4">
-              <NetworkIcon className="h-16 w-16 mx-auto opacity-50" />
-              <div>
-                <p className="text-lg font-medium">No active server connection</p>
-                <p className="text-sm mt-2">Please select a server from the dropdown in the header to view the system graph</p>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    )
-  }
-
   return (
-    <Card className="h-full">
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle>System Graph</CardTitle>
-            <CardDescription>Visual representation of agents, tasks, and their relationships</CardDescription>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="text-xs text-muted-foreground">
-              {nodeCount} nodes, {edgeCount} edges
-            </div>
-            <div className="flex items-center gap-1">
-              <Button
-                size="sm"
-                variant={layoutMode === 'physics' ? 'default' : 'outline'}
-                onClick={() => handleLayoutChange('physics')}
-              >
-                <Activity className="h-4 w-4 mr-1" />
-                Physics
-              </Button>
-              <Button
-                size="sm"
-                variant={layoutMode === 'hierarchical' ? 'default' : 'outline'}
-                onClick={() => handleLayoutChange('hierarchical')}
-              >
-                <GitBranch className="h-4 w-4 mr-1" />
-                Hierarchy
-              </Button>
-            </div>
+    <div className={cn("relative w-full", fullscreen ? "h-full" : "h-[800px]")}>
+      {/* Controls Bar */}
+      <div className="absolute top-4 left-4 right-4 z-10 flex items-center justify-between">
+        {/* Left side - Layout controls */}
+        <div className="flex items-center gap-2">
+          <div className="bg-background/95 backdrop-blur rounded-lg border p-1 flex gap-1">
             <Button
-              variant="outline"
+              variant={layoutMode === 'physics' ? 'default' : 'ghost'}
               size="sm"
-              onClick={() => setAutoRefresh(!autoRefresh)}
-              className={cn(autoRefresh && "bg-primary/10")}
+              onClick={() => handleLayoutChange('physics')}
+              className="h-8"
             >
-              <RefreshCw className={cn("h-4 w-4", autoRefresh && "animate-spin")} />
+              <Layers className="h-4 w-4 mr-1" />
+              Physics
             </Button>
             <Button
-              variant="outline"
+              variant={layoutMode === 'hierarchical' ? 'default' : 'ghost'}
               size="sm"
-              onClick={fetchGraphData}
-              disabled={loading}
+              onClick={() => handleLayoutChange('hierarchical')}
+              className="h-8"
             >
-              {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : 'Refresh'}
+              <GitBranch className="h-4 w-4 mr-1" />
+              Tree
+            </Button>
+          </div>
+          
+          <Badge variant="outline" className="bg-background/95 backdrop-blur">
+            {nodeCount} nodes, {edgeCount} edges
+          </Badge>
+        </div>
+
+        {/* Right side - Refresh controls */}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setAutoRefresh(!autoRefresh)}
+            className={cn("bg-background/95 backdrop-blur", autoRefresh && "bg-primary/10")}
+          >
+            {autoRefresh ? (
+              <>
+                <Activity className="h-4 w-4 mr-1 animate-pulse" />
+                Live
+              </>
+            ) : (
+              <>
+                <RefreshCw className="h-4 w-4 mr-1" />
+                Manual
+              </>
+            )}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={fetchGraphData}
+            disabled={loading}
+            className="bg-background/95 backdrop-blur"
+          >
+            {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          </Button>
+        </div>
+      </div>
+
+      {/* Graph Container */}
+      {loading && nodeCount === 0 ? (
+        <div className="flex items-center justify-center h-full">
+          <div className="text-center space-y-4">
+            <RefreshCw className="h-12 w-12 mx-auto animate-spin text-primary" />
+            <p className="text-muted-foreground">Loading graph data...</p>
+          </div>
+        </div>
+      ) : error && nodeCount === 0 ? (
+        <div className="flex items-center justify-center h-full">
+          <div className="text-center space-y-4">
+            <Activity className="h-12 w-12 mx-auto text-destructive" />
+            <p className="text-muted-foreground">{error}</p>
+            <Button onClick={fetchGraphData} variant="outline">
+              Retry
             </Button>
           </div>
         </div>
-      </CardHeader>
-      <CardContent className="p-0">
-        <Tabs defaultValue="graph" className="h-full">
-          <TabsList className="w-full rounded-none border-b">
-            <TabsTrigger value="graph" className="flex-1">
-              <Workflow className="h-4 w-4 mr-2" />
-              Graph View
-            </TabsTrigger>
-            <TabsTrigger value="details" className="flex-1">
-              <Eye className="h-4 w-4 mr-2" />
-              Node Details
-            </TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="graph" className={cn("m-0", fullscreen ? "h-full" : "h-[800px]")}>
-            {loading && nodeCount === 0 ? (
-              <div className="flex items-center justify-center h-full">
-                <div className="text-center space-y-4">
-                  <RefreshCw className="h-12 w-12 mx-auto animate-spin text-primary" />
-                  <p className="text-muted-foreground">Loading graph data...</p>
-                </div>
-              </div>
-            ) : error && nodeCount === 0 ? (
-              <div className="flex items-center justify-center h-full">
-                <div className="text-center space-y-4">
-                  <AlertCircle className="h-12 w-12 mx-auto text-destructive" />
-                  <p className="text-muted-foreground">{error}</p>
-                  <Button onClick={fetchGraphData} variant="outline">
-                    Retry
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div ref={containerRef} className="w-full h-full" />
-            )}
-          </TabsContent>
-          
-          <TabsContent value="details" className="p-6">
-            {selectedNode ? (
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold">
-                  {selectedNode.label}
-                </h3>
-                <div className="grid gap-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Type:</span>
-                    <span className="font-medium">{selectedNode.group}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">ID:</span>
-                    <span className="font-mono text-xs">{selectedNode.id}</span>
-                  </div>
-                  {selectedNode.status && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Status:</span>
-                      <Badge variant="outline">{selectedNode.status}</Badge>
-                    </div>
-                  )}
-                  {selectedNode.title && (
-                    <div className="mt-4">
-                      <span className="text-muted-foreground">Details:</span>
-                      <pre className="mt-1 text-xs whitespace-pre-wrap">{selectedNode.title}</pre>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-center justify-center h-full text-muted-foreground">
-                <div className="text-center">
-                  <Eye className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                  <p>Select a node to view details</p>
-                </div>
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
-      </CardContent>
-    </Card>
+      ) : (
+        <div ref={containerRef} className="w-full h-full bg-muted/20" />
+      )}
+    </div>
   )
 }
