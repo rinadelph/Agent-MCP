@@ -10,6 +10,63 @@ Multi-Agent Collaboration Protocol for coordinated AI software development.
 
 Think **Obsidian for your AI agents** - a living knowledge graph where multiple AI agents collaborate through shared context, intelligent task management, and real-time visualization. Watch your codebase evolve as specialized agents work in parallel, never losing context or stepping on each other's work.
 
+## Why Multiple Agents?
+
+Beyond the philosophical issues, traditional AI coding assistants hit practical limitations:
+- **Context windows overflow** on large codebases
+- **Knowledge gets lost** between conversations
+- **Single-threaded execution** creates bottlenecks
+- **No specialization** - one agent tries to do everything
+- **Constant rework** from lost context and confusion
+
+## The Multi-Agent Solution
+
+Agent-MCP transforms AI development from a single assistant to a coordinated team:
+
+<div align="center">
+  <img src="assets/images/dashboard-overview.png" alt="Multi-Agent Collaboration Network" width="800">
+</div>
+
+**Real-time visualization** shows your AI team at work - purple nodes represent context entries, blue nodes are agents, and connections show active collaborations. It's like having a mission control center for your development team.
+
+### Core Capabilities
+
+**Parallel Execution**  
+Multiple specialized agents work simultaneously on different parts of your codebase. Backend agents handle APIs while frontend agents build UI components, all coordinated through shared memory.
+
+**Persistent Knowledge Graph**  
+
+<div align="center">
+  <img src="assets/images/memory-bank.png" alt="Memory Bank Interface" width="800">
+</div>
+
+Your project's entire context lives in a searchable, persistent memory bank. Agents query this shared knowledge to understand requirements, architectural decisions, and implementation details. Nothing gets lost between sessions.
+
+**Intelligent Task Management**  
+
+<div align="center">
+  <img src="assets/images/agent-fleet.png" alt="Agent Fleet Management" width="800">
+</div>
+
+Monitor every agent's status, assigned tasks, and recent activity. The system automatically manages task dependencies, prevents conflicts, and ensures work flows smoothly from planning to implementation.
+
+## Quick Start
+
+```bash
+# Clone and setup
+git clone https://github.com/rinadelph/Agent-MCP.git
+cd Agent-MCP
+cp .env.example .env  # Add your OpenAI API key
+uv venv && uv pip install -e .
+
+# Start the server
+uv run -m agent_mcp.cli --project-dir /path/to/your/project
+
+# Launch dashboard (recommended for full experience)
+cd agent_mcp/dashboard && npm install && npm run dev
+```
+
+
 ## How It Works: Breaking Complexity into Simple Steps
 
 ```mermaid
@@ -70,62 +127,6 @@ graph TD
 ```
 
 Each agent focuses on their linear chain. No confusion. No context pollution. Just clear, deterministic progress.
-
-## Why Multiple Agents?
-
-Beyond the philosophical issues, traditional AI coding assistants hit practical limitations:
-- **Context windows overflow** on large codebases
-- **Knowledge gets lost** between conversations
-- **Single-threaded execution** creates bottlenecks
-- **No specialization** - one agent tries to do everything
-- **Constant rework** from lost context and confusion
-
-## The Multi-Agent Solution
-
-Agent-MCP transforms AI development from a single assistant to a coordinated team:
-
-<div align="center">
-  <img src="assets/images/dashboard-overview.png" alt="Multi-Agent Collaboration Network" width="800">
-</div>
-
-**Real-time visualization** shows your AI team at work - purple nodes represent context entries, blue nodes are agents, and connections show active collaborations. It's like having a mission control center for your development team.
-
-### Core Capabilities
-
-**Parallel Execution**  
-Multiple specialized agents work simultaneously on different parts of your codebase. Backend agents handle APIs while frontend agents build UI components, all coordinated through shared memory.
-
-**Persistent Knowledge Graph**  
-
-<div align="center">
-  <img src="assets/images/memory-bank.png" alt="Memory Bank Interface" width="800">
-</div>
-
-Your project's entire context lives in a searchable, persistent memory bank. Agents query this shared knowledge to understand requirements, architectural decisions, and implementation details. Nothing gets lost between sessions.
-
-**Intelligent Task Management**  
-
-<div align="center">
-  <img src="assets/images/agent-fleet.png" alt="Agent Fleet Management" width="800">
-</div>
-
-Monitor every agent's status, assigned tasks, and recent activity. The system automatically manages task dependencies, prevents conflicts, and ensures work flows smoothly from planning to implementation.
-
-## Quick Start
-
-```bash
-# Clone and setup
-git clone https://github.com/rinadelph/Agent-MCP.git
-cd Agent-MCP
-cp .env.example .env  # Add your OpenAI API key
-uv venv && uv pip install -e .
-
-# Start the server
-uv run -m agent_mcp.cli --project-dir /path/to/your/project
-
-# Launch dashboard (recommended for full experience)
-cd agent_mcp/dashboard && npm install && npm run dev
-```
 
 ## The 5-Step Workflow
 
