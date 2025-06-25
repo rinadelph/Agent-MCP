@@ -364,6 +364,11 @@ export function AgentsDashboard() {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
   const [taskDialogOpen, setTaskDialogOpen] = useState(false)
   
+  // Get filtered agents (only active or new agents)
+  const allAgents = data?.agents || []
+  const agents = getActiveAgents()
+  const isConnected = !!activeServerId && activeServer?.status === 'connected'
+
   // Fetch data on mount and when server changes
   useEffect(() => {
     if (activeServerId && activeServer?.status === 'connected') {
@@ -398,11 +403,6 @@ export function AgentsDashboard() {
 
     return () => clearInterval(cleanupInterval)
   }, [isConnected, getIdleAgentsForCleanup, refreshData])
-  
-  // Get filtered agents (only active or new agents)
-  const allAgents = data?.agents || []
-  const agents = getActiveAgents()
-  const isConnected = !!activeServerId && activeServer?.status === 'connected'
   
   
   const handleTaskClick = (task: Task) => {
