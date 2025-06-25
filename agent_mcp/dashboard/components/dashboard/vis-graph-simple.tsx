@@ -353,8 +353,26 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
       console.log('🏃 Physics simulation started')
     }
 
+    // Add resize observer for responsive sizing
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.target === containerRef.current && networkRef.current) {
+          console.log('📐 Container resized:', entry.contentRect.width, 'x', entry.contentRect.height)
+          // Redraw the network on resize
+          networkRef.current.redraw()
+          // Optionally fit to view after resize
+          setTimeout(() => {
+            networkRef.current?.fit({ animation: false })
+          }, 100)
+        }
+      }
+    })
+
+    resizeObserver.observe(containerRef.current)
+
     // Cleanup
     return () => {
+      resizeObserver.disconnect()
       network.destroy()
       networkRef.current = null
     }
@@ -388,9 +406,9 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
   }, [])
 
   return (
-    <div className={cn("relative w-full bg-background", fullscreen ? "h-full" : "h-[80vh] max-h-[800px] rounded-lg border")}>
+    <div className={cn("relative w-full bg-background", fullscreen ? "h-full" : "graph-container rounded-lg border")}>
       {/* Controls Bar */}
-      <div className="absolute top-2 sm:top-4 left-2 sm:left-4 right-2 sm:right-4 z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+      <div className="absolute top-[var(--space-fluid-sm)] left-[var(--space-fluid-sm)] right-[var(--space-fluid-sm)] z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-[var(--space-fluid-xs)]">
         {/* Left side - Layout controls */}
         <div className="flex flex-wrap items-center gap-2">
           <div className="bg-background/95 backdrop-blur rounded-lg border p-0.5 sm:p-1 flex gap-0.5 sm:gap-1">
@@ -476,7 +494,6 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
         <div 
           ref={containerRef} 
           className="w-full h-full bg-muted/20" 
-          style={{ minHeight: '400px' }}
           onMouseEnter={() => console.log('🖱️ Mouse entered graph container')}
         />
       )}

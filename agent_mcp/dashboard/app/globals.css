@@ -225,6 +225,58 @@
   }
 }
 
+/* Fluid Design System */
+@layer base {
+  :root {
+    /* Fluid spacing scale using clamp() */
+    --space-fluid-xs: clamp(0.25rem, 0.5vw, 0.5rem);
+    --space-fluid-sm: clamp(0.5rem, 1vw, 0.75rem);
+    --space-fluid-md: clamp(0.75rem, 1.5vw, 1rem);
+    --space-fluid-lg: clamp(1rem, 2vw, 1.5rem);
+    --space-fluid-xl: clamp(1.5rem, 3vw, 2.5rem);
+    --space-fluid-2xl: clamp(2rem, 4vw, 4rem);
+    --space-fluid-3xl: clamp(3rem, 6vw, 6rem);
+    
+    /* Fluid typography scale */
+    --text-fluid-xs: clamp(0.75rem, 0.8vw + 0.5rem, 0.875rem);
+    --text-fluid-sm: clamp(0.875rem, 0.9vw + 0.6rem, 1rem);
+    --text-fluid-base: clamp(1rem, 1vw + 0.75rem, 1.125rem);
+    --text-fluid-lg: clamp(1.125rem, 1.2vw + 0.9rem, 1.25rem);
+    --text-fluid-xl: clamp(1.25rem, 1.5vw + 1rem, 1.5rem);
+    --text-fluid-2xl: clamp(1.5rem, 2vw + 1.2rem, 2rem);
+    --text-fluid-3xl: clamp(1.875rem, 2.5vw + 1.5rem, 2.5rem);
+    --text-fluid-4xl: clamp(2.25rem, 3vw + 1.8rem, 3rem);
+    --text-fluid-5xl: clamp(3rem, 4vw + 2.4rem, 4rem);
+    
+    /* Responsive container padding */
+    --container-padding: clamp(1rem, 2vw, 3rem);
+    
+    /* Dynamic viewport units for better mobile support */
+    --vh: 1vh;
+    --vw: 1vw;
+  }
+  
+  /* Custom breakpoints for larger displays */
+  @media (min-width: 1920px) {
+    :root {
+      --container-padding: clamp(2rem, 3vw, 4rem);
+    }
+  }
+  
+  @media (min-width: 2560px) {
+    :root {
+      --container-padding: clamp(3rem, 4vw, 6rem);
+    }
+  }
+  
+  /* Ultra-wide display support */
+  @media (min-aspect-ratio: 21/9) {
+    :root {
+      --container-padding: clamp(2rem, 5vw, 8rem);
+    }
+  }
+}
+
 @layer components {
   /* Premium card styles with glassmorphism */
   .card-premium {
@@ -293,6 +345,51 @@
   .dark .status-warning {
     @apply bg-amber-950 text-amber-300 border border-amber-800;
   }
+  
+  /* Fluid container with responsive padding */
+  .fluid-container {
+    padding-left: var(--container-padding);
+    padding-right: var(--container-padding);
+    padding-top: var(--space-fluid-lg);
+    padding-bottom: var(--space-fluid-lg);
+  }
+  
+  /* Responsive graph container */
+  .graph-container {
+    min-height: clamp(400px, 50vh, 600px);
+    height: calc(100vh - 12rem);
+    max-height: calc(100vh - 8rem);
+  }
+  
+  @media (min-width: 768px) {
+    .graph-container {
+      height: calc(100vh - 10rem);
+      max-height: calc(100vh - 6rem);
+    }
+  }
+  
+  @media (min-width: 1920px) {
+    .graph-container {
+      height: calc(100vh - 8rem);
+      max-height: calc(100vh - 5rem);
+    }
+  }
+  
+  /* Ultra-wide specific styles */
+  @media (min-aspect-ratio: 21/9) {
+    .graph-container {
+      height: calc(100vh - 6rem);
+      max-height: none;
+    }
+  }
+  
+  /* High DPI display optimizations */
+  @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+    .graph-container {
+      image-rendering: crisp-edges;
+      -webkit-font-smoothing: antialiased;
+    }
+  }
 }
 
 @layer utilities {
@@ -323,6 +420,54 @@
       margin-left: 0;
     }
   }
+  
+  /* Responsive max-width container */
+  .responsive-max-width {
+    width: 100%;
+    max-width: 1536px; /* Default max-width */
+  }
+  
+  @media (min-width: 1920px) {
+    .responsive-max-width {
+      max-width: 1728px; /* 90% of 1920px */
+    }
+  }
+  
+  @media (min-width: 2560px) {
+    .responsive-max-width {
+      max-width: 2304px; /* 90% of 2560px */
+    }
+  }
+  
+  @media (min-width: 3840px) {
+    .responsive-max-width {
+      max-width: 3456px; /* 90% of 3840px (4K) */
+    }
+  }
+  
+  /* Ultra-wide specific max-width */
+  @media (min-aspect-ratio: 21/9) {
+    .responsive-max-width {
+      max-width: 85%; /* Percentage-based for ultra-wide */
+    }
+  }
+  
+  @media (min-aspect-ratio: 32/9) {
+    .responsive-max-width {
+      max-width: 75%; /* Even more constrained for super ultra-wide */
+    }
+  }
+  
+  /* Fluid text utilities */
+  .text-fluid-xs { font-size: var(--text-fluid-xs); }
+  .text-fluid-sm { font-size: var(--text-fluid-sm); }
+  .text-fluid-base { font-size: var(--text-fluid-base); }
+  .text-fluid-lg { font-size: var(--text-fluid-lg); }
+  .text-fluid-xl { font-size: var(--text-fluid-xl); }
+  .text-fluid-2xl { font-size: var(--text-fluid-2xl); }
+  .text-fluid-3xl { font-size: var(--text-fluid-3xl); }
+  .text-fluid-4xl { font-size: var(--text-fluid-4xl); }
+  .text-fluid-5xl { font-size: var(--text-fluid-5xl); }
 }
 
 @keyframes fadeIn {
