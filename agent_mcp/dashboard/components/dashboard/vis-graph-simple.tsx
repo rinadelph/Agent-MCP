@@ -196,22 +196,22 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
   
   // Track mounted state
   useEffect(() => {
-    console.log('🚀 VisGraph mounted with props:', { fullscreen })
     setIsMounted(true)
     return () => {
-      console.log('🔚 VisGraph unmounted')
       setIsMounted(false)
     }
   }, [])
 
-  // Convert API data to vis.js format
+  // Convert API data to vis.js format with smart diffing
   const convertToVisData = useCallback((graphData: any) => {
     if (!graphData || !graphData.nodes || !graphData.edges) {
       console.warn('Invalid graph data structure:', graphData)
       return
     }
 
-    console.log(`Converting ${graphData.nodes.length} nodes and ${graphData.edges.length} edges`)
+    // Get current nodes and edges
+    const currentNodeIds = new Set(nodesDataSetRef.current.getIds())
+    const currentEdgeIds = new Set(edgesDataSetRef.current.getIds())
 
     // Convert nodes
     const visNodes = graphData.nodes.map((node: any) => {
@@ -264,36 +264,80 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
       return edgeStyle
     })
 
-    // Update datasets
-    console.log('📝 Clearing and updating datasets...')
-    nodesDataSetRef.current.clear()
-    nodesDataSetRef.current.add(visNodes)
-    edgesDataSetRef.current.clear()
-    edgesDataSetRef.current.add(visEdges)
-    
-    console.log('✅ Datasets updated:')
-    console.log('  - Nodes in dataset:', nodesDataSetRef.current.length)
-    console.log('  - Edges in dataset:', edgesDataSetRef.current.length)
-    console.log('  - Sample nodes:', nodesDataSetRef.current.get().slice(0, 3))
+    // Smart update - only update what's changed
+    const newNodeIds = new Set(visNodes.map((n: any) => n.id))
+    const newEdgeIds = new Set(visEdges.map((e: any) => e.id))
+
+    // Find nodes to remove, update, and add
+    const nodesToRemove = Array.from(currentNodeIds).filter(id => !newNodeIds.has(id))
+    const nodesToUpdate: any[] = []
+    const nodesToAdd: any[] = []
+
+    visNodes.forEach((node: any) => {
+      if (currentNodeIds.has(node.id)) {
+        // Check if node has actually changed
+        const currentNode = nodesDataSetRef.current.get(node.id)
+        if (JSON.stringify(currentNode) !== JSON.stringify(node)) {
+          nodesToUpdate.push(node)
+        }
+      } else {
+        nodesToAdd.push(node)
+      }
+    })
+
+    // Find edges to remove, update, and add
+    const edgesToRemove = Array.from(currentEdgeIds).filter(id => !newEdgeIds.has(id))
+    const edgesToUpdate: any[] = []
+    const edgesToAdd: any[] = []
+
+    visEdges.forEach((edge: any) => {
+      if (currentEdgeIds.has(edge.id)) {
+        // Check if edge has actually changed
+        const currentEdge = edgesDataSetRef.current.get(edge.id)
+        if (JSON.stringify(currentEdge) !== JSON.stringify(edge)) {
+          edgesToUpdate.push(edge)
+        }
+      } else {
+        edgesToAdd.push(edge)
+      }
+    })
+
+    // Apply updates only if there are changes
+    if (nodesToRemove.length > 0) {
+      nodesDataSetRef.current.remove(nodesToRemove)
+    }
+    if (nodesToUpdate.length > 0) {
+      nodesDataSetRef.current.update(nodesToUpdate)
+    }
+    if (nodesToAdd.length > 0) {
+      nodesDataSetRef.current.add(nodesToAdd)
+    }
+
+    if (edgesToRemove.length > 0) {
+      edgesDataSetRef.current.remove(edgesToRemove)
+    }
+    if (edgesToUpdate.length > 0) {
+      edgesDataSetRef.current.update(edgesToUpdate)
+    }
+    if (edgesToAdd.length > 0) {
+      edgesDataSetRef.current.add(edgesToAdd)
+    }
 
     setNodeCount(visNodes.length)
     setEdgeCount(visEdges.length)
 
-    // Fit network to view
-    setTimeout(() => {
-      if (networkRef.current) {
-        networkRef.current.fit({ animation: true })
-        console.log('🎯 Fit to view executed')
-        const positions = networkRef.current.getPositions()
-        console.log('Network positions sample:', Object.keys(positions).slice(0, 3).map(id => ({ id, pos: positions[id] })))
-      } else {
-        console.error('❌ Network ref is null during fit!')
-      }
-    }, 100)
+    // Only fit to view if it's the first load or significant changes
+    if (currentNodeIds.size === 0 || nodesToAdd.length > 5) {
+      setTimeout(() => {
+        if (networkRef.current) {
+          networkRef.current.fit({ animation: true })
+        }
+      }, 100)
+    }
   }, [])
 
   // Fetch graph data
-  const fetchGraphData = useCallback(async () => {
+  const fetchGraphData = useCallback(async (isInitialLoad = false) => {
     if (!activeServerId || !activeServer || activeServer.status !== 'connected') {
       setError('No active server connection')
       setLoading(false)
@@ -301,7 +345,10 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
     }
 
     try {
-      setLoading(true)
+      // Only show loading on initial load
+      if (isInitialLoad || nodeCount === 0) {
+        setLoading(true)
+      }
       setError(null)
       
       const graphData = await apiClient.getGraphData()
@@ -310,12 +357,6 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
         throw new Error('No data received from server')
       }
       
-      console.log('📊 Graph data received:', {
-        nodes: graphData.nodes?.length || 0,
-        edges: graphData.edges?.length || 0,
-        sampleNode: graphData.nodes?.[0],
-        sampleEdge: graphData.edges?.[0]
-      })
       convertToVisData(graphData)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch graph data'
@@ -324,7 +365,7 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
     } finally {
       setLoading(false)
     }
-  }, [activeServerId, activeServer, convertToVisData])
+  }, [activeServerId, activeServer, convertToVisData, nodeCount])
 
   // Initialize vis.js network
   useEffect(() => {
@@ -334,24 +375,17 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
 
     // Small delay to ensure DOM is ready
     const initTimer = setTimeout(() => {
-      console.log('🔧 Initializing vis.js network...')
-      console.log('Container ref:', containerRef.current)
-      console.log('Container dimensions:', containerRef.current?.offsetWidth, 'x', containerRef.current?.offsetHeight)
-      
       if (!containerRef.current) {
-        console.warn('⚠️ Container ref is not ready yet')
         return
       }
 
       // Check if container has dimensions
       const { offsetWidth, offsetHeight } = containerRef.current
       if (offsetWidth === 0 || offsetHeight === 0) {
-        console.warn('⚠️ Container has no dimensions yet')
         return
       }
 
       const options = layoutMode === 'physics' ? physicsOptions : hierarchicalOptions
-      console.log('Layout mode:', layoutMode)
 
       const data = {
         nodes: nodesDataSetRef.current,
@@ -415,10 +449,10 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
 
   // Fetch data on mount and handle auto-refresh
   useEffect(() => {
-    fetchGraphData()
+    fetchGraphData(true) // Initial load
 
     if (autoRefresh) {
-      const interval = setInterval(fetchGraphData, 10000) // 10 seconds
+      const interval = setInterval(() => fetchGraphData(false), 30000) // 30 seconds, non-initial load
       return () => clearInterval(interval)
     }
   }, [fetchGraphData, autoRefresh])
@@ -498,7 +532,7 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
           <Button
             variant="outline"
             size="sm"
-            onClick={fetchGraphData}
+            onClick={() => fetchGraphData(true)}
             disabled={loading}
             className="bg-background/95 backdrop-blur h-7 sm:h-8 px-2 sm:px-3"
           >
@@ -520,7 +554,7 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
           <div className="text-center space-y-4">
             <Activity className="h-12 w-12 mx-auto text-destructive" />
             <p className="text-muted-foreground">{error}</p>
-            <Button onClick={fetchGraphData} variant="outline">
+            <Button onClick={() => fetchGraphData(true)} variant="outline">
               Retry
             </Button>
           </div>
