@@ -49,23 +49,30 @@ const AgentNode = ({ data, selected }: NodeProps) => {
   }
 
   return (
-    <div className={cn(
-      "px-4 py-3 rounded-lg border-2 bg-card transition-all",
-      selected ? "border-primary shadow-lg" : "border-border",
-      data.highlighted && "ring-2 ring-primary ring-offset-2"
-    )}>
-      <Handle type="target" position={Position.Top} className="w-3 h-3" />
-      <div className="flex items-center gap-2 min-w-[120px]">
-        <div className={cn("w-3 h-3 rounded-full", statusColors[data.status] || 'bg-gray-400')} />
+    <div 
+      className={cn(
+        "px-4 py-3 rounded-lg border-2 transition-all",
+        selected ? "border-primary shadow-lg" : "border-border"
+      )}
+      style={{
+        background: statusColors[data.status] === 'bg-green-500' ? '#4CAF50' : 
+                   statusColors[data.status] === 'bg-blue-500' ? '#2196F3' : '#9E9E9E',
+        color: 'white',
+        minWidth: '150px'
+      }}
+    >
+      <Handle type="target" position={Position.Top} style={{ background: '#555' }} />
+      <div className="flex items-center gap-2">
+        <div className="w-3 h-3 rounded-full bg-white/30" />
         <div>
           <div className="font-semibold text-sm">{data.label}</div>
-          <div className="text-xs text-muted-foreground">{data.status}</div>
-          {data.currentTask && (
-            <div className="text-xs text-primary mt-1">→ {data.currentTask}</div>
+          <div className="text-xs opacity-80">{data.status}</div>
+          {data.current_task && (
+            <div className="text-xs opacity-70 mt-1">→ {data.current_task}</div>
           )}
         </div>
       </div>
-      <Handle type="source" position={Position.Bottom} className="w-3 h-3" />
+      <Handle type="source" position={Position.Bottom} style={{ background: '#555' }} />
     </div>
   )
 }
@@ -86,31 +93,50 @@ const TaskNode = ({ data, selected }: NodeProps) => {
     low: 'text-blue-600 bg-blue-50'
   }
 
+  const getTaskColor = (status: string) => {
+    switch(status) {
+      case 'completed': return '#9E9E9E'
+      case 'cancelled': 
+      case 'failed': return '#FF9800'
+      case 'in_progress': return '#2196F3'
+      case 'pending': 
+      default: return '#FFC107'
+    }
+  }
+
   return (
-    <div className={cn(
-      "px-3 py-2 rounded-md border bg-card transition-all min-w-[200px]",
-      selected ? "border-primary shadow-lg" : "border-border",
-      data.highlighted && "ring-2 ring-primary ring-offset-2"
-    )}>
-      <Handle type="target" position={Position.Top} className="w-2 h-2" />
+    <div 
+      className={cn(
+        "px-3 py-2 rounded-md border transition-all",
+        selected ? "border-primary shadow-lg" : "border-gray-600"
+      )}
+      style={{
+        background: getTaskColor(data.status),
+        color: data.status === 'pending' ? '#333' : 'white',
+        minWidth: '200px',
+        borderWidth: '2px'
+      }}
+    >
+      <Handle type="target" position={Position.Top} style={{ background: '#555' }} />
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1">
           <div className="font-medium text-sm truncate">{data.label}</div>
-          <div className="flex items-center gap-1 mt-1">
-            <div className={cn("w-2 h-2 rounded-full", statusColors[data.status] || 'bg-gray-400')} />
-            <span className="text-xs text-muted-foreground">{data.status}</span>
-          </div>
+          <div className="text-xs opacity-80 mt-1">{data.status}</div>
         </div>
         {data.priority && (
-          <Badge variant="secondary" className={cn("text-xs px-1 py-0", priorityColors[data.priority])}>
+          <div className={cn(
+            "text-xs px-2 py-0.5 rounded",
+            data.priority === 'high' ? 'bg-red-900/50' : 
+            data.priority === 'medium' ? 'bg-yellow-900/50' : 'bg-blue-900/50'
+          )}>
             {data.priority}
-          </Badge>
+          </div>
         )}
       </div>
-      {data.assignedTo && (
-        <div className="text-xs text-muted-foreground mt-1">→ {data.assignedTo}</div>
+      {data.assigned_to && (
+        <div className="text-xs opacity-70 mt-1">→ {data.assigned_to}</div>
       )}
-      <Handle type="source" position={Position.Bottom} className="w-2 h-2" />
+      <Handle type="source" position={Position.Bottom} style={{ background: '#555' }} />
     </div>
   )
 }
@@ -609,7 +635,7 @@ export function SystemGraph() {
   }
 
   return (
-    <Card className="h-full">
+    <Card className="h-[700px] flex flex-col">
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
@@ -646,8 +672,8 @@ export function SystemGraph() {
           </div>
         </div>
       </CardHeader>
-      <CardContent className="p-0">
-        <Tabs defaultValue="graph" className="h-full">
+      <CardContent className="p-0 flex-grow">
+        <Tabs defaultValue="graph" className="h-full flex flex-col">
           <TabsList className="w-full rounded-none border-b">
             <TabsTrigger value="graph" className="flex-1">
               <Workflow className="h-4 w-4 mr-2" />
@@ -659,7 +685,7 @@ export function SystemGraph() {
             </TabsTrigger>
           </TabsList>
           
-          <TabsContent value="graph" className="h-[600px] m-0 relative overflow-hidden">
+          <TabsContent value="graph" className="flex-grow m-0 relative overflow-hidden">
             <ReactFlowProvider>
               <div className="absolute inset-0" style={{ width: '100%', height: '100%' }}>
                 <ReactFlow

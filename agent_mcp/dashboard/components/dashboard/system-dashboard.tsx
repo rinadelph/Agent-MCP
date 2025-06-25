@@ -1,7 +1,7 @@
 "use client"
 
 import React from "react"
-import { SystemGraph } from "./system-graph"
+import { VisGraph } from "./vis-graph"
 import { TestGraph } from "./test-graph"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -240,7 +240,7 @@ export function SystemDashboard() {
         </TabsList>
 
         <TabsContent value="graph" className="space-y-4">
-          <SystemGraph />
+          <VisGraph />
         </TabsContent>
         
         <TabsContent value="test" className="space-y-4">
