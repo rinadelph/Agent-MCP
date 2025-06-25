@@ -18,7 +18,7 @@ export function TaskDetailsDialog({ task, open, onOpenChange }: TaskDetailsDialo
   if (!task) return null
 
   // Helper function to parse JSON fields safely
-  const parseJsonField = (field: any): any[] => {
+  const parseJsonField = (field: unknown): unknown[] => {
     if (!field) return []
     if (Array.isArray(field)) return field
     if (typeof field === 'string') {

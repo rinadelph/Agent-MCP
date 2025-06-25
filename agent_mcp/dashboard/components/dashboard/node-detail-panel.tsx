@@ -11,12 +11,33 @@ import { apiClient, Agent, Task } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useDataStore } from '@/lib/stores/data-store'
 
+interface ContextData {
+  id: string;
+  type: string;
+  content?: string;
+  metadata?: Record<string, unknown>;
+}
+
+interface FileData {
+  id: string;
+  name: string;
+  path?: string;
+  content?: string;
+}
+
+interface AdminData {
+  token?: string;
+  permissions?: string[];
+}
+
+type NodeData = Agent | Task | ContextData | FileData | AdminData;
+
 interface NodeDetailPanelProps {
   nodeId: string | null
   nodeType: 'agent' | 'task' | 'context' | 'file' | 'admin' | null
   isOpen: boolean
   onClose: () => void
-  nodeData?: any
+  nodeData?: NodeData
 }
 
 const statusIcons = {
@@ -47,7 +68,7 @@ const priorityColors = {
 
 export function NodeDetailPanel({ nodeId, nodeType, isOpen, onClose, nodeData }: NodeDetailPanelProps) {
   const [loading, setLoading] = useState(false)
-  const [details, setDetails] = useState<Agent | Task | any | null>(null)
+  const [details, setDetails] = useState<NodeData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const { data, fetchAllData, getAgent, getTask, getContext, getAdminToken } = useDataStore()
 
@@ -427,7 +448,7 @@ export function NodeDetailPanel({ nodeId, nodeType, isOpen, onClose, nodeData }:
     )
   }
 
-  const renderContextDetails = (context: any) => {
+  const renderContextDetails = (context: ContextData) => {
     return (
       <>
         {/* Header */}

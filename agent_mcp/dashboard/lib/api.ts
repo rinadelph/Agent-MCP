@@ -54,6 +54,34 @@ export interface GraphEdge {
   [key: string]: unknown
 }
 
+export interface Memory {
+  context_key: string
+  value: any
+  description?: string
+  last_updated: string
+  updated_by: string
+  _metadata?: {
+    size_bytes: number
+    size_kb: number
+    json_valid: boolean
+    days_old?: number
+    is_stale: boolean
+    is_large: boolean
+  }
+}
+
+export interface MemoryHealthAnalysis {
+  status: 'excellent' | 'good' | 'needs_attention' | 'critical' | 'no_data'
+  health_score: number
+  total: number
+  stale_entries: number
+  json_errors: number
+  large_entries: number
+  issues: string[]
+  warnings: string[]
+  recommendations: string[]
+}
+
 export interface SystemStatus {
   server_running: boolean
   total_agents: number
@@ -241,6 +269,76 @@ class ApiClient {
     return this.request(`/node-details?node_id=${encodeURIComponent(nodeId)}`)
   }
 
+  // Memory endpoints
+  async getMemories(options?: {
+    context_key?: string
+    search_query?: string
+    show_health_analysis?: boolean
+    show_stale_entries?: boolean
+    max_results?: number
+    sort_by?: 'key' | 'last_updated' | 'size'
+  }): Promise<Memory[]> {
+    // Note: This would require implementing MCP tool calls via the backend
+    // For now, we'll use the context data from getAllData
+    const allData = await this.getAllData()
+    return allData.context.map(ctx => ({
+      context_key: ctx.context_key,
+      value: ctx.value,
+      description: ctx.description,
+      last_updated: ctx.last_updated,
+      updated_by: ctx.updated_by,
+      _metadata: {
+        size_bytes: JSON.stringify(ctx.value).length,
+        size_kb: Math.round(JSON.stringify(ctx.value).length / 1024 * 100) / 100,
+        json_valid: true,
+        days_old: ctx.last_updated ? Math.floor((Date.now() - new Date(ctx.last_updated).getTime()) / (1000 * 60 * 60 * 24)) : undefined,
+        is_stale: ctx.last_updated ? (Date.now() - new Date(ctx.last_updated).getTime()) > (30 * 24 * 60 * 60 * 1000) : false,
+        is_large: JSON.stringify(ctx.value).length > 10240
+      }
+    }))
+  }
+
+  async createMemory(data: {
+    context_key: string
+    context_value: any
+    description?: string
+    token: string
+  }): Promise<{ success: boolean; message: string }> {
+    // This would need to be implemented as an MCP tool call
+    return this.request('/memories', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    })
+  }
+
+  async updateMemory(context_key: string, data: {
+    context_value: any
+    description?: string
+    token: string
+  }): Promise<{ success: boolean; message: string }> {
+    // This would need to be implemented as an MCP tool call
+    return this.request(`/memories/${encodeURIComponent(context_key)}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    })
+  }
+
+  async deleteMemory(context_key: string, token: string): Promise<{ success: boolean; message: string }> {
+    // This would need to be implemented as an MCP tool call
+    return this.request(`/memories/${encodeURIComponent(context_key)}`, {
+      method: 'DELETE',
+      body: JSON.stringify({ token })
+    })
+  }
+
+  async getMemoryHealth(token: string): Promise<MemoryHealthAnalysis> {
+    // This would need to be implemented as an MCP tool call
+    return this.request('/memories/health', {
+      method: 'POST',
+      body: JSON.stringify({ token, show_health_analysis: true })
+    })
+  }
+
   // Real-time updates via Server-Sent Events
   createEventSource(endpoint: string): EventSource {
     return new EventSource(`${this.baseUrl}/api${endpoint}`)
@@ -264,6 +362,9 @@ export const queryKeys = {
   agent: (id: string) => ['agents', id] as const,
   tasks: ['tasks'] as const,
   task: (id: string) => ['tasks', id] as const,
+  memories: ['memories'] as const,
+  memory: (key: string) => ['memories', key] as const,
+  memoryHealth: ['memories', 'health'] as const,
   tokens: ['tokens'] as const,
   nodeDetails: (id: string) => ['node-details', id] as const,
 } as const

@@ -18,7 +18,7 @@ export function OverviewDashboard() {
   // Selected node state for detail panel
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [selectedNodeType, setSelectedNodeType] = useState<'agent' | 'task' | 'context' | 'file' | 'admin' | null>(null)
-  const [selectedNodeData, setSelectedNodeData] = useState<any>(null)
+  const [selectedNodeData, setSelectedNodeData] = useState<unknown>(null)
   const [isPanelOpen, setIsPanelOpen] = useState(false)
   
   useEffect(() => {
@@ -26,7 +26,7 @@ export function OverviewDashboard() {
     if (activeServerId && activeServer?.status === 'connected') {
       fetchAllData()
     }
-  }, [activeServerId, activeServer?.status])
+  }, [activeServerId, activeServer?.status, fetchAllData])
   
   const isConnected = !!activeServerId && activeServer?.status === 'connected'
 

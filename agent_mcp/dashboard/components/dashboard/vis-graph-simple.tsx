@@ -212,12 +212,12 @@ interface VisGraphProps {
 
 export function VisGraph({ 
   fullscreen = false, 
-  selectedNodeId, 
-  selectedNodeType, 
-  selectedNodeData, 
-  isPanelOpen, 
+  selectedNodeId: _selectedNodeId, 
+  selectedNodeType: _selectedNodeType, 
+  selectedNodeData: _selectedNodeData, 
+  isPanelOpen: _isPanelOpen, 
   onNodeSelect, 
-  onClosePanel 
+  onClosePanel: _onClosePanel 
 }: VisGraphProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const networkRef = useRef<Network | null>(null)

@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
@@ -78,6 +78,9 @@ export function GraphSettingsPanel({ onSettingsChange, isOpen, onClose }: GraphS
   const [settings, setSettings] = useState<GraphSettings>(DEFAULT_SETTINGS)
   const [hasChanges, setHasChanges] = useState(false)
 
+  // Stable callback reference
+  const stableOnSettingsChange = useCallback(onSettingsChange, [onSettingsChange])
+  
   // Load saved settings on mount
   useEffect(() => {
     const saved = localStorage.getItem('graphSettings')
@@ -85,12 +88,12 @@ export function GraphSettingsPanel({ onSettingsChange, isOpen, onClose }: GraphS
       try {
         const parsed = JSON.parse(saved)
         setSettings(parsed)
-        onSettingsChange(parsed)
+        stableOnSettingsChange(parsed)
       } catch (e) {
         console.error('Failed to load saved settings:', e)
       }
     }
-  }, [])
+  }, [stableOnSettingsChange])
 
   const updateSetting = (category: keyof GraphSettings, key: string, value: number) => {
     const newSettings = {
