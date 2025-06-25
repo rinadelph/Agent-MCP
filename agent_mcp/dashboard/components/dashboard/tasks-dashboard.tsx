@@ -1,10 +1,10 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useCallback, useMemo } from "react"
 import { 
   CheckSquare, Clock, AlertCircle, Users, Hash, Calendar, Tag,
   Search, Filter, Plus, MoreVertical, Eye, ChevronDown, Play, Pause,
-  ArrowUp, ArrowDown, Minus, CheckCircle2, Target, Zap, GitBranch
+  ArrowUp, ArrowDown, Minus, CheckCircle2, Target, Zap, GitBranch, RefreshCw
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -17,7 +17,12 @@ import { apiClient, Task } from "@/lib/api"
 import { useServerStore } from "@/lib/stores/server-store"
 import { cn } from "@/lib/utils"
 
-// Real data hook for tasks
+// Cache for tasks data
+const tasksCache = new Map<string, { data: Task[], timestamp: number }>()
+const CACHE_DURATION = 30000 // 30 seconds
+const REFRESH_INTERVAL = 60000 // 1 minute for background refresh
+
+// Real data hook for tasks with caching
 const useTasksData = () => {
   const { activeServerId, servers } = useServerStore()
   const activeServer = servers.find(s => s.id === activeServerId)
@@ -25,44 +30,82 @@ const useTasksData = () => {
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [lastFetch, setLastFetch] = useState<number>(0)
 
-  useEffect(() => {
+  const fetchData = useCallback(async (forceRefresh = false) => {
     if (!activeServerId || !activeServer || activeServer.status !== 'connected') {
-      setLoading(false)
-      setError(null)
       setTasks([])
+      setError(null)
+      setLoading(false)
       return
     }
 
-    const fetchData = async () => {
-      setLoading(true)
-      try {
-        const tasksData = await apiClient.getTasks()
-        setTasks(tasksData)
-        setError(null)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch tasks')
-        console.error('Error fetching tasks:', err)
-      } finally {
-        setLoading(false)
-      }
+    const cacheKey = `${activeServerId}-tasks`
+    const now = Date.now()
+    const cached = tasksCache.get(cacheKey)
+
+    // Use cache if it's fresh and not forcing refresh
+    if (!forceRefresh && cached && (now - cached.timestamp) < CACHE_DURATION) {
+      setTasks(cached.data)
+      setError(null)
+      setLoading(false)
+      return
     }
 
-    fetchData()
-    const interval = setInterval(fetchData, 5000) // Update every 5 seconds
-    return () => clearInterval(interval)
-  }, [activeServerId, activeServer])
+    // Only show loading on first fetch or force refresh
+    if (tasks.length === 0 || forceRefresh) {
+      setLoading(true)
+    }
 
-  return { tasks, loading, error, isConnected: !!activeServerId && activeServer?.status === 'connected' }
+    try {
+      const tasksData = await apiClient.getTasks()
+      
+      // Update cache
+      tasksCache.set(cacheKey, { data: tasksData, timestamp: now })
+      
+      setTasks(tasksData)
+      setError(null)
+      setLastFetch(now)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch tasks')
+      console.error('Error fetching tasks:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [activeServerId, activeServer, tasks.length])
+
+  useEffect(() => {
+    fetchData()
+
+    // Background refresh - less frequent and doesn't show loading
+    const interval = setInterval(() => {
+      fetchData(false)
+    }, REFRESH_INTERVAL)
+
+    return () => clearInterval(interval)
+  }, [fetchData])
+
+  // Manual refresh function
+  const refresh = useCallback(() => fetchData(true), [fetchData])
+
+  // Memoize return value to prevent unnecessary re-renders
+  return useMemo(() => ({
+    tasks, 
+    loading, 
+    error, 
+    refresh,
+    lastFetch,
+    isConnected: !!activeServerId && activeServer?.status === 'connected' 
+  }), [tasks, loading, error, refresh, lastFetch, activeServerId, activeServer])
 }
 
 const StatusDot = ({ status }: { status: Task['status'] }) => {
   const config = {
-    in_progress: "bg-teal-400 shadow-teal-400/50 shadow-md animate-pulse",
-    pending: "bg-amber-400 shadow-amber-400/50 shadow-md",
-    completed: "bg-emerald-400 shadow-emerald-400/50 shadow-md",
-    cancelled: "bg-slate-500 shadow-slate-500/50 shadow-md",
-    failed: "bg-orange-400 shadow-orange-400/50 shadow-md animate-pulse",
+    in_progress: "bg-primary shadow-primary/50 shadow-md animate-pulse",
+    pending: "bg-warning shadow-warning/50 shadow-md",
+    completed: "bg-success shadow-success/50 shadow-md",
+    cancelled: "bg-muted-foreground shadow-muted-foreground/50 shadow-md",
+    failed: "bg-destructive shadow-destructive/50 shadow-md animate-pulse",
   }
   
   return (
@@ -75,12 +118,13 @@ const StatusDot = ({ status }: { status: Task['status'] }) => {
 
 const PriorityIcon = ({ priority }: { priority: Task['priority'] }) => {
   const config = {
-    high: { icon: ArrowUp, className: "text-orange-400" },
-    medium: { icon: Minus, className: "text-amber-400" },
-    low: { icon: ArrowDown, className: "text-slate-400" },
+    high: { icon: ArrowUp, className: "text-destructive" },
+    medium: { icon: Minus, className: "text-warning" },
+    low: { icon: ArrowDown, className: "text-muted-foreground" },
   }
   
-  const { icon: Icon, className } = config[priority]
+  const configItem = config[priority] || config.medium // fallback to medium if priority is undefined
+  const { icon: Icon, className } = configItem
   return <Icon className={cn("h-4 w-4", className)} />
 }
 
@@ -102,14 +146,14 @@ const CompactTaskRow = ({ task }: { task: Task }) => {
   }
 
   return (
-    <TableRow className="border-slate-800/50 hover:bg-slate-900/30 group transition-colors">
+    <TableRow className="border-border/50 hover:bg-muted/30 group transition-colors">
       <TableCell className="py-3">
         <div className="flex items-center gap-3">
           <StatusDot status={task.status} />
           <PriorityIcon priority={task.priority} />
           <div className="min-w-0 flex-1">
-            <div className="font-medium text-sm text-white truncate">{task.title}</div>
-            <div className="text-xs text-slate-500 font-mono">#{task.task_id.slice(-6)}</div>
+            <div className="font-medium text-sm text-foreground truncate">{task.title}</div>
+            <div className="text-xs text-muted-foreground font-mono">#{task.task_id.slice(-6)}</div>
           </div>
         </div>
       </TableCell>
@@ -119,11 +163,11 @@ const CompactTaskRow = ({ task }: { task: Task }) => {
           variant="outline" 
           className={cn(
             "text-xs font-semibold border-0 px-3 py-1.5 rounded-md",
-            task.status === 'in_progress' && "bg-teal-500/15 text-teal-300 ring-1 ring-teal-500/20",
-            task.status === 'pending' && "bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/20",
-            task.status === 'completed' && "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/20",
-            task.status === 'cancelled' && "bg-slate-500/15 text-slate-300 ring-1 ring-slate-500/20",
-            task.status === 'failed' && "bg-orange-500/15 text-orange-300 ring-1 ring-orange-500/20"
+            task.status === 'in_progress' && "bg-primary/15 text-primary ring-1 ring-primary/20",
+            task.status === 'pending' && "bg-warning/15 text-warning ring-1 ring-warning/20",
+            task.status === 'completed' && "bg-success/15 text-success ring-1 ring-success/20",
+            task.status === 'cancelled' && "bg-muted/50 text-muted-foreground ring-1 ring-border",
+            task.status === 'failed' && "bg-destructive/15 text-destructive ring-1 ring-destructive/20"
           )}
         >
           {task.status.replace('_', ' ').toUpperCase()}
@@ -131,11 +175,11 @@ const CompactTaskRow = ({ task }: { task: Task }) => {
       </TableCell>
       
       <TableCell className="py-3 max-w-xs">
-        <div className="text-sm text-slate-300 truncate">
+        <div className="text-sm text-foreground truncate">
           {task.description || "No description"}
         </div>
         {task.assigned_to && (
-          <div className="text-xs text-slate-500 mt-1 flex items-center gap-1">
+          <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
             <Users className="h-3 w-3" />
             {task.assigned_to}
           </div>
@@ -147,9 +191,9 @@ const CompactTaskRow = ({ task }: { task: Task }) => {
           variant="outline" 
           className={cn(
             "text-xs font-medium px-2 py-0.5",
-            task.priority === 'high' && "bg-orange-500/10 text-orange-300 border-orange-500/20",
-            task.priority === 'medium' && "bg-amber-500/10 text-amber-300 border-amber-500/20",
-            task.priority === 'low' && "bg-slate-500/10 text-slate-300 border-slate-500/20"
+            task.priority === 'high' && "bg-destructive/10 text-destructive border-destructive/20",
+            task.priority === 'medium' && "bg-warning/10 text-warning border-warning/20",
+            task.priority === 'low' && "bg-muted/50 text-muted-foreground border-border"
           )}
         >
           {task.priority.toUpperCase()}
@@ -159,20 +203,20 @@ const CompactTaskRow = ({ task }: { task: Task }) => {
       <TableCell className="py-3">
         <div className="flex flex-wrap gap-1">
           {task.parent_task && (
-            <Badge variant="outline" className="text-xs px-2 py-0.5 bg-purple-500/10 text-purple-300 border-purple-500/20">
+            <Badge variant="outline" className="text-xs px-2 py-0.5 bg-accent/10 text-accent-foreground border-accent/20">
               <GitBranch className="h-3 w-3 mr-1" />
               Subtask
             </Badge>
           )}
           {task.child_tasks && task.child_tasks.length > 0 && (
-            <Badge variant="outline" className="text-xs px-2 py-0.5 bg-blue-500/10 text-blue-300 border-blue-500/20">
+            <Badge variant="outline" className="text-xs px-2 py-0.5 bg-info/10 text-info border-info/20">
               {task.child_tasks.length} children
             </Badge>
           )}
         </div>
       </TableCell>
       
-      <TableCell className="py-3 text-xs text-slate-500 font-mono">
+      <TableCell className="py-3 text-xs text-muted-foreground font-mono">
         {formatDate(task.updated_at)}
       </TableCell>
       
@@ -181,7 +225,7 @@ const CompactTaskRow = ({ task }: { task: Task }) => {
           <Button 
             variant="ghost" 
             size="sm" 
-            className="h-7 w-7 p-0 text-slate-400 hover:text-white hover:bg-slate-800"
+            className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground hover:bg-muted"
           >
             <Eye className="h-3.5 w-3.5" />
           </Button>
@@ -189,7 +233,7 @@ const CompactTaskRow = ({ task }: { task: Task }) => {
             <Button 
               variant="ghost" 
               size="sm" 
-              className="h-7 w-7 p-0 text-teal-400 hover:text-teal-300 hover:bg-teal-500/10"
+              className="h-7 w-7 p-0 text-primary hover:text-primary/80 hover:bg-primary/10"
             >
               <Play className="h-3.5 w-3.5" />
             </Button>
@@ -198,7 +242,7 @@ const CompactTaskRow = ({ task }: { task: Task }) => {
             <Button 
               variant="ghost" 
               size="sm" 
-              className="h-7 w-7 p-0 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
+              className="h-7 w-7 p-0 text-warning hover:text-warning/80 hover:bg-warning/10"
             >
               <Pause className="h-3.5 w-3.5" />
             </Button>
@@ -206,7 +250,7 @@ const CompactTaskRow = ({ task }: { task: Task }) => {
           <Button 
             variant="ghost" 
             size="sm" 
-            className="h-7 w-7 p-0 text-slate-400 hover:text-white hover:bg-slate-800"
+            className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground hover:bg-muted"
           >
             <MoreVertical className="h-3.5 w-3.5" />
           </Button>
@@ -223,20 +267,20 @@ const StatsCard = ({ icon: Icon, label, value, change, trend }: {
   change?: string
   trend?: 'up' | 'down' | 'neutral'
 }) => (
-  <div className="bg-slate-900/60 border border-slate-800/60 rounded-xl p-5 backdrop-blur-sm hover:bg-slate-900/80 transition-all duration-200 group">
+  <div className="bg-card/80 border border-border/60 rounded-xl p-5 backdrop-blur-sm hover:bg-card transition-all duration-200 group">
     <div className="flex items-center justify-between">
       <div>
         <div className="flex items-center gap-2 mb-2">
-          <Icon className="h-4 w-4 text-slate-400 group-hover:text-slate-300 transition-colors" />
-          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{label}</span>
+          <Icon className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{label}</span>
         </div>
-        <div className="text-2xl font-bold text-white mb-1">{value}</div>
+        <div className="text-2xl font-bold text-foreground mb-1">{value}</div>
         {change && (
           <div className={cn(
             "text-xs font-medium",
-            trend === 'up' && "text-teal-400",
-            trend === 'down' && "text-orange-400",
-            trend === 'neutral' && "text-slate-400"
+            trend === 'up' && "text-primary",
+            trend === 'down' && "text-destructive",
+            trend === 'neutral' && "text-muted-foreground"
           )}>
             {change}
           </div>
@@ -273,52 +317,52 @@ const CreateTaskModal = ({ onCreateTask }: { onCreateTask: (data: any) => void }
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" className="bg-teal-600 hover:bg-teal-700 text-white shadow-lg hover:shadow-teal-500/25 transition-all duration-200">
+        <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-primary/25 transition-all duration-200">
           <Plus className="h-4 w-4 mr-1.5" />
           Create Task
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md bg-slate-900 border-slate-800 text-white">
+      <DialogContent className="sm:max-w-md bg-card border-border text-card-foreground">
         <DialogHeader>
           <DialogTitle className="text-lg">Create Task</DialogTitle>
-          <DialogDescription className="text-slate-400">
+          <DialogDescription className="text-muted-foreground">
             Define a new task for the system to execute.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="text-xs font-medium text-slate-400 uppercase tracking-wider block mb-2">
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider block mb-2">
               Task Title
             </label>
             <Input
               value={formData.title}
               onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
               placeholder="Analyze dataset and generate report"
-              className="bg-slate-800 border-slate-700 text-white"
+              className="bg-background border-border text-foreground"
               required
             />
           </div>
           <div>
-            <label className="text-xs font-medium text-slate-400 uppercase tracking-wider block mb-2">
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider block mb-2">
               Description
             </label>
             <Textarea
               value={formData.description}
               onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
               placeholder="Detailed task requirements and objectives..."
-              className="bg-slate-800 border-slate-700 text-white h-20 resize-none"
+              className="bg-background border-border text-foreground h-20 resize-none"
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-xs font-medium text-slate-400 uppercase tracking-wider block mb-2">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider block mb-2">
                 Priority
               </label>
               <Select value={formData.priority} onValueChange={(value: Task['priority']) => setFormData(prev => ({ ...prev, priority: value }))}>
-                <SelectTrigger className="bg-slate-800 border-slate-700 text-white">
+                <SelectTrigger className="bg-background border-border text-foreground">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-slate-900 border-slate-800">
+                <SelectContent className="bg-background border-border">
                   <SelectItem value="low">Low</SelectItem>
                   <SelectItem value="medium">Medium</SelectItem>
                   <SelectItem value="high">High</SelectItem>
@@ -326,14 +370,14 @@ const CreateTaskModal = ({ onCreateTask }: { onCreateTask: (data: any) => void }
               </Select>
             </div>
             <div>
-              <label className="text-xs font-medium text-slate-400 uppercase tracking-wider block mb-2">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider block mb-2">
                 Assign To
               </label>
               <Input
                 value={formData.assigned_to}
                 onChange={(e) => setFormData(prev => ({ ...prev, assigned_to: e.target.value }))}
                 placeholder="agent-01"
-                className="bg-slate-800 border-slate-700 text-white font-mono text-sm"
+                className="bg-background border-border text-foreground font-mono text-sm"
               />
             </div>
           </div>
@@ -341,7 +385,7 @@ const CreateTaskModal = ({ onCreateTask }: { onCreateTask: (data: any) => void }
             <Button type="button" variant="outline" onClick={() => setOpen(false)} size="sm">
               Cancel
             </Button>
-            <Button type="submit" size="sm" className="bg-teal-600 hover:bg-teal-700 shadow-lg hover:shadow-teal-500/25 transition-all">
+            <Button type="submit" size="sm" className="bg-primary hover:bg-primary/90 shadow-lg hover:shadow-primary/25 transition-all">
               Create Task
             </Button>
           </DialogFooter>
@@ -352,45 +396,51 @@ const CreateTaskModal = ({ onCreateTask }: { onCreateTask: (data: any) => void }
 }
 
 export function TasksDashboard() {
-  const { tasks, loading, error, isConnected } = useTasksData()
+  const { tasks, loading, error, refresh, lastFetch, isConnected } = useTasksData()
   const { servers, activeServerId } = useServerStore()
   const activeServer = servers.find(s => s.id === activeServerId)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [priorityFilter, setPriorityFilter] = useState<string>('all')
 
-  const filteredTasks = tasks.filter(task => {
-    const matchesSearch = task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         (task.description && task.description.toLowerCase().includes(searchTerm.toLowerCase()))
-    const matchesStatus = statusFilter === 'all' || task.status === statusFilter
-    const matchesPriority = priorityFilter === 'all' || task.priority === priorityFilter
-    return matchesSearch && matchesStatus && matchesPriority
-  })
+  // Memoize filtered tasks to prevent unnecessary recalculations
+  const filteredTasks = useMemo(() => {
+    return tasks.filter(task => {
+      const matchesSearch = task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           (task.description && task.description.toLowerCase().includes(searchTerm.toLowerCase()))
+      const matchesStatus = statusFilter === 'all' || task.status === statusFilter
+      const matchesPriority = priorityFilter === 'all' || task.priority === priorityFilter
+      return matchesSearch && matchesStatus && matchesPriority
+    })
+  }, [tasks, searchTerm, statusFilter, priorityFilter])
 
-  const stats = {
+  // Memoize stats calculation
+  const stats = useMemo(() => ({
     total: tasks.length,
     in_progress: tasks.filter(t => t.status === 'in_progress').length,
     pending: tasks.filter(t => t.status === 'pending').length,
     completed: tasks.filter(t => t.status === 'completed').length,
     failed: tasks.filter(t => t.status === 'failed').length,
-  }
+  }), [tasks])
 
-  const handleCreateTask = async (data: any) => {
+  const handleCreateTask = useCallback(async (data: any) => {
     try {
       await apiClient.createTask(data)
+      // Refresh tasks after creating a new one
+      refresh()
     } catch (error) {
       console.error('Failed to create task:', error)
     }
-  }
+  }, [refresh])
 
   if (!isConnected) {
     return (
       <div className="h-full flex items-center justify-center">
         <div className="text-center space-y-4">
-          <CheckSquare className="h-12 w-12 text-slate-600 mx-auto" />
+          <CheckSquare className="h-12 w-12 text-muted-foreground mx-auto" />
           <div>
-            <h3 className="text-lg font-medium text-white mb-2">No Server Connection</h3>
-            <p className="text-slate-400 text-sm">Connect to an MCP server to manage tasks</p>
+            <h3 className="text-lg font-medium text-foreground mb-2">No Server Connection</h3>
+            <p className="text-muted-foreground text-sm">Connect to an MCP server to manage tasks</p>
           </div>
         </div>
       </div>
@@ -401,8 +451,8 @@ export function TasksDashboard() {
     return (
       <div className="h-full flex items-center justify-center">
         <div className="text-center space-y-4">
-          <div className="animate-spin h-8 w-8 border-2 border-teal-500 border-t-transparent rounded-full mx-auto" />
-          <p className="text-slate-400 text-sm">Loading tasks...</p>
+          <div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full mx-auto" />
+          <p className="text-muted-foreground text-sm">Loading tasks...</p>
         </div>
       </div>
     )
@@ -412,10 +462,10 @@ export function TasksDashboard() {
     return (
       <div className="h-full flex items-center justify-center">
         <div className="text-center space-y-4">
-          <AlertCircle className="h-12 w-12 text-orange-500 mx-auto" />
+          <AlertCircle className="h-12 w-12 text-destructive mx-auto" />
           <div>
-            <h3 className="text-lg font-medium text-white mb-2">Connection Error</h3>
-            <p className="text-orange-400 text-sm">{error}</p>
+            <h3 className="text-lg font-medium text-foreground mb-2">Connection Error</h3>
+            <p className="text-destructive text-sm">{error}</p>
           </div>
         </div>
       </div>
@@ -435,6 +485,21 @@ export function TasksDashboard() {
             <div className="w-2 h-2 bg-teal-400 rounded-full mr-2 animate-pulse" />
             {activeServer?.name}
           </Badge>
+          {lastFetch > 0 && (
+            <span className="text-xs text-muted-foreground">
+              Last updated: {new Date(lastFetch).toLocaleTimeString()}
+            </span>
+          )}
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={refresh}
+            disabled={loading}
+            className="text-xs"
+          >
+            <RefreshCw className={cn("h-3.5 w-3.5 mr-1.5", loading && "animate-spin")} />
+            Refresh
+          </Button>
           <CreateTaskModal onCreateTask={handleCreateTask} />
         </div>
       </div>
