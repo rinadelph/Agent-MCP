@@ -1,19 +1,56 @@
 "use client"
 
-import React from "react"
-import { Server, Wifi, WifiOff, Plus } from "lucide-react"
+import React, { useEffect, useState } from "react"
+import { Server, Wifi, WifiOff, Plus, RefreshCw, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { useServerStore } from "@/lib/stores/server-store"
 import { ProjectPicker } from "./project-picker"
+import { ManualServerInput } from "./manual-server-input"
+import { config } from "@/lib/config"
 
 export function ServerConnection() {
-  const { servers, activeServerId, setActiveServer } = useServerStore()
+  const { 
+    servers, 
+    activeServerId, 
+    setActiveServer, 
+    autoDetectServers, 
+    clearPersistedData,
+    isConnecting 
+  } = useServerStore()
   const activeServer = servers.find(s => s.id === activeServerId)
+  const [isDetecting, setIsDetecting] = useState(false)
 
   const connectedServers = servers.filter(s => s.status === 'connected')
   const disconnectedServers = servers.filter(s => s.status !== 'connected')
+
+  // Auto-detect servers on mount if enabled and no active server
+  useEffect(() => {
+    if (config.autoDetect.enabled && !activeServerId && !isConnecting) {
+      handleAutoDetect()
+    }
+  }, [])
+
+  const handleAutoDetect = async () => {
+    setIsDetecting(true)
+    try {
+      const detectedServer = await autoDetectServers()
+      if (detectedServer && config.autoDetect.enabled) {
+        await setActiveServer(detectedServer.id)
+      }
+    } catch (error) {
+      console.error('Auto-detection failed:', error)
+    } finally {
+      setIsDetecting(false)
+    }
+  }
+
+  const handleClearData = () => {
+    if (confirm('This will clear all saved server configurations and reset to defaults. Continue?')) {
+      clearPersistedData()
+    }
+  }
 
   return (
     <div className="min-h-[60vh] flex items-center justify-center p-8">
@@ -119,11 +156,8 @@ export function ServerConnection() {
             Add New Server
           </h3>
           <Card className="border-dashed border-2 border-muted-foreground/20 hover:border-muted-foreground/40 transition-colors">
-            <CardContent className="p-6 text-center">
-              <ProjectPicker />
-              <p className="text-sm text-muted-foreground mt-2">
-                Connect to a new MCP server to get started
-              </p>
+            <CardContent className="p-6">
+              <ManualServerInput />
             </CardContent>
           </Card>
         </div>

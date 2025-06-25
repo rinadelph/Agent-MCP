@@ -2,13 +2,14 @@
 import os
 import json
 import datetime
+import sqlite3
 from pathlib import Path
 from typing import Callable, List, Dict, Any # Added List, Dict, Any
 
 from starlette.routing import Route, Mount
 from starlette.staticfiles import StaticFiles
 from starlette.templating import Jinja2Templates
-from starlette.responses import JSONResponse, Response
+from starlette.responses import JSONResponse, Response, PlainTextResponse
 from starlette.requests import Request
 
 # Project-specific imports
@@ -47,18 +48,30 @@ async def dashboard_home_route(request: Request) -> Response:
     return templates.TemplateResponse("index_componentized.html", {"request": request})
 
 async def simple_status_api_route(request: Request) -> JSONResponse:
-    # // ... (implementation from previous response)
+    # Handle OPTIONS for CORS preflight
+    if request.method == 'OPTIONS':
+        return await handle_options(request)
+    
     try:
-        project_name = Path(os.environ.get("MCP_PROJECT_DIR", ".")).name
-        active_agents_summary = [
-            {"agent_id": data.get("agent_id"), "status": data.get("status")}
-            for data in g.active_agents.values()
-        ]
+        # Get system status
+        from ..db.actions.agent_db import get_all_active_agents_from_db
+        from ..db.actions.task_db import get_all_tasks_from_db
+        
+        agents = get_all_active_agents_from_db()
+        tasks = get_all_tasks_from_db()
+        
+        # Count task statuses
+        pending_tasks = len([t for t in tasks if t.get('status') == 'pending'])
+        completed_tasks = len([t for t in tasks if t.get('status') == 'completed'])
+        
         return JSONResponse({
-            "project_name": project_name,
-            "active_agents_count": len(g.active_agents),
-            "active_agents_summary": active_agents_summary,
-            "server_status": "running"
+            "server_running": True,
+            "total_agents": len(agents),
+            "active_agents": len([a for a in agents if a.get('status') == 'active']),
+            "total_tasks": len(tasks),
+            "pending_tasks": pending_tasks,
+            "completed_tasks": completed_tasks,
+            "last_updated": datetime.datetime.now().isoformat()
         })
     except Exception as e:
         logger.error(f"Error in simple_status_api_route: {e}", exc_info=True)
@@ -336,19 +349,37 @@ async def terminate_agent_dashboard_api_route(request: Request) -> JSONResponse:
         return JSONResponse({"message": f"Error terminating agent via dashboard API: {str(e)}"}, status_code=500)
 
 
+# --- CORS Preflight Handler ---
+async def handle_options(request: Request) -> Response:
+    """Handle OPTIONS requests for CORS preflight"""
+    return PlainTextResponse(
+        '',
+        headers={
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+            'Access-Control-Allow-Headers': '*',
+            'Access-Control-Max-Age': '86400',
+        }
+    )
+
 # --- Route Definitions List ---
 routes = [
     Route('/', endpoint=dashboard_home_route, name="dashboard_home"),
-    Route('/api/status', endpoint=simple_status_api_route, name="simple_status_api"),
-    Route('/api/graph-data', endpoint=graph_data_api_route, name="graph_data_api"),
-    Route('/api/task-tree-data', endpoint=task_tree_data_api_route, name="task_tree_data_api"),
-    Route('/api/node-details', endpoint=node_details_api_route, name="node_details_api"),
-    Route('/api/agents-list', endpoint=agents_list_api_route, name="agents_list_api"),
-    Route('/api/tokens', endpoint=tokens_api_route, name="tokens_api"),
-    Route('/api/tasks-all', endpoint=all_tasks_api_route, name="all_tasks_api"),
-    Route('/api/update-task-dashboard', endpoint=update_task_details_api_route, name="update_task_dashboard_api"),
+    Route('/api/status', endpoint=simple_status_api_route, name="simple_status_api", methods=['GET', 'OPTIONS']),
+    Route('/api/graph-data', endpoint=graph_data_api_route, name="graph_data_api", methods=['GET', 'OPTIONS']),
+    Route('/api/task-tree-data', endpoint=task_tree_data_api_route, name="task_tree_data_api", methods=['GET', 'OPTIONS']),
+    Route('/api/node-details', endpoint=node_details_api_route, name="node_details_api", methods=['GET', 'OPTIONS']),
+    Route('/api/agents', endpoint=agents_list_api_route, name="agents_list_api", methods=['GET', 'OPTIONS']),
+    Route('/api/agents-list', endpoint=agents_list_api_route, name="agents_list_api_legacy", methods=['GET', 'OPTIONS']),
+    Route('/api/tokens', endpoint=tokens_api_route, name="tokens_api", methods=['GET', 'OPTIONS']),
+    Route('/api/tasks', endpoint=all_tasks_api_route, name="all_tasks_api", methods=['GET', 'OPTIONS']),
+    Route('/api/tasks-all', endpoint=all_tasks_api_route, name="all_tasks_api_legacy", methods=['GET', 'OPTIONS']),
+    Route('/api/update-task-dashboard', endpoint=update_task_details_api_route, name="update_task_dashboard_api", methods=['POST', 'OPTIONS']),
     
     # Added back for 1-to-1 dashboard compatibility
-    Route('/api/create-agent', endpoint=create_agent_dashboard_api_route, name="create_agent_dashboard_api"),
-    Route('/api/terminate-agent', endpoint=terminate_agent_dashboard_api_route, name="terminate_agent_dashboard_api"),
+    Route('/api/create-agent', endpoint=create_agent_dashboard_api_route, name="create_agent_dashboard_api", methods=['POST', 'OPTIONS']),
+    Route('/api/terminate-agent', endpoint=terminate_agent_dashboard_api_route, name="terminate_agent_dashboard_api", methods=['POST', 'OPTIONS']),
+    
+    # Catch-all OPTIONS handler for any API route
+    Route('/api/{path:path}', endpoint=handle_options, methods=['OPTIONS']),
 ]

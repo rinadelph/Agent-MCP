@@ -95,6 +95,8 @@ class ApiClient {
         'Content-Type': 'application/json',
         ...options.headers,
       },
+      credentials: 'include', // Include cookies for CORS
+      mode: 'cors', // Explicitly set CORS mode
       ...options,
     })
 

@@ -108,14 +108,16 @@ def create_app(project_dir: str, admin_token_cli: Optional[str] = None) -> Starl
         logger.info("Starlette app shutdown complete.")
 
     # Define middleware (if any)
-    # Enable CORS for dashboard integration
+    # Enable CORS for dashboard integration - allow ANY origin
     middleware_stack = [
         Middleware(
             CORSMiddleware,
-            allow_origins=['http://localhost:3000'],  # Next.js dev server
+            allow_origins=['*'],  # Allow ALL origins
             allow_credentials=True,
-            allow_methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-            allow_headers=['*'],
+            allow_methods=['*'],  # Allow ALL methods
+            allow_headers=['*'],  # Allow ALL headers
+            expose_headers=['*'],
+            max_age=3600,  # Cache preflight for 1 hour
         )
     ]
 

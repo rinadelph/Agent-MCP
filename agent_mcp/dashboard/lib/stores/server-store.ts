@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { apiClient } from '../api'
+import { config, getAutoDetectServers } from '../config'
 
 export interface MCPServer {
   id: string
@@ -26,6 +27,8 @@ interface ServerStore {
   checkServerHealth: (id: string) => Promise<boolean>
   refreshAllServers: () => Promise<void>
   disconnectServer: () => void
+  autoDetectServers: () => Promise<MCPServer | null>
+  clearPersistedData: () => void
 }
 
 export const useServerStore = create<ServerStore>()(
@@ -34,9 +37,9 @@ export const useServerStore = create<ServerStore>()(
       servers: [
         {
           id: 'default',
-          name: 'Local Development',
-          host: 'localhost',
-          port: 8080,
+          name: config.defaultServer.name,
+          host: config.defaultServer.host,
+          port: config.defaultServer.port,
           status: 'disconnected',
           description: 'Default local MCP server'
         }
@@ -164,6 +167,84 @@ export const useServerStore = create<ServerStore>()(
         
         // Reset API client
         apiClient.setServer('', 0)
+      },
+
+      autoDetectServers: async () => {
+        const possibleServers = getAutoDetectServers()
+        
+        for (const serverConfig of possibleServers) {
+          try {
+            // Temporarily set API client to test this server
+            apiClient.setServer(serverConfig.host, serverConfig.port)
+            
+            const response = await apiClient.getSystemStatus()
+            
+            if (response.server_running === true) {
+              // Found a working server
+              const detectedServer: MCPServer = {
+                id: `auto_${serverConfig.port}`,
+                name: `Auto-detected (${serverConfig.host}:${serverConfig.port})`,
+                host: serverConfig.host,
+                port: serverConfig.port,
+                status: 'connected',
+                lastConnected: new Date().toISOString(),
+                description: 'Automatically detected MCP server'
+              }
+              
+              // Add to servers list if not already present
+              const existingServer = get().servers.find(
+                s => s.host === serverConfig.host && s.port === serverConfig.port
+              )
+              
+              if (!existingServer) {
+                set((state) => ({
+                  servers: [...state.servers, detectedServer]
+                }))
+              } else {
+                // Update existing server status
+                set((state) => ({
+                  servers: state.servers.map(s => 
+                    s.id === existingServer.id 
+                      ? { ...s, status: 'connected', lastConnected: new Date().toISOString() }
+                      : s
+                  )
+                }))
+              }
+              
+              return existingServer || detectedServer
+            }
+          } catch (error) {
+            // Continue to next port
+            console.debug(`Server not found on ${serverConfig.host}:${serverConfig.port}`)
+          }
+        }
+        
+        // No server found
+        return null
+      },
+
+      clearPersistedData: () => {
+        // Reset to default state
+        set({
+          servers: [
+            {
+              id: 'default',
+              name: config.defaultServer.name,
+              host: config.defaultServer.host,
+              port: config.defaultServer.port,
+              status: 'disconnected',
+              description: 'Default local MCP server'
+            }
+          ],
+          activeServerId: null,
+          isConnecting: false,
+          connectionError: null
+        })
+        
+        // Clear localStorage
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('mcp-server-store')
+        }
       }
     }),
     {

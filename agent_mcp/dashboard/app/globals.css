@@ -383,6 +383,28 @@
     }
   }
   
+  /* Grid layout constraints for large screens */
+  @media (min-width: 1920px) {
+    .grid {
+      gap: var(--space-fluid-xl);
+    }
+  }
+  
+  /* Maximum grid column width for readability */
+  .grid > * {
+    max-width: 100%;
+  }
+  
+  @media (min-width: 2560px) {
+    .grid-cols-4 > * {
+      max-width: 400px;
+    }
+    
+    .grid-cols-3 > * {
+      max-width: 600px;
+    }
+  }
+  
   /* High DPI display optimizations */
   @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
     .graph-container {

@@ -134,15 +134,15 @@ const StatCard = React.memo(({
   return (
     <Card className="bg-card/80 border border-border/60 rounded-xl backdrop-blur-sm hover:bg-card transition-all duration-200 group">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-        <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">{title}</CardTitle>
+        <CardTitle className="text-fluid-sm font-semibold text-muted-foreground uppercase tracking-wider">{title}</CardTitle>
         <Icon className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
       </CardHeader>
       <CardContent>
-        <div className="text-2xl font-bold text-foreground mb-1">{value}</div>
+        <div className="text-fluid-2xl font-bold text-foreground mb-1">{value}</div>
         <div className="flex items-center space-x-2">
-          <p className="text-xs text-muted-foreground">{description}</p>
+          <p className="text-fluid-xs text-muted-foreground">{description}</p>
           {change && (
-            <span className={`text-xs font-medium ${changeColors[changeType]}`}>
+            <span className={`text-fluid-xs font-medium ${changeColors[changeType]}`}>
               {change}
             </span>
           )}
@@ -247,16 +247,16 @@ export function OverviewDashboard() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="w-full space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">System Overview</h1>
-          <p className="text-muted-foreground text-sm">
+          <h1 className="text-fluid-2xl font-bold text-foreground">System Overview</h1>
+          <p className="text-muted-foreground text-fluid-base mt-1">
             Real-time autonomous system monitoring and analytics
           </p>
         </div>
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Badge variant="outline" className={systemData.server_running ? "bg-primary/15 text-primary border-primary/30" : "bg-destructive/15 text-destructive border-destructive/30"}>
             <div className={`w-2 h-2 rounded-full mr-2 ${systemData.server_running ? 'bg-primary animate-pulse' : 'bg-destructive animate-pulse'}`}></div>
             {systemData.server_running ? 'Server Online' : 'Server Offline'}
@@ -278,8 +278,8 @@ export function OverviewDashboard() {
         </div>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {/* Stats Grid - Responsive with max-width constraint */}
+      <div className="grid gap-[var(--space-fluid-md)] grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           title="Total Agents"
           value={systemData.total_agents}
@@ -306,10 +306,10 @@ export function OverviewDashboard() {
         />
       </div>
 
-      {/* Main Content Grid */}
-      <div className="grid gap-6 lg:grid-cols-3">
+      {/* Main Content Grid - Better responsive layout */}
+      <div className="grid gap-[var(--space-fluid-lg)] grid-cols-1 xl:grid-cols-3">
         {/* System Health */}
-        <Card className="bg-card border border-border rounded-xl lg:col-span-2">
+        <Card className="bg-card border border-border rounded-xl xl:col-span-2">
           <CardHeader>
             <CardTitle className="text-foreground">System Health</CardTitle>
             <CardDescription className="text-muted-foreground">
