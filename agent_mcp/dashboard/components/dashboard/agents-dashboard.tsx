@@ -2,9 +2,8 @@
 
 import React, { useState, useEffect } from "react"
 import { 
-  User, Users, Activity, Zap, Power, PowerOff, Clock, Hash, Settings, Trash2, Play, 
-  StopCircle, AlertCircle, CheckCircle2, Shield, Cpu, Database, Network, Terminal,
-  Search, Filter, Plus, MoreVertical, Eye, GitBranch, Layers, Workflow, Grid, List, RefreshCw, Copy
+  Users, PowerOff, Clock, AlertCircle, CheckCircle2, Shield, Cpu, Database, Network, Terminal,
+  Search, Plus, MoreVertical, Eye, RefreshCw, Copy
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -56,8 +55,7 @@ const CompactAgentRow = ({ agent, onTerminate, onSelect, onTaskClick }: {
   onSelect: (agent: Agent) => void,
   onTaskClick: (task: Task) => void 
 }) => {
-  const [mounted, setMounted] = useState(false)
-  const { getAgentTasks, getAgentActions, shouldDisplayAgent } = useDataStore()
+  const { getAgentTasks } = useDataStore()
   
   // Check if agent is new (less than 10 minutes old)
   const isNewAgent = () => {
@@ -71,7 +69,6 @@ const CompactAgentRow = ({ agent, onTerminate, onSelect, onTaskClick }: {
   // Get agent's tasks and recent actions
   const agentTasks = getAgentTasks(agent.agent_id)
   const currentTask = agentTasks.find(t => t.task_id === agent.current_task)
-  const recentActions = getAgentActions(agent.agent_id).slice(0, 3)
   
   // Calculate task stats - separate assigned vs worked on  
   // Use the data store's logic for consistent ID matching
@@ -98,19 +95,7 @@ const CompactAgentRow = ({ agent, onTerminate, onSelect, onTaskClick }: {
     completed: agentTasks.filter(t => t.status === 'completed').length
   }
   
-  useEffect(() => {
-    setMounted(true)
-  }, [])
 
-  const formatDate = (dateString: string) => {
-    if (!mounted) return "..."
-    return new Date(dateString).toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-  }
 
   return (
     <TableRow className="border-border/50 hover:bg-muted/30 group transition-all duration-200">
@@ -234,7 +219,7 @@ const CompactAgentRow = ({ agent, onTerminate, onSelect, onTaskClick }: {
 }
 
 const StatsCard = ({ icon: Icon, label, value, change, trend }: {
-  icon: any
+  icon: React.ComponentType<{ className?: string }>
   label: string
   value: number
   change?: string
@@ -263,7 +248,13 @@ const StatsCard = ({ icon: Icon, label, value, change, trend }: {
   </div>
 )
 
-const CreateAgentModal = ({ onCreateAgent }: { onCreateAgent: (data: any) => void }) => {
+interface CreateAgentData {
+  agent_id: string;
+  capabilities?: string[];
+  working_directory?: string;
+}
+
+const CreateAgentModal = ({ onCreateAgent }: { onCreateAgent: (data: CreateAgentData) => void }) => {
   const [open, setOpen] = useState(false)
   const [formData, setFormData] = useState({
     agent_id: '',
@@ -427,7 +418,7 @@ export function AgentsDashboard() {
     idleForCleanup: getIdleAgentsForCleanup().length
   }
 
-  const handleCreateAgent = async (data: any) => {
+  const handleCreateAgent = async (data: CreateAgentData) => {
     try {
       await apiClient.createAgent(data)
     } catch (error) {

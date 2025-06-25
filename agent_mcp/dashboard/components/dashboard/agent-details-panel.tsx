@@ -1,11 +1,10 @@
 "use client"
 
-import React, { useState, useEffect } from 'react'
-import { X, Activity, Clock, Hash, Shield, Terminal, Cpu, FileText, ChevronRight, Copy, CheckCircle2, AlertCircle, PowerOff, BarChart3, Database } from 'lucide-react'
+import React, { useState } from 'react'
+import { X, Copy, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import { Agent, Task } from '@/lib/api'
 import { useDataStore } from '@/lib/stores/data-store'
@@ -20,7 +19,7 @@ export function AgentDetailsPanel({ agent, onClose }: AgentDetailsPanelProps) {
   const [copiedToken, setCopiedToken] = useState(false)
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
   const [taskDialogOpen, setTaskDialogOpen] = useState(false)
-  const { data, getAgentTasks, getAgentActions } = useDataStore()
+  const { getAgentTasks, getAgentActions } = useDataStore()
   
   // Get agent's tasks and actions from cached data
   const agentTasks = agent ? getAgentTasks(agent.agent_id) : []
@@ -63,14 +62,6 @@ export function AgentDetailsPanel({ agent, onClose }: AgentDetailsPanelProps) {
     return colors[status] || colors.pending
   }
 
-  const getEventIcon = (type: TaskEvent['type']) => {
-    switch (type) {
-      case 'start': return <Activity className="h-3.5 w-3.5" />
-      case 'progress': return <ChevronRight className="h-3.5 w-3.5" />
-      case 'complete': return <CheckCircle2 className="h-3.5 w-3.5" />
-      case 'error': return <AlertCircle className="h-3.5 w-3.5" />
-    }
-  }
 
   return (
     <div className={cn(

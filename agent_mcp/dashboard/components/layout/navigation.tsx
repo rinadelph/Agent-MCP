@@ -4,17 +4,10 @@ import React from "react"
 import { 
   LayoutDashboard, 
   Users, 
-  CheckSquare, 
-  Monitor, 
-  Settings,
-  BarChart3,
-  Shield,
-  Database,
-  Zap
+  CheckSquare
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { Separator } from "@/components/ui/separator"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useDashboard, useSidebar } from "@/lib/store"
 
