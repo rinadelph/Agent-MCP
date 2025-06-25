@@ -412,6 +412,22 @@
       -webkit-font-smoothing: antialiased;
     }
   }
+  
+  /* Ensure full width layouts don't have unwanted margins */
+  .w-full {
+    width: 100% !important;
+  }
+  
+  /* Better handling of flex containers on large screens */
+  @media (min-width: 1920px) {
+    .flex {
+      gap: var(--space-fluid-md);
+    }
+    
+    .space-y-6 > * + * {
+      margin-top: var(--space-fluid-xl);
+    }
+  }
 }
 
 @layer utilities {

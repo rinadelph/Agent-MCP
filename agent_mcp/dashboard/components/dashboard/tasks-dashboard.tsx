@@ -276,17 +276,17 @@ const StatsCard = React.memo(({ icon: Icon, label, value, change, trend }: {
   change?: string
   trend?: 'up' | 'down' | 'neutral'
 }) => (
-  <div className="bg-slate-900/60 dark:bg-slate-900/60 bg-white/80 border border-slate-800/60 dark:border-slate-800/60 border-slate-200 rounded-xl p-5 backdrop-blur-sm hover:bg-slate-900/80 dark:hover:bg-slate-900/80 hover:bg-white/90 transition-all duration-200 group">
+  <div className="bg-slate-900/60 dark:bg-slate-900/60 bg-white/80 border border-slate-800/60 dark:border-slate-800/60 border-slate-200 rounded-xl p-[var(--space-fluid-md)] backdrop-blur-sm hover:bg-slate-900/80 dark:hover:bg-slate-900/80 hover:bg-white/90 transition-all duration-200 group">
     <div className="flex items-center justify-between">
       <div>
         <div className="flex items-center gap-2 mb-2">
           <Icon className="h-4 w-4 text-slate-400 dark:text-slate-400 text-slate-600 group-hover:text-slate-300 dark:group-hover:text-slate-300 group-hover:text-slate-700 transition-colors" />
-          <span className="text-xs font-semibold text-slate-400 dark:text-slate-400 text-slate-600 uppercase tracking-wider">{label}</span>
+          <span className="text-fluid-xs font-semibold text-slate-400 dark:text-slate-400 text-slate-600 uppercase tracking-wider">{label}</span>
         </div>
-        <div className="text-2xl font-bold text-white dark:text-white text-slate-900 mb-1">{value}</div>
+        <div className="text-fluid-2xl font-bold text-white dark:text-white text-slate-900 mb-1">{value}</div>
         {change && (
           <div className={cn(
-            "text-xs font-medium",
+            "text-fluid-xs font-medium",
             trend === 'up' && "text-teal-400",
             trend === 'down' && "text-orange-400",
             trend === 'neutral' && "text-slate-400"
@@ -484,14 +484,14 @@ export function TasksDashboard() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="w-full space-y-[var(--space-fluid-lg)]">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white dark:text-white text-slate-900">Task Operations</h1>
-          <p className="text-slate-400 dark:text-slate-400 text-slate-600 text-sm">Orchestrate and monitor autonomous tasks</p>
+          <h1 className="text-fluid-2xl font-bold text-white dark:text-white text-slate-900">Task Operations</h1>
+          <p className="text-slate-400 dark:text-slate-400 text-slate-600 text-fluid-base mt-1">Orchestrate and monitor autonomous tasks</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <Badge variant="outline" className="text-xs bg-teal-500/15 text-teal-300 border-teal-500/30 font-medium">
             <div className="w-2 h-2 bg-teal-400 rounded-full mr-2 animate-pulse" />
             {activeServer?.name}
@@ -516,7 +516,7 @@ export function TasksDashboard() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-5 gap-4">
+      <div className="grid gap-[var(--space-fluid-md)] grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <StatsCard 
           icon={Target} 
           label="Total" 
@@ -555,8 +555,8 @@ export function TasksDashboard() {
       </div>
 
       {/* Controls */}
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-sm">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-[var(--space-fluid-sm)]">
+        <div className="relative flex-1 sm:max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-teal-400 dark:text-teal-400 text-teal-600" />
           <Input
             placeholder="Search tasks..."
@@ -566,7 +566,7 @@ export function TasksDashboard() {
           />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-36 bg-slate-900/60 dark:bg-slate-900/60 bg-white/80 border-slate-700/60 dark:border-slate-700/60 border-slate-300 text-white dark:text-white text-slate-900">
+          <SelectTrigger className="w-full sm:w-36 bg-slate-900/60 dark:bg-slate-900/60 bg-white/80 border-slate-700/60 dark:border-slate-700/60 border-slate-300 text-white dark:text-white text-slate-900">
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="bg-slate-900 dark:bg-slate-900 bg-white border-slate-800 dark:border-slate-800 border-slate-200">
@@ -579,7 +579,7 @@ export function TasksDashboard() {
           </SelectContent>
         </Select>
         <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-          <SelectTrigger className="w-32 bg-slate-900/60 dark:bg-slate-900/60 bg-white/80 border-slate-700/60 dark:border-slate-700/60 border-slate-300 text-white dark:text-white text-slate-900">
+          <SelectTrigger className="w-full sm:w-32 bg-slate-900/60 dark:bg-slate-900/60 bg-white/80 border-slate-700/60 dark:border-slate-700/60 border-slate-300 text-white dark:text-white text-slate-900">
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="bg-slate-900 dark:bg-slate-900 bg-white border-slate-800 dark:border-slate-800 border-slate-200">
@@ -592,7 +592,7 @@ export function TasksDashboard() {
       </div>
 
       {/* Tasks Table */}
-      <div className="bg-slate-900/50 dark:bg-slate-900/50 bg-white/90 border border-teal-500/20 dark:border-teal-500/20 border-teal-600/30 rounded-xl overflow-hidden backdrop-blur-md shadow-xl shadow-teal-500/10">
+      <div className="bg-slate-900/50 dark:bg-slate-900/50 bg-white/90 border border-teal-500/20 dark:border-teal-500/20 border-teal-600/30 rounded-xl overflow-x-auto backdrop-blur-md shadow-xl shadow-teal-500/10">
         <Table>
           <TableHeader>
             <TableRow className="border-teal-500/10 dark:border-teal-500/10 border-teal-600/20 hover:bg-transparent">

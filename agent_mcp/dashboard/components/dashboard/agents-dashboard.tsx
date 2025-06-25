@@ -242,17 +242,17 @@ const StatsCard = ({ icon: Icon, label, value, change, trend }: {
   change?: string
   trend?: 'up' | 'down' | 'neutral'
 }) => (
-  <div className="bg-card/80 border border-border/60 rounded-xl p-5 backdrop-blur-sm hover:bg-card transition-all duration-200 group">
+  <div className="bg-card/80 border border-border/60 rounded-xl p-[var(--space-fluid-md)] backdrop-blur-sm hover:bg-card transition-all duration-200 group">
     <div className="flex items-center justify-between">
       <div>
         <div className="flex items-center gap-2 mb-2">
           <Icon className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
-          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{label}</span>
+          <span className="text-fluid-xs font-semibold text-muted-foreground uppercase tracking-wider">{label}</span>
         </div>
-        <div className="text-2xl font-bold text-foreground mb-1">{value}</div>
+        <div className="text-fluid-2xl font-bold text-foreground mb-1">{value}</div>
         {change && (
           <div className={cn(
-            "text-xs font-medium",
+            "text-fluid-xs font-medium",
             trend === 'up' && "text-primary",
             trend === 'down' && "text-destructive",
             trend === 'neutral' && "text-muted-foreground"
@@ -433,14 +433,14 @@ export function AgentsDashboard() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="w-full space-y-[var(--space-fluid-lg)]">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Agent Fleet</h1>
-          <p className="text-muted-foreground text-sm">Monitor and manage autonomous agents</p>
+          <h1 className="text-fluid-2xl font-bold text-foreground">Agent Fleet</h1>
+          <p className="text-muted-foreground text-fluid-base mt-1">Monitor and manage autonomous agents</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <Badge variant="outline" className="text-xs bg-primary/15 text-primary border-primary/30 font-medium">
             <div className="w-2 h-2 bg-primary rounded-full mr-2 animate-pulse" />
             {activeServer?.name}
@@ -465,7 +465,7 @@ export function AgentsDashboard() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid gap-[var(--space-fluid-md)] grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
         <StatsCard 
           icon={Users} 
           label="Total" 
@@ -497,8 +497,8 @@ export function AgentsDashboard() {
       </div>
 
       {/* Controls */}
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-sm">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-[var(--space-fluid-sm)]">
+        <div className="relative flex-1 sm:max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search agents..."
@@ -508,7 +508,7 @@ export function AgentsDashboard() {
           />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-32 bg-background border-border text-foreground">
+          <SelectTrigger className="w-full sm:w-32 bg-background border-border text-foreground">
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="bg-background border-border">
@@ -522,7 +522,7 @@ export function AgentsDashboard() {
       </div>
 
       {/* Agents Table */}
-      <div className="bg-card/30 border border-border/50 rounded-lg overflow-hidden backdrop-blur-sm">
+      <div className="bg-card/30 border border-border/50 rounded-lg overflow-x-auto backdrop-blur-sm">
         <Table>
           <TableHeader>
             <TableRow className="border-border/50 hover:bg-transparent">

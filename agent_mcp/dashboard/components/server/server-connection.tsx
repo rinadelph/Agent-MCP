@@ -53,16 +53,16 @@ export function ServerConnection() {
   }
 
   return (
-    <div className="min-h-[60vh] flex items-center justify-center p-8">
-      <div className="max-w-2xl w-full space-y-6">
+    <div className="min-h-[60vh] flex items-center justify-center p-[var(--space-fluid-xl)]">
+      <div className="max-w-2xl w-full space-y-[var(--space-fluid-lg)]">
         {/* Header */}
         <div className="text-center space-y-4">
           <div className="mx-auto w-16 h-16 bg-teal-500/20 rounded-full flex items-center justify-center">
             <Server className="w-8 h-8 text-teal-500" />
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-foreground">Connect to MCP Server</h2>
-            <p className="text-muted-foreground mt-2">
+            <h2 className="text-fluid-2xl font-bold text-foreground">Connect to MCP Server</h2>
+            <p className="text-muted-foreground text-fluid-base mt-2">
               Choose a server to start managing agents and tasks
             </p>
           </div>
@@ -70,12 +70,12 @@ export function ServerConnection() {
 
         {/* Connected Servers */}
         {connectedServers.length > 0 && (
-          <div className="space-y-3">
-            <h3 className="text-sm font-medium text-foreground flex items-center gap-2">
+          <div className="space-y-[var(--space-fluid-sm)]">
+            <h3 className="text-fluid-sm font-medium text-foreground flex items-center gap-2">
               <Wifi className="w-4 h-4 text-green-500" />
               Connected Servers
             </h3>
-            <div className="grid gap-3">
+            <div className="grid gap-[var(--space-fluid-sm)]">
               {connectedServers.map((server) => (
                 <Card 
                   key={server.id} 

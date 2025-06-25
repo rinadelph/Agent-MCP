@@ -41,27 +41,27 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="flex h-16 items-center px-6">
+      <div className="flex h-16 items-center px-[var(--space-fluid-lg)] gap-[var(--space-fluid-md)]">
         {/* Logo and Title */}
-        <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-3">
+        <div className="flex items-center flex-shrink-0">
+          <div className="flex items-center gap-[var(--space-fluid-sm)]">
             <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-lg">
-              <span className="text-primary-foreground font-bold text-sm">A</span>
+              <span className="text-primary-foreground font-bold text-fluid-sm">A</span>
             </div>
-            <div className="flex flex-col">
-              <h1 className="text-lg font-bold tracking-tight text-foreground">Agent MCP</h1>
-              <p className="text-xs text-muted-foreground">Autonomous Multi-Agent Control</p>
+            <div className="hidden sm:flex flex-col">
+              <h1 className="text-fluid-lg font-bold tracking-tight text-foreground">Agent MCP</h1>
+              <p className="text-fluid-xs text-muted-foreground">Autonomous Multi-Agent Control</p>
             </div>
           </div>
         </div>
 
         {/* Project Picker */}
-        <div className="mx-4">
+        <div className="flex-shrink-0">
           <ProjectPicker />
         </div>
 
         {/* Search Bar */}
-        <div className="flex-1 max-w-md mx-4">
+        <div className="flex-1 max-w-xl hidden md:block">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -69,13 +69,13 @@ export function Header() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleSearchKeyDown}
-              className="pl-10 bg-background/50 border-border/60 text-foreground placeholder:text-muted-foreground focus:border-primary/50 focus:ring-primary/20 transition-all"
+              className="pl-10 bg-background/50 border-border/60 text-foreground placeholder:text-muted-foreground focus:border-primary/50 focus:ring-primary/20 transition-all text-fluid-sm"
             />
           </div>
         </div>
 
         {/* Right Side Actions */}
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center gap-[var(--space-fluid-xs)] flex-shrink-0">
           {/* Notifications */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
