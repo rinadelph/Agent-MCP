@@ -1,0 +1,74 @@
+"use client"
+
+import * as React from "react"
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { 
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarHeader,
+  SidebarRail,
+} from "@/components/ui/sidebar"
+import { Navigation } from "./navigation"
+import { useSidebar } from "@/lib/store"
+import { cn } from "@/lib/utils"
+
+export function AppSidebar() {
+  const { isCollapsed, toggle } = useSidebar()
+
+  return (
+    <Sidebar 
+      variant="sidebar" 
+      collapsible="icon"
+      className={cn(
+        "fixed left-0 top-16 h-[calc(100vh-4rem)] z-40 transition-all duration-300",
+        isCollapsed ? "w-16" : "w-64"
+      )}
+    >
+      {/* Sidebar Header */}
+      <SidebarHeader className="border-b px-3 py-3">
+        <div className="flex items-center justify-between">
+          {!isCollapsed && (
+            <div className="flex items-center space-x-2">
+              <div className="h-6 w-6 rounded bg-primary/10 flex items-center justify-center">
+                <span className="text-xs font-semibold text-primary">M</span>
+              </div>
+              <span className="font-semibold text-sm">MCP Control</span>
+            </div>
+          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggle}
+            className="h-8 w-8 shrink-0"
+          >
+            {isCollapsed ? (
+              <PanelLeftOpen className="h-4 w-4" />
+            ) : (
+              <PanelLeftClose className="h-4 w-4" />
+            )}
+            <span className="sr-only">Toggle sidebar</span>
+          </Button>
+        </div>
+      </SidebarHeader>
+
+      {/* Sidebar Content */}
+      <SidebarContent className="px-0">
+        <Navigation />
+      </SidebarContent>
+
+      {/* Sidebar Footer */}
+      <SidebarFooter className="border-t p-3">
+        {!isCollapsed && (
+          <div className="text-xs text-muted-foreground text-center">
+            <div className="font-medium">Agent MCP Dashboard</div>
+            <div>v2.0 • Premium UI</div>
+          </div>
+        )}
+      </SidebarFooter>
+
+      <SidebarRail />
+    </Sidebar>
+  )
+}
