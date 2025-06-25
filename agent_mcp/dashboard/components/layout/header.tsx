@@ -44,13 +44,13 @@ export function Header() {
       <div className="flex h-16 items-center px-6">
         {/* Logo and Title */}
         <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-2">
-            <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
+          <div className="flex items-center space-x-3">
+            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-lg">
               <span className="text-primary-foreground font-bold text-sm">A</span>
             </div>
             <div className="flex flex-col">
-              <h1 className="text-lg font-semibold tracking-tight">Agent MCP</h1>
-              <p className="text-xs text-muted-foreground">Multi-Agent Dashboard</p>
+              <h1 className="text-lg font-bold tracking-tight text-foreground">Agent MCP</h1>
+              <p className="text-xs text-muted-foreground">Autonomous Multi-Agent Control</p>
             </div>
           </div>
         </div>
@@ -69,7 +69,7 @@ export function Header() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleSearchKeyDown}
-              className="pl-10 bg-muted/50 border-none focus:bg-background transition-colors"
+              className="pl-10 bg-background/50 border-border/60 text-foreground placeholder:text-muted-foreground focus:border-primary/50 focus:ring-primary/20 transition-all"
             />
           </div>
         </div>
@@ -79,12 +79,12 @@ export function Header() {
           {/* Notifications */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="relative h-9 w-9">
+              <Button variant="ghost" size="icon" className="relative h-9 w-9 text-muted-foreground hover:text-foreground hover:bg-muted/50">
                 <Bell className="h-4 w-4" />
                 {unreadCount > 0 && (
                   <Badge 
                     variant="destructive" 
-                    className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
+                    className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs bg-destructive text-destructive-foreground"
                   >
                     {unreadCount > 9 ? '9+' : unreadCount}
                   </Badge>
@@ -126,17 +126,17 @@ export function Header() {
           <ThemeToggle />
 
           {/* Settings */}
-          <Button variant="ghost" size="icon" className="h-9 w-9">
+          <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-foreground hover:bg-muted/50">
             <Settings className="h-4 w-4" />
           </Button>
 
           {/* User Menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="relative h-9 w-9 rounded-full">
-                <Avatar className="h-9 w-9">
+              <Button variant="ghost" className="relative h-9 w-9 rounded-full hover:bg-muted/50">
+                <Avatar className="h-9 w-9 ring-2 ring-primary/30">
                   <AvatarImage src="/avatar.png" alt="Admin" />
-                  <AvatarFallback>AD</AvatarFallback>
+                  <AvatarFallback className="bg-primary text-primary-foreground font-semibold">AD</AvatarFallback>
                 </Avatar>
               </Button>
             </DropdownMenuTrigger>

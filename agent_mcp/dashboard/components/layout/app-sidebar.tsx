@@ -31,10 +31,10 @@ export function AppSidebar() {
         <div className="flex items-center justify-between">
           {!isCollapsed && (
             <div className="flex items-center space-x-2">
-              <div className="h-6 w-6 rounded bg-primary/10 flex items-center justify-center">
+              <div className="h-6 w-6 rounded bg-primary/20 flex items-center justify-center">
                 <span className="text-xs font-semibold text-primary">M</span>
               </div>
-              <span className="font-semibold text-sm">MCP Control</span>
+              <span className="font-semibold text-sm text-foreground">MCP Control</span>
             </div>
           )}
           <Button
@@ -62,8 +62,8 @@ export function AppSidebar() {
       <SidebarFooter className="border-t p-3">
         {!isCollapsed && (
           <div className="text-xs text-muted-foreground text-center">
-            <div className="font-medium">Agent MCP Dashboard</div>
-            <div>v2.0 • Premium UI</div>
+            <div className="font-medium text-foreground">Agent MCP Dashboard</div>
+            <div className="text-muted-foreground">v2.0 • Premium UI</div>
           </div>
         )}
       </SidebarFooter>

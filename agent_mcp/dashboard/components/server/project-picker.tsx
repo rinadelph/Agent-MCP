@@ -57,11 +57,11 @@ export function ProjectPicker() {
   const getStatusIcon = (status: MCPServer['status']) => {
     switch (status) {
       case 'connected':
-        return <Wifi className="h-4 w-4 text-green-500" />
+        return <Wifi className="h-4 w-4 text-primary" />
       case 'connecting':
-        return <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />
+        return <Loader2 className="h-4 w-4 text-info animate-spin" />
       case 'error':
-        return <AlertCircle className="h-4 w-4 text-red-500" />
+        return <AlertCircle className="h-4 w-4 text-destructive" />
       default:
         return <WifiOff className="h-4 w-4 text-muted-foreground" />
     }
@@ -70,11 +70,11 @@ export function ProjectPicker() {
   const getStatusColor = (status: MCPServer['status']) => {
     switch (status) {
       case 'connected':
-        return 'bg-green-500'
+        return 'bg-primary'
       case 'connecting':
-        return 'bg-blue-500'
+        return 'bg-info'
       case 'error':
-        return 'bg-red-500'
+        return 'bg-destructive'
       default:
         return 'bg-muted-foreground'
     }
@@ -115,11 +115,11 @@ export function ProjectPicker() {
 
         {connectionError && (
           <div className="p-2">
-            <Card className="border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950">
+            <Card className="border-destructive/20 bg-destructive/10">
               <CardContent className="p-3">
                 <div className="flex items-center space-x-2">
-                  <AlertCircle className="h-4 w-4 text-red-500" />
-                  <span className="text-sm text-red-700 dark:text-red-300">
+                  <AlertCircle className="h-4 w-4 text-destructive" />
+                  <span className="text-sm text-destructive">
                     {connectionError}
                   </span>
                 </div>

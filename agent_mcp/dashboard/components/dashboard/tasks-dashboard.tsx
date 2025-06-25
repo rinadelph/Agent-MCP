@@ -148,7 +148,7 @@ const CompactTaskRow = React.memo(({ task }: { task: Task }) => {
   }, [mounted])
 
   return (
-    <TableRow className="border-border/50 hover:bg-muted/30 group transition-colors">
+    <TableRow className="border-teal-500/10 dark:border-teal-500/10 border-teal-600/20 hover:bg-teal-500/5 dark:hover:bg-teal-500/5 hover:bg-teal-600/10 group transition-all duration-200">
       <TableCell className="py-3">
         <div className="flex items-center gap-3">
           <StatusDot status={task.status} />
@@ -554,7 +554,7 @@ export function TasksDashboard() {
       {/* Controls */}
       <div className="flex items-center gap-4">
         <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-teal-400 dark:text-teal-400 text-teal-600" />
           <Input
             placeholder="Search tasks..."
             value={searchTerm}
@@ -589,17 +589,17 @@ export function TasksDashboard() {
       </div>
 
       {/* Tasks Table */}
-      <div className="bg-slate-900/30 border border-slate-800/50 rounded-lg overflow-hidden backdrop-blur-sm">
+      <div className="bg-slate-900/50 dark:bg-slate-900/50 bg-white/90 border border-teal-500/20 dark:border-teal-500/20 border-teal-600/30 rounded-xl overflow-hidden backdrop-blur-md shadow-xl shadow-teal-500/10">
         <Table>
           <TableHeader>
-            <TableRow className="border-slate-800/50 hover:bg-transparent">
-              <TableHead className="text-slate-400 font-medium text-xs uppercase tracking-wider">Task</TableHead>
-              <TableHead className="text-slate-400 font-medium text-xs uppercase tracking-wider">Status</TableHead>
-              <TableHead className="text-slate-400 font-medium text-xs uppercase tracking-wider">Details</TableHead>
-              <TableHead className="text-slate-400 font-medium text-xs uppercase tracking-wider">Priority</TableHead>
-              <TableHead className="text-slate-400 font-medium text-xs uppercase tracking-wider">Relations</TableHead>
-              <TableHead className="text-slate-400 font-medium text-xs uppercase tracking-wider">Updated</TableHead>
-              <TableHead className="text-slate-400 font-medium text-xs uppercase tracking-wider w-24">Actions</TableHead>
+            <TableRow className="border-teal-500/10 dark:border-teal-500/10 border-teal-600/20 hover:bg-transparent">
+              <TableHead className="text-white/70 dark:text-white/70 text-slate-700 font-medium text-xs uppercase tracking-wider">Task</TableHead>
+              <TableHead className="text-white/70 dark:text-white/70 text-slate-700 font-medium text-xs uppercase tracking-wider">Status</TableHead>
+              <TableHead className="text-white/70 dark:text-white/70 text-slate-700 font-medium text-xs uppercase tracking-wider">Details</TableHead>
+              <TableHead className="text-white/70 dark:text-white/70 text-slate-700 font-medium text-xs uppercase tracking-wider">Priority</TableHead>
+              <TableHead className="text-white/70 dark:text-white/70 text-slate-700 font-medium text-xs uppercase tracking-wider">Relations</TableHead>
+              <TableHead className="text-white/70 dark:text-white/70 text-slate-700 font-medium text-xs uppercase tracking-wider">Updated</TableHead>
+              <TableHead className="text-white/70 dark:text-white/70 text-slate-700 font-medium text-xs uppercase tracking-wider w-24">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -614,9 +614,9 @@ export function TasksDashboard() {
         
         {filteredTasks.length === 0 && (
           <div className="p-12 text-center">
-            <CheckSquare className="h-12 w-12 text-slate-600 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-white mb-2">No tasks found</h3>
-            <p className="text-slate-400 text-sm mb-4">
+            <CheckSquare className="h-12 w-12 text-teal-400/50 dark:text-teal-400/50 text-teal-600/50 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-white dark:text-white text-slate-900 mb-2">No tasks found</h3>
+            <p className="text-white/60 dark:text-white/60 text-slate-600 text-sm mb-4">
               {tasks.length === 0 ? "Create your first task to get started" : "No tasks match your current filters"}
             </p>
             {tasks.length === 0 && <CreateTaskModal onCreateTask={handleCreateTask} />}

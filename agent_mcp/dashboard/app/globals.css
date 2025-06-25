@@ -57,97 +57,97 @@
 :root {
   --radius: 0.625rem;
   
-  /* Light Theme - Anthropic Inspired Clean Design */
+  /* Light Theme - Deep Ocean Tech Colors with improved contrast */
   --background: hsl(0, 0%, 100%);
-  --foreground: hsl(222.2, 84%, 4.9%);
+  --foreground: hsl(215, 30%, 8%);
   --card: hsl(0, 0%, 100%);
-  --card-foreground: hsl(222.2, 84%, 4.9%);
+  --card-foreground: hsl(215, 30%, 8%);
   --popover: hsl(0, 0%, 100%);
-  --popover-foreground: hsl(222.2, 84%, 4.9%);
-  --primary: hsl(221.2, 83.2%, 53.3%);
-  --primary-foreground: hsl(210, 40%, 98%);
+  --popover-foreground: hsl(215, 30%, 8%);
+  --primary: hsl(178, 84%, 40%);
+  --primary-foreground: hsl(0, 0%, 100%);
   --secondary: hsl(210, 40%, 98%);
-  --secondary-foreground: hsl(222.2, 84%, 4.9%);
+  --secondary-foreground: hsl(215, 30%, 8%);
   --muted: hsl(210, 40%, 96%);
-  --muted-foreground: hsl(215.4, 16.3%, 46.9%);
+  --muted-foreground: hsl(215, 25%, 25%);
   --accent: hsl(210, 40%, 96%);
-  --accent-foreground: hsl(222.2, 84%, 4.9%);
-  --destructive: hsl(0, 84.2%, 60.2%);
+  --accent-foreground: hsl(215, 30%, 8%);
+  --destructive: hsl(11, 80%, 50%);
   --border: hsl(214.3, 31.8%, 91.4%);
   --input: hsl(214.3, 31.8%, 91.4%);
-  --ring: hsl(221.2, 83.2%, 53.3%);
+  --ring: hsl(178, 84%, 40%);
   
-  /* Enhanced chart colors for data visualization */
-  --chart-1: hsl(221.2, 83.2%, 53.3%);
-  --chart-2: hsl(147, 64%, 40%);
-  --chart-3: hsl(286, 65%, 52%);
-  --chart-4: hsl(36, 100%, 48%);
-  --chart-5: hsl(10, 79%, 58%);
+  /* Enhanced chart colors - Deep Ocean Tech palette */
+  --chart-1: hsl(178, 84%, 40%);
+  --chart-2: hsl(188, 94%, 45%);
+  --chart-3: hsl(262, 83%, 58%);
+  --chart-4: hsl(43, 100%, 48%);
+  --chart-5: hsl(11, 80%, 50%);
   
-  /* Sidebar with subtle distinction */
+  /* Sidebar with Deep Ocean Tech styling */
   --sidebar: hsl(210, 40%, 99%);
-  --sidebar-foreground: hsl(222.2, 84%, 4.9%);
-  --sidebar-primary: hsl(221.2, 83.2%, 53.3%);
-  --sidebar-primary-foreground: hsl(210, 40%, 98%);
+  --sidebar-foreground: hsl(215, 30%, 8%);
+  --sidebar-primary: hsl(178, 84%, 40%);
+  --sidebar-primary-foreground: hsl(0, 0%, 100%);
   --sidebar-accent: hsl(210, 40%, 96%);
-  --sidebar-accent-foreground: hsl(222.2, 84%, 4.9%);
+  --sidebar-accent-foreground: hsl(215, 30%, 8%);
   --sidebar-border: hsl(214.3, 31.8%, 91.4%);
-  --sidebar-ring: hsl(221.2, 83.2%, 53.3%);
+  --sidebar-ring: hsl(178, 84%, 40%);
   
-  /* Premium semantic colors */
-  --success: hsl(142, 76%, 36%);
+  /* Premium semantic colors - Deep Ocean Tech */
+  --success: hsl(178, 84%, 40%);
   --success-foreground: hsl(0, 0%, 100%);
-  --warning: hsl(38, 92%, 50%);
+  --warning: hsl(43, 100%, 48%);
   --warning-foreground: hsl(0, 0%, 100%);
-  --info: hsl(199, 89%, 48%);
+  --info: hsl(188, 94%, 45%);
   --info-foreground: hsl(0, 0%, 100%);
 }
 
 .dark {
-  /* Dark Theme - Palantir Inspired Sophisticated Design */
-  --background: hsl(222.2, 84%, 4.9%);
+  /* Dark Theme - Deep Ocean Tech Design */
+  --background: hsl(220, 27%, 6%);
   --foreground: hsl(210, 40%, 98%);
-  --card: hsl(222.2, 84%, 8%);
+  --card: hsl(220, 27%, 8%);
   --card-foreground: hsl(210, 40%, 98%);
-  --popover: hsl(222.2, 84%, 8%);
+  --popover: hsl(220, 27%, 8%);
   --popover-foreground: hsl(210, 40%, 98%);
-  --primary: hsl(217.2, 91.2%, 59.8%);
-  --primary-foreground: hsl(222.2, 84%, 4.9%);
+  --primary: hsl(178, 84%, 40%);
+  --primary-foreground: hsl(220, 27%, 6%);
   --secondary: hsl(217.2, 32.6%, 17.5%);
   --secondary-foreground: hsl(210, 40%, 98%);
   --muted: hsl(217.2, 32.6%, 17.5%);
   --muted-foreground: hsl(215, 20.2%, 65.1%);
   --accent: hsl(217.2, 32.6%, 17.5%);
   --accent-foreground: hsl(210, 40%, 98%);
-  --destructive: hsl(0, 62.8%, 60.5%);
+  --destructive: hsl(11, 80%, 50%);
   --border: hsl(217.2, 32.6%, 17.5%);
   --input: hsl(217.2, 32.6%, 17.5%);
-  --ring: hsl(217.2, 91.2%, 59.8%);
+  --ring: hsl(178, 84%, 40%);
   
-  /* Enhanced chart colors for dark theme */
-  --chart-1: hsl(217.2, 91.2%, 59.8%);
-  --chart-2: hsl(142, 66%, 55%);
-  --chart-3: hsl(286, 70%, 65%);
-  --chart-4: hsl(36, 100%, 60%);
-  --chart-5: hsl(10, 79%, 68%);
+  /* Enhanced chart colors for dark theme - Deep Ocean Tech */
+  --chart-1: hsl(178, 84%, 40%);
+  --chart-2: hsl(188, 94%, 45%);
+  --chart-3: hsl(262, 83%, 58%);
+  --chart-4: hsl(43, 100%, 48%);
+  --chart-5: hsl(11, 80%, 50%);
   
-  /* Sophisticated dark sidebar */
-  --sidebar: hsl(222.2, 84%, 6%);
+  /* Sophisticated dark sidebar - Deep Ocean Tech */
+  --sidebar: hsl(220, 27%, 6%);
   --sidebar-foreground: hsl(210, 40%, 98%);
-  --sidebar-primary: hsl(217.2, 91.2%, 59.8%);
-  --sidebar-primary-foreground: hsl(222.2, 84%, 4.9%);
+  --sidebar-primary: hsl(178, 84%, 40%);
+  --sidebar-primary-foreground: hsl(220, 27%, 6%);
   --sidebar-accent: hsl(217.2, 32.6%, 17.5%);
   --sidebar-accent-foreground: hsl(210, 40%, 98%);
   --sidebar-border: hsl(217.2, 32.6%, 17.5%);
-  --sidebar-ring: hsl(217.2, 91.2%, 59.8%);
+  --sidebar-ring: hsl(178, 84%, 40%);
   
-  /* Premium semantic colors for dark theme */
-  --success: hsl(142, 66%, 55%);
-  --success-foreground: hsl(222.2, 84%, 4.9%);
-  --warning: hsl(38, 92%, 60%);
-  --warning-foreground: hsl(222.2, 84%, 4.9%);
-  --info: hsl(199, 89%, 58%);
-  --info-foreground: hsl(222.2, 84%, 4.9%);
+  /* Premium semantic colors for dark theme - Deep Ocean Tech */
+  --success: hsl(178, 84%, 40%);
+  --success-foreground: hsl(220, 27%, 6%);
+  --warning: hsl(43, 100%, 48%);
+  --warning-foreground: hsl(220, 27%, 6%);
+  --info: hsl(188, 94%, 45%);
+  --info-foreground: hsl(220, 27%, 6%);
 }
 
 @layer base {
