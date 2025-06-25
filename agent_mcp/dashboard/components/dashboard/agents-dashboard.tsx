@@ -1,10 +1,10 @@
 "use client"
 
-import React, { useState, useEffect, useCallback, useMemo } from "react"
+import React, { useState, useEffect } from "react"
 import { 
   User, Users, Activity, Zap, Power, PowerOff, Clock, Hash, Settings, Trash2, Play, 
   StopCircle, AlertCircle, CheckCircle2, Shield, Cpu, Database, Network, Terminal,
-  Search, Filter, Plus, MoreVertical, Eye, GitBranch, Layers, Workflow, Grid, List, RefreshCw
+  Search, Filter, Plus, MoreVertical, Eye, GitBranch, Layers, Workflow, Grid, List, RefreshCw, Copy
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -13,91 +13,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { apiClient, Agent } from "@/lib/api"
+import { apiClient, Agent, Task } from "@/lib/api"
 import { useServerStore } from "@/lib/stores/server-store"
+import { useDataStore } from "@/lib/stores/data-store"
 import { cn } from "@/lib/utils"
+import { AgentDetailsPanel } from "./agent-details-panel"
+import { TaskDetailsDialog } from "./task-details-dialog"
 
-// Cache for agents data
-const agentsCache = new Map<string, { data: Agent[], timestamp: number }>()
-const CACHE_DURATION = 30000 // 30 seconds
-const REFRESH_INTERVAL = 60000 // 1 minute for background refresh
-
-// Real data hook for agents with caching
-const useAgentsData = () => {
-  const { activeServerId, servers } = useServerStore()
-  const activeServer = servers.find(s => s.id === activeServerId)
-  
-  const [agents, setAgents] = useState<Agent[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [lastFetch, setLastFetch] = useState<number>(0)
-
-  const fetchData = useCallback(async (forceRefresh = false) => {
-    if (!activeServerId || !activeServer || activeServer.status !== 'connected') {
-      setAgents([])
-      setError(null)
-      setLoading(false)
-      return
-    }
-
-    const cacheKey = `${activeServerId}-agents`
-    const now = Date.now()
-    const cached = agentsCache.get(cacheKey)
-
-    // Use cache if it's fresh and not forcing refresh
-    if (!forceRefresh && cached && (now - cached.timestamp) < CACHE_DURATION) {
-      setAgents(cached.data)
-      setError(null)
-      setLoading(false)
-      return
-    }
-
-    // Only show loading on first fetch or force refresh
-    if (agents.length === 0 || forceRefresh) {
-      setLoading(true)
-    }
-
-    try {
-      const agentsData = await apiClient.getAgents()
-      
-      // Update cache
-      agentsCache.set(cacheKey, { data: agentsData, timestamp: now })
-      
-      setAgents(agentsData)
-      setError(null)
-      setLastFetch(now)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch agents')
-      console.error('Error fetching agents:', err)
-    } finally {
-      setLoading(false)
-    }
-  }, [activeServerId, activeServer, agents.length])
-
-  useEffect(() => {
-    fetchData()
-
-    // Background refresh - less frequent and doesn't show loading
-    const interval = setInterval(() => {
-      fetchData(false)
-    }, REFRESH_INTERVAL)
-
-    return () => clearInterval(interval)
-  }, [fetchData])
-
-  // Manual refresh function
-  const refresh = useCallback(() => fetchData(true), [fetchData])
-
-  // Memoize return value to prevent unnecessary re-renders
-  return useMemo(() => ({
-    agents, 
-    loading, 
-    error, 
-    refresh,
-    lastFetch,
-    isConnected: !!activeServerId && activeServer?.status === 'connected' 
-  }), [agents, loading, error, refresh, lastFetch, activeServerId, activeServer])
-}
 
 const StatusDot = ({ status }: { status: Agent['status'] }) => {
   const config = {
@@ -128,8 +50,27 @@ const AgentTypeIcon = ({ agentId }: { agentId: string }) => {
   return <Icon className="h-4 w-4 text-muted-foreground" />
 }
 
-const CompactAgentRow = ({ agent, onTerminate }: { agent: Agent, onTerminate: (id: string) => void }) => {
+const CompactAgentRow = ({ agent, onTerminate, onSelect, onTaskClick }: { 
+  agent: Agent, 
+  onTerminate: (id: string) => void, 
+  onSelect: (agent: Agent) => void,
+  onTaskClick: (task: Task) => void 
+}) => {
   const [mounted, setMounted] = useState(false)
+  const { getAgentTasks, getAgentActions } = useDataStore()
+  
+  // Get agent's tasks and recent actions
+  const agentTasks = getAgentTasks(agent.agent_id)
+  const currentTask = agentTasks.find(t => t.task_id === agent.current_task)
+  const recentActions = getAgentActions(agent.agent_id).slice(0, 3)
+  
+  // Calculate task stats
+  const taskStats = {
+    total: agentTasks.length,
+    pending: agentTasks.filter(t => t.status === 'pending').length,
+    inProgress: agentTasks.filter(t => t.status === 'in_progress').length,
+    completed: agentTasks.filter(t => t.status === 'completed').length
+  }
   
   useEffect(() => {
     setMounted(true)
@@ -173,44 +114,64 @@ const CompactAgentRow = ({ agent, onTerminate }: { agent: Agent, onTerminate: (i
         </Badge>
       </TableCell>
       
-      <TableCell className="py-3 max-w-xs">
-        <div className="text-sm text-foreground truncate">
-          {agent.current_task || "No active task"}
-        </div>
-        {agent.current_task && (
-          <div className="text-xs text-muted-foreground mt-1 truncate">
-            {agent.working_directory || "No directory set"}
+      <TableCell className="py-3">
+        {currentTask ? (
+          <div className="max-w-md">
+            <button
+              onClick={() => onTaskClick(currentTask)}
+              className="text-sm text-foreground hover:text-primary truncate block text-left hover:underline max-w-full"
+            >
+              {currentTask.title}
+            </button>
+            <div className="text-xs text-muted-foreground mt-1">
+              Tasks: {taskStats.inProgress} active, {taskStats.completed} done
+            </div>
+          </div>
+        ) : (
+          <div>
+            <div className="text-sm text-muted-foreground">No active task</div>
+            {taskStats.total > 0 && (
+              <div className="text-xs text-muted-foreground mt-1">
+                {taskStats.total} tasks total
+              </div>
+            )}
           </div>
         )}
       </TableCell>
       
       <TableCell className="py-3">
-        <div className="flex flex-wrap gap-1">
-          {agent.capabilities?.slice(0, 2).map((cap, i) => (
-            <Badge key={i} variant="outline" className="text-xs px-2 py-0.5 bg-accent/10 text-accent-foreground border-accent/20 font-medium">
-              {cap}
-            </Badge>
-          ))}
-          {agent.capabilities && agent.capabilities.length > 2 && (
-            <Badge variant="outline" className="text-xs px-2 py-0.5 bg-muted/50 text-muted-foreground border-border font-medium">
-              +{agent.capabilities.length - 2}
-            </Badge>
-          )}
-        </div>
+        {agent.auth_token ? (
+          <div className="flex items-center gap-2">
+            <code className="text-xs font-mono text-muted-foreground max-w-[120px] truncate">
+              {agent.auth_token.slice(0, 8)}...
+            </code>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                navigator.clipboard.writeText(agent.auth_token || '')
+                // You could add a toast notification here
+              }}
+              className="h-6 w-6 p-0"
+            >
+              <Copy className="h-3 w-3" />
+            </Button>
+          </div>
+        ) : (
+          <span className="text-xs text-muted-foreground">No token</span>
+        )}
       </TableCell>
       
-      <TableCell className="py-3 text-xs text-muted-foreground font-mono">
-        {formatDate(agent.updated_at)}
-      </TableCell>
-      
-      <TableCell className="py-3">
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+      <TableCell className="py-3 text-right pr-4">
+        <div className="flex items-center gap-1 justify-end">
           <Button 
             variant="ghost" 
             size="sm" 
-            className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground hover:bg-muted"
+            onClick={() => onSelect(agent)}
+            className="h-7 px-2 text-xs"
           >
-            <Eye className="h-3.5 w-3.5" />
+            <Eye className="h-3.5 w-3.5 mr-1" />
+            Details
           </Button>
           {agent.status === 'running' && (
             <Button 
@@ -222,13 +183,6 @@ const CompactAgentRow = ({ agent, onTerminate }: { agent: Agent, onTerminate: (i
               <PowerOff className="h-3.5 w-3.5" />
             </Button>
           )}
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground hover:bg-muted"
-          >
-            <MoreVertical className="h-3.5 w-3.5" />
-          </Button>
         </div>
       </TableCell>
     </TableRow>
@@ -357,11 +311,29 @@ const CreateAgentModal = ({ onCreateAgent }: { onCreateAgent: (data: any) => voi
 }
 
 export function AgentsDashboard() {
-  const { agents, loading, error, refresh, lastFetch, isConnected } = useAgentsData()
   const { servers, activeServerId } = useServerStore()
   const activeServer = servers.find(s => s.id === activeServerId)
+  const { data, loading, error, fetchAllData, refreshData } = useDataStore()
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null)
+  const [taskDialogOpen, setTaskDialogOpen] = useState(false)
+  
+  // Fetch data on mount and when server changes
+  useEffect(() => {
+    if (activeServerId && activeServer?.status === 'connected') {
+      fetchAllData()
+    }
+  }, [activeServerId, activeServer?.status, fetchAllData])
+  
+  const agents = data?.agents || []
+  const isConnected = !!activeServerId && activeServer?.status === 'connected'
+  
+  const handleTaskClick = (task: Task) => {
+    setSelectedTask(task)
+    setTaskDialogOpen(true)
+  }
 
   const filteredAgents = agents.filter(agent => {
     const matchesSearch = agent.agent_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -433,7 +405,10 @@ export function AgentsDashboard() {
   }
 
   return (
-    <div className="w-full space-y-[var(--space-fluid-lg)]">
+    <div className="w-full space-y-[var(--space-fluid-lg)] -mx-[var(--container-padding)] px-[var(--container-padding)] -my-[var(--space-fluid-lg)] py-[var(--space-fluid-lg)]" style={{
+      paddingRight: selectedAgent ? `calc(360px + var(--container-padding))` : 'var(--container-padding)',
+      transition: 'padding-right 0.5s ease-in-out'
+    }}>
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -445,15 +420,15 @@ export function AgentsDashboard() {
             <div className="w-2 h-2 bg-primary rounded-full mr-2 animate-pulse" />
             {activeServer?.name}
           </Badge>
-          {lastFetch > 0 && (
+          {data?.timestamp && (
             <span className="text-xs text-muted-foreground">
-              Last updated: {new Date(lastFetch).toLocaleTimeString()}
+              Last updated: {new Date(data.timestamp).toLocaleTimeString()}
             </span>
           )}
           <Button 
             variant="outline" 
             size="sm" 
-            onClick={refresh}
+            onClick={refreshData}
             disabled={loading}
             className="text-xs"
           >
@@ -522,28 +497,31 @@ export function AgentsDashboard() {
       </div>
 
       {/* Agents Table */}
-      <div className="bg-card/30 border border-border/50 rounded-lg overflow-x-auto backdrop-blur-sm">
-        <Table>
-          <TableHeader>
-            <TableRow className="border-border/50 hover:bg-transparent">
-              <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider">Agent</TableHead>
-              <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider">Status</TableHead>
-              <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider">Current Task</TableHead>
-              <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider">Capabilities</TableHead>
-              <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider">Updated</TableHead>
-              <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider w-24">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredAgents.map((agent) => (
-              <CompactAgentRow
-                key={agent.agent_id}
-                agent={agent}
-                onTerminate={handleTerminateAgent}
-              />
-            ))}
-          </TableBody>
-        </Table>
+      <div className="bg-card/30 border border-border/50 rounded-lg backdrop-blur-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <Table className="w-full">
+            <TableHeader>
+              <TableRow className="border-border/50 hover:bg-transparent">
+                <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider w-[25%]">Agent</TableHead>
+                <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider w-[15%]">Status</TableHead>
+                <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider w-[30%]">Tasks</TableHead>
+                <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider w-[20%]">Token</TableHead>
+                <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider w-[10%] text-right pr-4">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredAgents.map((agent) => (
+                <CompactAgentRow
+                  key={agent.agent_id}
+                  agent={agent}
+                  onTerminate={handleTerminateAgent}
+                  onSelect={setSelectedAgent}
+                  onTaskClick={handleTaskClick}
+                />
+              ))}
+            </TableBody>
+          </Table>
+        </div>
         
         {filteredAgents.length === 0 && (
           <div className="p-12 text-center">
@@ -556,6 +534,22 @@ export function AgentsDashboard() {
           </div>
         )}
       </div>
+
+      {/* Agent Details Panel */}
+      <AgentDetailsPanel 
+        agent={selectedAgent} 
+        onClose={() => setSelectedAgent(null)} 
+      />
+      
+      {/* Task Details Dialog */}
+      <TaskDetailsDialog
+        task={selectedTask}
+        open={taskDialogOpen}
+        onOpenChange={(open) => {
+          setTaskDialogOpen(open)
+          if (!open) setSelectedTask(null)
+        }}
+      />
     </div>
   )
 }

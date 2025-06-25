@@ -59,9 +59,7 @@ export function MainLayout({ children }: MainLayoutProps) {
           {/* Main Content */}
           <main className="flex-1 overflow-auto min-h-0">
             <div className="fluid-container h-full animate-fade-in">
-              <div className="responsive-max-width mx-auto h-full">
-                {children}
-              </div>
+              {children}
             </div>
           </main>
         </div>

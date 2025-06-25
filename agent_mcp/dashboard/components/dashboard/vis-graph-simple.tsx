@@ -9,7 +9,9 @@ import {
 } from 'lucide-react'
 import { apiClient } from '@/lib/api'
 import { useServerStore } from '@/lib/stores/server-store'
+import { useDataStore } from '@/lib/stores/data-store'
 import { cn } from '@/lib/utils'
+import { NodeDetailPanel } from './node-detail-panel'
 
 // Physics options with better spacing and clustering
 const physicsOptions = {
@@ -52,6 +54,14 @@ const physicsOptions = {
         enabled: true,
         min: 8,
         max: 20
+      }
+    },
+    chosen: {
+      node: function(values, id, selected, hovering) {
+        if (hovering) {
+          values.borderWidth = 4
+          values.shadowSize = 10
+        }
       }
     }
   },
@@ -213,6 +223,12 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
   const [edgeCount, setEdgeCount] = useState(0)
   const [isMounted, setIsMounted] = useState(false)
   
+  // Selected node state for detail panel
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const [selectedNodeType, setSelectedNodeType] = useState<'agent' | 'task' | 'context' | 'file' | 'admin' | null>(null)
+  const [selectedNodeData, setSelectedNodeData] = useState<any>(null)
+  const [isPanelOpen, setIsPanelOpen] = useState(false)
+  
   // Track mounted state
   useEffect(() => {
     setIsMounted(true)
@@ -266,14 +282,14 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
         return {
           id: node.id,
           label: node.label || node.id,
-          title: node.title || `${node.group}: ${node.label}`,
           group: node.group,
           fixed: { x: true, y: true },
           x: 0,
           y: 0,
           physics: false, // Disable physics for admin node
           ...styling,
-          ...node
+          ...node,
+          title: undefined // Explicitly remove any title that might come from node data
         }
       }
       
@@ -287,14 +303,14 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
         return {
           id: node.id,
           label: node.label || node.id,
-          title: node.title || `${node.group}: ${node.label}`,
           group: node.group,
           x: Math.cos(angle) * radius,
           y: Math.sin(angle) * radius,
           fixed: { x: true, y: true }, // Fix context nodes in crown position
           physics: false, // Disable physics for context nodes
           ...styling,
-          ...node
+          ...node,
+          title: undefined // Explicitly remove any title that might come from node data
         }
       }
       
@@ -308,12 +324,12 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
         return {
           id: node.id,
           label: node.label || node.id,
-          title: node.title || `${node.group}: ${node.label}`,
           group: node.group,
           x: Math.cos(angle) * radius,
           y: Math.sin(angle) * radius,
           ...styling,
-          ...node
+          ...node,
+          title: undefined // Explicitly remove any title that might come from node data
         }
       }
       
@@ -321,7 +337,6 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
       return {
         id: node.id,
         label: node.label || node.id,
-        title: node.title || `${node.group}: ${node.label}`,
         group: node.group,
         ...styling,
         ...node
@@ -349,7 +364,8 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
 
       // Apply edge styling based on type
       if (edge.title) {
-        edgeStyle.title = edge.title
+        // Don't add title to prevent hover tooltips
+        // edgeStyle.title = edge.title
         
         if (edge.title.includes('Created by')) {
           edgeStyle.color = { color: '#555555', opacity: 0.2 }
@@ -522,6 +538,38 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
       networkRef.current = network
       console.log('✅ Network created:', network)
       
+      // Add click event handler
+      network.on('click', (params) => {
+        if (params.nodes.length > 0) {
+          const nodeId = params.nodes[0]
+          const node = nodesDataSetRef.current.get(nodeId)
+          
+          if (node) {
+            if (node.group === 'admin') {
+              // Special handling for admin node
+              setSelectedNodeId('admin')
+              setSelectedNodeType('admin' as any)
+              setSelectedNodeData(node)
+              setIsPanelOpen(true)
+            } else if (node.group === 'agent' || node.group === 'task' || node.group === 'context' || node.group === 'file') {
+              setSelectedNodeId(nodeId)
+              setSelectedNodeType(node.group as 'agent' | 'task' | 'context' | 'file')
+              setSelectedNodeData(node)
+              setIsPanelOpen(true)
+            }
+          }
+        }
+      })
+      
+      // Add hover effect
+      network.on('hoverNode', () => {
+        containerRef.current!.style.cursor = 'pointer'
+      })
+      
+      network.on('blurNode', () => {
+        containerRef.current!.style.cursor = 'default'
+      })
+      
       // Force physics to start
       if (layoutMode === 'physics') {
         network.startSimulation()
@@ -595,6 +643,13 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
         networkRef.current?.fit({ animation: true })
       }, 100)
     }
+  }, [])
+
+  const handleClosePanel = useCallback(() => {
+    setIsPanelOpen(false)
+    setSelectedNodeId(null)
+    setSelectedNodeType(null)
+    setSelectedNodeData(null)
   }, [])
 
   return (
@@ -689,6 +744,15 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
           onMouseEnter={() => console.log('🖱️ Mouse entered graph container')}
         />
       )}
+      
+      {/* Node Detail Panel */}
+      <NodeDetailPanel
+        nodeId={selectedNodeId}
+        nodeType={selectedNodeType}
+        nodeData={selectedNodeData}
+        isOpen={isPanelOpen}
+        onClose={handleClosePanel}
+      />
     </div>
   )
 }

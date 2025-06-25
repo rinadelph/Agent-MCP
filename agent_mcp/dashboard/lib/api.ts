@@ -9,6 +9,7 @@ export interface Agent {
   capabilities?: string[]
   created_at: string
   updated_at: string
+  auth_token?: string
 }
 
 export interface Task {
@@ -61,6 +62,18 @@ export interface SystemStatus {
   pending_tasks: number
   completed_tasks: number
   last_updated: string
+}
+
+export interface AgentDetails {
+  agent: Agent
+  token?: string
+  tasks?: Task[]
+  actions?: Array<{
+    timestamp: string
+    action_type: string
+    task_id?: string
+    details?: any
+  }>
 }
 
 class ApiClient {
@@ -129,6 +142,26 @@ class ApiClient {
     return this.request<Agent>(`/agents/${agentId}`)
   }
 
+  async getAgentDetails(agentId: string): Promise<AgentDetails> {
+    // Get agent basic info
+    const agent = await this.getAgent(agentId)
+    
+    // Get tokens
+    const tokens = await this.getTokens()
+    const agentToken = tokens.agent_tokens.find(t => t.agent_id === agentId)?.token || 
+                       (agentId === 'Admin' ? tokens.admin_token : undefined)
+    
+    // Get node details which includes actions and related tasks
+    const nodeDetails = await this.getNodeDetails(`agent_${agentId}`)
+    
+    return {
+      agent: { ...agent, auth_token: agentToken },
+      token: agentToken,
+      tasks: nodeDetails.related?.assigned_tasks || [],
+      actions: nodeDetails.actions || []
+    }
+  }
+
   async createAgent(data: {
     agent_id: string
     capabilities?: string[]
@@ -183,12 +216,29 @@ class ApiClient {
     return this.request('/tokens')
   }
 
+  // All data endpoint for caching
+  async getAllData(): Promise<{
+    agents: Agent[]
+    tasks: Task[]
+    context: any[]
+    actions: any[]
+    file_metadata: any[]
+    file_map: Record<string, any>
+    admin_token: string
+    timestamp: string
+  }> {
+    return this.request('/all-data')
+  }
+
   // Node details endpoint
   async getNodeDetails(nodeId: string): Promise<{
-    node_type: string
-    details: Record<string, unknown>
+    id: string
+    type: string
+    data: Record<string, unknown>
+    actions: Array<Record<string, unknown>>
+    related?: Record<string, unknown>
   }> {
-    return this.request(`/node-details/${nodeId}`)
+    return this.request(`/node-details?node_id=${encodeURIComponent(nodeId)}`)
   }
 
   // Real-time updates via Server-Sent Events

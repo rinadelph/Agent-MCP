@@ -349,6 +349,90 @@ async def terminate_agent_dashboard_api_route(request: Request) -> JSONResponse:
         return JSONResponse({"message": f"Error terminating agent via dashboard API: {str(e)}"}, status_code=500)
 
 
+# --- Comprehensive Data Endpoint ---
+async def all_data_api_route(request: Request) -> JSONResponse:
+    """Get all data in one call for caching on frontend"""
+    if request.method == 'OPTIONS':
+        return await handle_options(request)
+    
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get all agents with their tokens
+        cursor.execute("SELECT * FROM agents ORDER BY created_at DESC")
+        agents_data = []
+        for row in cursor.fetchall():
+            agent_dict = dict(row)
+            agent_id = agent_dict['agent_id']
+            
+            # Find token for this agent from active_agents
+            agent_token = None
+            for token, data in g.active_agents.items():
+                if data.get("agent_id") == agent_id and data.get("status") != "terminated":
+                    agent_token = token
+                    break
+            
+            agent_dict['auth_token'] = agent_token
+            agents_data.append(agent_dict)
+        
+        # Add admin as special agent
+        agents_data.insert(0, {
+            'agent_id': 'Admin',
+            'status': 'system',
+            'auth_token': g.admin_token,
+            'created_at': 'N/A',
+            'current_task': 'N/A'
+        })
+        
+        # Get all tasks
+        cursor.execute("SELECT * FROM tasks ORDER BY created_at DESC")
+        tasks_data = [dict(row) for row in cursor.fetchall()]
+        
+        # Get all context entries
+        cursor.execute("SELECT * FROM project_context ORDER BY created_at DESC")
+        context_data = [dict(row) for row in cursor.fetchall()]
+        
+        # Get recent agent actions (last 100)
+        cursor.execute("""
+            SELECT * FROM agent_actions 
+            ORDER BY timestamp DESC 
+            LIMIT 100
+        """)
+        actions_data = [dict(row) for row in cursor.fetchall()]
+        
+        # Get file metadata
+        cursor.execute("SELECT * FROM file_metadata")
+        file_metadata = [dict(row) for row in cursor.fetchall()]
+        
+        response_data = {
+            "agents": agents_data,
+            "tasks": tasks_data,
+            "context": context_data,
+            "actions": actions_data,
+            "file_metadata": file_metadata,
+            "file_map": g.file_map,
+            "admin_token": g.admin_token,
+            "timestamp": datetime.datetime.now().isoformat()
+        }
+        
+        return JSONResponse(
+            response_data,
+            headers={
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type'
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Error fetching all data: {e}", exc_info=True)
+        return JSONResponse({"error": f"Failed to fetch all data: {str(e)}"}, status_code=500)
+    finally:
+        if conn:
+            conn.close()
+
 # --- CORS Preflight Handler ---
 async def handle_options(request: Request) -> Response:
     """Handle OPTIONS requests for CORS preflight"""
@@ -365,6 +449,7 @@ async def handle_options(request: Request) -> Response:
 # --- Route Definitions List ---
 routes = [
     Route('/', endpoint=dashboard_home_route, name="dashboard_home"),
+    Route('/api/all-data', endpoint=all_data_api_route, name="all_data_api", methods=['GET', 'OPTIONS']),
     Route('/api/status', endpoint=simple_status_api_route, name="simple_status_api", methods=['GET', 'OPTIONS']),
     Route('/api/graph-data', endpoint=graph_data_api_route, name="graph_data_api", methods=['GET', 'OPTIONS']),
     Route('/api/task-tree-data', endpoint=task_tree_data_api_route, name="task_tree_data_api", methods=['GET', 'OPTIONS']),
