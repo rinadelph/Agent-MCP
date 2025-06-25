@@ -497,26 +497,19 @@ export function NodeDetailPanel({ nodeId, nodeType, isOpen, onClose, nodeData }:
   }
 
   return (
-    <>
-      {/* Backdrop */}
-      <div 
-        className={cn(
-          "fixed inset-0 bg-background/80 backdrop-blur-sm transition-opacity z-40",
-          isOpen ? "opacity-100" : "opacity-0 pointer-events-none"
-        )}
-        onClick={onClose}
-      />
-
-      {/* Panel */}
-      <div className={cn(
-        "fixed right-0 top-0 h-full w-full max-w-md bg-background border-l shadow-xl transition-transform z-50",
-        isOpen ? "translate-x-0" : "translate-x-full"
-      )}>
-        <Card className="h-full border-0 rounded-none">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-            <CardTitle className="text-base font-medium">
-              {nodeType === 'agent' ? 'Agent Details' : nodeType === 'task' ? 'Task Details' : 'Node Details'}
-            </CardTitle>
+    <div className={cn(
+      "h-full bg-background border-l shadow-xl transition-all duration-300 flex-shrink-0",
+      isOpen ? "w-96" : "w-0 overflow-hidden"
+    )}>
+      {isOpen && (
+        <div className="h-full flex flex-col bg-background w-96">
+          <div className="flex flex-row items-center justify-between p-4 border-b">
+            <h3 className="text-base font-medium">
+              {nodeType === 'agent' || nodeType === 'admin' ? 'Agent Details' : 
+               nodeType === 'task' ? 'Task Details' : 
+               nodeType === 'context' ? 'Context Details' :
+               'Node Details'}
+            </h3>
             <Button
               variant="ghost"
               size="icon"
@@ -525,9 +518,10 @@ export function NodeDetailPanel({ nodeId, nodeType, isOpen, onClose, nodeData }:
             >
               <X className="h-4 w-4" />
             </Button>
-          </CardHeader>
+          </div>
 
-          <CardContent>
+          <ScrollArea className="flex-1">
+            <div className="p-4">{" "}
             {loading && (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -566,9 +560,10 @@ export function NodeDetailPanel({ nodeId, nodeType, isOpen, onClose, nodeData }:
                 </div>
               </div>
             )}
-          </CardContent>
-        </Card>
-      </div>
-    </>
+            </div>
+          </ScrollArea>
+        </div>
+      )}
+    </div>
   )
 }

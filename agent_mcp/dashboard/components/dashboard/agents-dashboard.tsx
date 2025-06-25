@@ -64,9 +64,14 @@ const CompactAgentRow = ({ agent, onTerminate, onSelect, onTaskClick }: {
   const currentTask = agentTasks.find(t => t.task_id === agent.current_task)
   const recentActions = getAgentActions(agent.agent_id).slice(0, 3)
   
-  // Calculate task stats
+  // Calculate task stats - separate assigned vs worked on
+  const assignedTasks = agentTasks.filter(t => t.assigned_to === agent.agent_id)
+  const workedOnTasks = agentTasks.filter(t => t.assigned_to !== agent.agent_id)
+  
   const taskStats = {
     total: agentTasks.length,
+    assigned: assignedTasks.length,
+    workedOn: workedOnTasks.length,
     pending: agentTasks.filter(t => t.status === 'pending').length,
     inProgress: agentTasks.filter(t => t.status === 'in_progress').length,
     completed: agentTasks.filter(t => t.status === 'completed').length
@@ -124,7 +129,10 @@ const CompactAgentRow = ({ agent, onTerminate, onSelect, onTaskClick }: {
               {currentTask.title}
             </button>
             <div className="text-xs text-muted-foreground mt-1">
-              Tasks: {taskStats.inProgress} active, {taskStats.completed} done
+              {taskStats.assigned > 0 && `${taskStats.assigned} assigned`}
+              {taskStats.assigned > 0 && taskStats.workedOn > 0 && ', '}
+              {taskStats.workedOn > 0 && `${taskStats.workedOn} contributed`}
+              {taskStats.total === 0 && 'No tasks'}
             </div>
           </div>
         ) : (
@@ -132,7 +140,9 @@ const CompactAgentRow = ({ agent, onTerminate, onSelect, onTaskClick }: {
             <div className="text-sm text-muted-foreground truncate">No active task</div>
             {taskStats.total > 0 && (
               <div className="text-xs text-muted-foreground mt-1">
-                {taskStats.total} tasks total
+                {taskStats.assigned > 0 && `${taskStats.assigned} assigned`}
+                {taskStats.assigned > 0 && taskStats.workedOn > 0 && ', '}
+                {taskStats.workedOn > 0 && `${taskStats.workedOn} contributed`}
               </div>
             )}
           </div>

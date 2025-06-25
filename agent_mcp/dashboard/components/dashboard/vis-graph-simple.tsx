@@ -204,6 +204,12 @@ const getNodeStyling = (node: any) => {
 
 interface VisGraphProps {
   fullscreen?: boolean
+  selectedNodeId?: string | null
+  selectedNodeType?: 'agent' | 'task' | 'context' | 'file' | 'admin' | null
+  selectedNodeData?: any
+  isPanelOpen?: boolean
+  onNodeSelect?: (nodeId: string, nodeType: 'agent' | 'task' | 'context' | 'file' | 'admin', nodeData: any) => void
+  onClosePanel?: () => void
 }
 
 export function VisGraph({ fullscreen = false }: VisGraphProps) {
@@ -653,99 +659,102 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
   }, [])
 
   return (
-    <div className={cn("relative w-full bg-background", fullscreen ? "h-full" : "graph-container rounded-lg border")}>
-      {/* Controls Bar */}
-      <div className="absolute top-[var(--space-fluid-sm)] left-[var(--space-fluid-sm)] right-[var(--space-fluid-sm)] z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-[var(--space-fluid-xs)]">
-        {/* Left side - Layout controls */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="bg-background/95 backdrop-blur rounded-lg border p-0.5 sm:p-1 flex gap-0.5 sm:gap-1">
+    <div className={cn("w-full h-full flex", fullscreen ? "" : "graph-container rounded-lg border")}>
+      {/* Main Content Area - Graph */}
+      <div className="relative flex-1 min-w-0 bg-muted/20">
+        {/* Controls Bar - Positioned over the graph */}
+        <div className="absolute top-[var(--space-fluid-sm)] left-[var(--space-fluid-sm)] right-[var(--space-fluid-sm)] z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-[var(--space-fluid-xs)]">
+          {/* Left side - Layout controls */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="bg-background/95 backdrop-blur rounded-lg border p-0.5 sm:p-1 flex gap-0.5 sm:gap-1">
+              <Button
+                variant={layoutMode === 'physics' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => handleLayoutChange('physics')}
+                className="h-7 sm:h-8 px-2 sm:px-3 text-xs sm:text-sm"
+              >
+                <Layers className="h-3 sm:h-4 w-3 sm:w-4 mr-0.5 sm:mr-1" />
+                <span className="hidden sm:inline">Physics</span>
+                <span className="sm:hidden">P</span>
+              </Button>
+              <Button
+                variant={layoutMode === 'hierarchical' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => handleLayoutChange('hierarchical')}
+                className="h-7 sm:h-8 px-2 sm:px-3 text-xs sm:text-sm"
+              >
+                <GitBranch className="h-3 sm:h-4 w-3 sm:w-4 mr-0.5 sm:mr-1" />
+                <span className="hidden sm:inline">Tree</span>
+                <span className="sm:hidden">T</span>
+              </Button>
+            </div>
+            
+            <Badge variant="outline" className="bg-background/95 backdrop-blur text-xs sm:text-sm">
+              <span className="hidden sm:inline">{nodeCount} nodes, {edgeCount} edges</span>
+              <span className="sm:hidden">{nodeCount}n, {edgeCount}e</span>
+            </Badge>
+          </div>
+
+          {/* Right side - Refresh controls */}
+          <div className="flex items-center gap-1 sm:gap-2">
             <Button
-              variant={layoutMode === 'physics' ? 'default' : 'ghost'}
+              variant="outline"
               size="sm"
-              onClick={() => handleLayoutChange('physics')}
-              className="h-7 sm:h-8 px-2 sm:px-3 text-xs sm:text-sm"
+              onClick={() => setAutoRefresh(!autoRefresh)}
+              className={cn("bg-background/95 backdrop-blur h-7 sm:h-8 px-2 sm:px-3 text-xs sm:text-sm", autoRefresh && "bg-primary/10")}
             >
-              <Layers className="h-3 sm:h-4 w-3 sm:w-4 mr-0.5 sm:mr-1" />
-              <span className="hidden sm:inline">Physics</span>
-              <span className="sm:hidden">P</span>
+              {autoRefresh ? (
+                <>
+                  <Activity className="h-3 sm:h-4 w-3 sm:w-4 mr-0.5 sm:mr-1 animate-pulse" />
+                  <span className="hidden sm:inline">Live</span>
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-3 sm:h-4 w-3 sm:w-4 mr-0.5 sm:mr-1" />
+                  <span className="hidden sm:inline">Manual</span>
+                </>
+              )}
             </Button>
             <Button
-              variant={layoutMode === 'hierarchical' ? 'default' : 'ghost'}
+              variant="outline"
               size="sm"
-              onClick={() => handleLayoutChange('hierarchical')}
-              className="h-7 sm:h-8 px-2 sm:px-3 text-xs sm:text-sm"
+              onClick={() => fetchGraphData(true)}
+              disabled={loading}
+              className="bg-background/95 backdrop-blur h-7 sm:h-8 px-2 sm:px-3"
             >
-              <GitBranch className="h-3 sm:h-4 w-3 sm:w-4 mr-0.5 sm:mr-1" />
-              <span className="hidden sm:inline">Tree</span>
-              <span className="sm:hidden">T</span>
+              {loading ? <RefreshCw className="h-3 sm:h-4 w-3 sm:w-4 animate-spin" /> : <RefreshCw className="h-3 sm:h-4 w-3 sm:w-4" />}
             </Button>
           </div>
-          
-          <Badge variant="outline" className="bg-background/95 backdrop-blur text-xs sm:text-sm">
-            <span className="hidden sm:inline">{nodeCount} nodes, {edgeCount} edges</span>
-            <span className="sm:hidden">{nodeCount}n, {edgeCount}e</span>
-          </Badge>
         </div>
 
-        {/* Right side - Refresh controls */}
-        <div className="flex items-center gap-1 sm:gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setAutoRefresh(!autoRefresh)}
-            className={cn("bg-background/95 backdrop-blur h-7 sm:h-8 px-2 sm:px-3 text-xs sm:text-sm", autoRefresh && "bg-primary/10")}
-          >
-            {autoRefresh ? (
-              <>
-                <Activity className="h-3 sm:h-4 w-3 sm:w-4 mr-0.5 sm:mr-1 animate-pulse" />
-                <span className="hidden sm:inline">Live</span>
-              </>
-            ) : (
-              <>
-                <RefreshCw className="h-3 sm:h-4 w-3 sm:w-4 mr-0.5 sm:mr-1" />
-                <span className="hidden sm:inline">Manual</span>
-              </>
-            )}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => fetchGraphData(true)}
-            disabled={loading}
-            className="bg-background/95 backdrop-blur h-7 sm:h-8 px-2 sm:px-3"
-          >
-            {loading ? <RefreshCw className="h-3 sm:h-4 w-3 sm:w-4 animate-spin" /> : <RefreshCw className="h-3 sm:h-4 w-3 sm:w-4" />}
-          </Button>
-        </div>
+        {/* Graph Container */}
+        {loading && nodeCount === 0 ? (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center space-y-4">
+              <RefreshCw className="h-12 w-12 mx-auto animate-spin text-primary" />
+              <p className="text-muted-foreground">Loading graph data...</p>
+            </div>
+          </div>
+        ) : error && nodeCount === 0 ? (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center space-y-4">
+              <Activity className="h-12 w-12 mx-auto text-destructive" />
+              <p className="text-muted-foreground">{error}</p>
+              <Button onClick={() => fetchGraphData(true)} variant="outline">
+                Retry
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div 
+            ref={containerRef} 
+            className="w-full h-full" 
+            onMouseEnter={() => console.log('🖱️ Mouse entered graph container')}
+          />
+        )}
       </div>
-
-      {/* Graph Container */}
-      {loading && nodeCount === 0 ? (
-        <div className="flex items-center justify-center h-full">
-          <div className="text-center space-y-4">
-            <RefreshCw className="h-12 w-12 mx-auto animate-spin text-primary" />
-            <p className="text-muted-foreground">Loading graph data...</p>
-          </div>
-        </div>
-      ) : error && nodeCount === 0 ? (
-        <div className="flex items-center justify-center h-full">
-          <div className="text-center space-y-4">
-            <Activity className="h-12 w-12 mx-auto text-destructive" />
-            <p className="text-muted-foreground">{error}</p>
-            <Button onClick={() => fetchGraphData(true)} variant="outline">
-              Retry
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <div 
-          ref={containerRef} 
-          className="w-full h-full bg-muted/20" 
-          onMouseEnter={() => console.log('🖱️ Mouse entered graph container')}
-        />
-      )}
       
-      {/* Node Detail Panel */}
+      {/* Node Detail Panel - As a flex sibling */}
       <NodeDetailPanel
         nodeId={selectedNodeId}
         nodeType={selectedNodeType}

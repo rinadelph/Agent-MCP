@@ -29,6 +29,17 @@ interface DataStore {
   getContext: (contextKey: string) => any | undefined
   getAdminToken: () => string | undefined
   getAgentToken: (agentId: string) => string | undefined
+  getAgentTaskAnalysis: (agentId: string) => {
+    assignedTasks: Task[]
+    workedOnTasks: Task[]
+    completedTasks: Task[]
+    completionActions: any[]
+    totalTasks: number
+    assignedCount: number
+    workedOnCount: number
+    completedCount: number
+    completionActionCount: number
+  }
   updateAgent: (agent: Agent) => void
   updateTask: (task: Task) => void
   refreshData: () => Promise<void>
@@ -140,13 +151,44 @@ export const useDataStore = create<DataStore>((set, get) => ({
   getAgentTasks: (agentId: string) => {
     const state = get()
     if (!state.data) return []
-    return state.data.tasks.filter(t => t.assigned_to === agentId)
+    
+    // Strip prefix if present for consistent matching
+    const cleanAgentId = agentId.startsWith('agent_') ? agentId.substring(6) : agentId
+    
+    // Get tasks assigned to this agent
+    const assignedTasks = state.data.tasks.filter(t => t.assigned_to === cleanAgentId)
+    
+    // Get tasks this agent has worked on (via actions)
+    const workedOnTaskIds = new Set<string>()
+    state.data.actions
+      .filter(a => a.agent_id === cleanAgentId)
+      .forEach(action => {
+        if (action.task_id) {
+          workedOnTaskIds.add(action.task_id)
+        }
+      })
+    
+    // Get tasks worked on but not assigned
+    const workedOnTasks = state.data.tasks.filter(t => 
+      workedOnTaskIds.has(t.task_id) && t.assigned_to !== cleanAgentId
+    )
+    
+    // Combine and deduplicate
+    const allTasks = [...assignedTasks, ...workedOnTasks]
+    const uniqueTasks = allTasks.filter((task, index, arr) => 
+      arr.findIndex(t => t.task_id === task.task_id) === index
+    )
+    
+    return uniqueTasks
   },
 
   getAgentActions: (agentId: string) => {
     const state = get()
     if (!state.data) return []
-    return state.data.actions.filter(a => a.agent_id === agentId)
+    
+    // Strip prefix if present for consistent matching
+    const cleanAgentId = agentId.startsWith('agent_') ? agentId.substring(6) : agentId
+    return state.data.actions.filter(a => a.agent_id === cleanAgentId)
   },
 
   getTask: (taskId: string) => {
@@ -175,6 +217,44 @@ export const useDataStore = create<DataStore>((set, get) => ({
   getAgentToken: (agentId: string) => {
     const agent = get().getAgent(agentId)
     return agent?.auth_token
+  },
+
+  getAgentTaskAnalysis: (agentId: string) => {
+    const state = get()
+    if (!state.data) return {
+      assignedTasks: [],
+      workedOnTasks: [],
+      completedTasks: [],
+      totalTasks: 0,
+      assignedCount: 0,
+      workedOnCount: 0,
+      completedCount: 0
+    }
+    
+    const cleanAgentId = agentId.startsWith('agent_') ? agentId.substring(6) : agentId
+    const allTasks = get().getAgentTasks(agentId)
+    
+    const assignedTasks = allTasks.filter(t => t.assigned_to === cleanAgentId)
+    const workedOnTasks = allTasks.filter(t => t.assigned_to !== cleanAgentId)
+    const completedTasks = allTasks.filter(t => t.status === 'completed')
+    
+    // Get completion actions for this agent
+    const completionActions = state.data.actions.filter(a => 
+      a.agent_id === cleanAgentId && 
+      (a.action_type === 'task_completed' || a.action_type === 'complete_task' || a.action_type.includes('complet'))
+    )
+    
+    return {
+      assignedTasks,
+      workedOnTasks,
+      completedTasks,
+      completionActions,
+      totalTasks: allTasks.length,
+      assignedCount: assignedTasks.length,
+      workedOnCount: workedOnTasks.length,
+      completedCount: completedTasks.length,
+      completionActionCount: completionActions.length
+    }
   },
 
   updateAgent: (agent: Agent) => {

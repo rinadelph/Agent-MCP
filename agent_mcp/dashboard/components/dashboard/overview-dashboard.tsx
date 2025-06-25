@@ -8,12 +8,19 @@ import { Card, CardContent } from "@/components/ui/card"
 import { useServerStore } from "@/lib/stores/server-store"
 import { useDataStore } from "@/lib/stores/data-store"
 import { VisGraph } from "./vis-graph-simple"
+import { NodeDetailPanel } from "./node-detail-panel"
 
 export function OverviewDashboard() {
   const [mounted, setMounted] = useState(false)
   const { servers, activeServerId } = useServerStore()
   const activeServer = servers.find(s => s.id === activeServerId)
   const { data, loading, fetchAllData, isRefreshing } = useDataStore()
+  
+  // Selected node state for detail panel
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const [selectedNodeType, setSelectedNodeType] = useState<'agent' | 'task' | 'context' | 'file' | 'admin' | null>(null)
+  const [selectedNodeData, setSelectedNodeData] = useState<any>(null)
+  const [isPanelOpen, setIsPanelOpen] = useState(false)
   
   useEffect(() => {
     setMounted(true)
@@ -47,8 +54,18 @@ export function OverviewDashboard() {
     )
   }
 
+  const handleClosePanel = () => {
+    setIsPanelOpen(false)
+    setSelectedNodeId(null)
+    setSelectedNodeType(null)
+    setSelectedNodeData(null)
+  }
+
   return (
-    <div className="w-full h-full flex flex-col">
+    <div className="w-full h-full flex flex-col" style={{
+      paddingRight: isPanelOpen ? `calc(384px)` : '0px',
+      transition: 'padding-right 0.5s ease-in-out'
+    }}>
       {/* Minimal Header */}
       <div className="flex items-center justify-between p-4 border-b">
         <div className="flex items-center gap-2">
@@ -71,10 +88,32 @@ export function OverviewDashboard() {
         </div>
       </div>
 
-      {/* Full Screen Graph */}
-      <div className="flex-1 min-h-0 p-4">
-        <VisGraph fullscreen />
+      {/* Full Screen Graph Container */}
+      <div className="flex-1 min-h-0 overflow-hidden">
+        <VisGraph 
+          fullscreen 
+          selectedNodeId={selectedNodeId}
+          selectedNodeType={selectedNodeType}
+          selectedNodeData={selectedNodeData}
+          isPanelOpen={isPanelOpen}
+          onNodeSelect={(nodeId, nodeType, nodeData) => {
+            setSelectedNodeId(nodeId)
+            setSelectedNodeType(nodeType)
+            setSelectedNodeData(nodeData)
+            setIsPanelOpen(true)
+          }}
+          onClosePanel={handleClosePanel}
+        />
       </div>
+      
+      {/* Node Detail Panel - Fixed positioned like agents dashboard */}
+      <NodeDetailPanel
+        nodeId={selectedNodeId}
+        nodeType={selectedNodeType}
+        nodeData={selectedNodeData}
+        isOpen={isPanelOpen}
+        onClose={handleClosePanel}
+      />
     </div>
   )
 }
