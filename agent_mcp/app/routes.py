@@ -43,26 +43,71 @@ STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 # ... (dashboard_home_route, simple_status_api_route, graph_data_api_route, task_tree_data_api_route, node_details_api_route, agents_list_api_route, tokens_api_route, all_tasks_api_route, update_task_details_api_route remain unchanged from the previous version) ...
 # Ellipsis for brevity, these functions are the same as in the previous response.
 async def dashboard_home_route(request: Request) -> Response:
-    # // ... (implementation from previous response)
-    return templates.TemplateResponse("index_componentized.html", {"request": request})
+    """Serve the Next.js static dashboard."""
+    from starlette.responses import FileResponse
+    
+    # Serve the static Next.js index.html
+    index_path = STATIC_DIR / "index.html"
+    if index_path.exists():
+        return FileResponse(str(index_path), media_type="text/html")
+    else:
+        # Fallback to old template if Next.js build not available
+        logger.warning("Next.js dashboard not found, falling back to old template")
+        return templates.TemplateResponse("index_componentized.html", {"request": request})
 
 async def simple_status_api_route(request: Request) -> JSONResponse:
-    # // ... (implementation from previous response)
+    """API endpoint for Next.js dashboard system status."""
     try:
-        project_name = Path(os.environ.get("MCP_PROJECT_DIR", ".")).name
-        active_agents_summary = [
-            {"agent_id": data.get("agent_id"), "status": data.get("status")}
-            for data in g.active_agents.values()
-        ]
-        return JSONResponse({
-            "project_name": project_name,
-            "active_agents_count": len(g.active_agents),
-            "active_agents_summary": active_agents_summary,
-            "server_status": "running"
-        })
+        import sqlite3
+        conn = None
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            # Get task counts
+            cursor.execute("SELECT COUNT(*) FROM tasks")
+            total_tasks = cursor.fetchone()[0]
+            
+            cursor.execute("SELECT COUNT(*) FROM tasks WHERE status = 'pending'")
+            pending_tasks = cursor.fetchone()[0]
+            
+            cursor.execute("SELECT COUNT(*) FROM tasks WHERE status = 'completed'")
+            completed_tasks = cursor.fetchone()[0]
+            
+            # Get agent counts
+            active_agents_count = len([
+                agent for agent in g.active_agents.values() 
+                if agent.get("status") not in ["terminated", "failed"]
+            ])
+            
+            cursor.execute("SELECT COUNT(*) FROM agents")
+            total_agents = cursor.fetchone()[0]
+            
+            return JSONResponse({
+                "server_running": True,
+                "total_agents": total_agents,
+                "active_agents": active_agents_count,
+                "total_tasks": total_tasks,
+                "pending_tasks": pending_tasks,
+                "completed_tasks": completed_tasks,
+                "last_updated": datetime.datetime.now().isoformat()
+            })
+            
+        finally:
+            if conn:
+                conn.close()
     except Exception as e:
         logger.error(f"Error in simple_status_api_route: {e}", exc_info=True)
-        return JSONResponse({"error": f"Failed to get simple status: {str(e)}"}, status_code=500)
+        return JSONResponse({
+            "server_running": True,
+            "total_agents": 0,
+            "active_agents": 0,
+            "total_tasks": 0,
+            "pending_tasks": 0,
+            "completed_tasks": 0,
+            "last_updated": datetime.datetime.now().isoformat(),
+            "error": str(e)
+        }, status_code=500)
 
 async def graph_data_api_route(request: Request) -> JSONResponse:
     # // ... (implementation from previous response)
@@ -134,25 +179,43 @@ async def node_details_api_route(request: Request) -> JSONResponse:
     return JSONResponse(details)
 
 async def agents_list_api_route(request: Request) -> JSONResponse:
-    # // ... (implementation from previous response)
-    agents_list_data: List[Dict[str, Any]] = []
+    """API endpoint for Next.js dashboard agents list."""
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        admin_style = get_node_style('admin')
-        agents_list_data.append({
-            'agent_id': 'Admin', 'status': 'system', 'color': admin_style.get('color', '#607D8B'),
-            'created_at': 'N/A', 'current_task': 'N/A'
-        })
-        cursor.execute("SELECT agent_id, status, color, created_at, current_task FROM agents ORDER BY created_at DESC")
-        for row in cursor.fetchall(): agents_list_data.append(dict(row))
+        
+        # Get agents from database
+        cursor.execute("""
+            SELECT agent_id, status, color, created_at, updated_at, 
+                   current_task, working_directory, capabilities 
+            FROM agents ORDER BY created_at DESC
+        """)
+        
+        agents_list_data = []
+        for row in cursor.fetchall():
+            agent_dict = dict(row)
+            # Parse capabilities if it's a JSON string
+            if agent_dict.get('capabilities'):
+                try:
+                    agent_dict['capabilities'] = json.loads(agent_dict['capabilities'])
+                except (json.JSONDecodeError, TypeError):
+                    agent_dict['capabilities'] = []
+            else:
+                agent_dict['capabilities'] = []
+                
+            # Ensure required fields exist
+            agent_dict['updated_at'] = agent_dict.get('updated_at') or agent_dict.get('created_at')
+            agents_list_data.append(agent_dict)
+            
+        return JSONResponse(agents_list_data)
+        
     except Exception as e:
         logger.error(f"Error fetching agents list: {e}", exc_info=True)
         return JSONResponse({'error': f'Failed to fetch agents list: {str(e)}'}, status_code=500)
     finally:
-        if conn: conn.close()
-    return JSONResponse(agents_list_data)
+        if conn: 
+            conn.close()
 
 async def tokens_api_route(request: Request) -> JSONResponse:
     # // ... (implementation from previous response)
@@ -167,13 +230,31 @@ async def tokens_api_route(request: Request) -> JSONResponse:
         return JSONResponse({"error": f"Error retrieving tokens: {str(e)}"}, status_code=500)
 
 async def all_tasks_api_route(request: Request) -> JSONResponse:
-    # // ... (implementation from previous response)
+    """API endpoint for Next.js dashboard tasks list."""
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM tasks ORDER BY created_at DESC")
-        tasks_data = [dict(row) for row in cursor.fetchall()]
+        
+        tasks_data = []
+        for row in cursor.fetchall():
+            task_dict = dict(row)
+            
+            # Parse JSON fields
+            for field in ['child_tasks', 'depends_on_tasks', 'notes']:
+                if task_dict.get(field):
+                    try:
+                        task_dict[field] = json.loads(task_dict[field])
+                    except (json.JSONDecodeError, TypeError):
+                        task_dict[field] = [] if field != 'notes' else []
+                else:
+                    task_dict[field] = [] if field != 'notes' else []
+            
+            # Ensure updated_at exists
+            task_dict['updated_at'] = task_dict.get('updated_at') or task_dict.get('created_at')
+            tasks_data.append(task_dict)
+            
         return JSONResponse(tasks_data)
     except Exception as e:
         logger.error(f"Error fetching all tasks: {e}", exc_info=True)
@@ -343,9 +424,11 @@ routes = [
     Route('/api/graph-data', endpoint=graph_data_api_route, name="graph_data_api"),
     Route('/api/task-tree-data', endpoint=task_tree_data_api_route, name="task_tree_data_api"),
     Route('/api/node-details', endpoint=node_details_api_route, name="node_details_api"),
-    Route('/api/agents-list', endpoint=agents_list_api_route, name="agents_list_api"),
+    Route('/api/agents', endpoint=agents_list_api_route, name="agents_api"),  # Updated for Next.js
+    Route('/api/agents-list', endpoint=agents_list_api_route, name="agents_list_api"),  # Keep old route
+    Route('/api/tasks', endpoint=all_tasks_api_route, name="tasks_api"),  # Updated for Next.js
+    Route('/api/tasks-all', endpoint=all_tasks_api_route, name="all_tasks_api"),  # Keep old route
     Route('/api/tokens', endpoint=tokens_api_route, name="tokens_api"),
-    Route('/api/tasks-all', endpoint=all_tasks_api_route, name="all_tasks_api"),
     Route('/api/update-task-dashboard', endpoint=update_task_details_api_route, name="update_task_dashboard_api"),
     
     # Added back for 1-to-1 dashboard compatibility

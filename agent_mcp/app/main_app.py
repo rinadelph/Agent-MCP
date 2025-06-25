@@ -128,6 +128,22 @@ def create_app(project_dir: str, admin_token_cli: Optional[str] = None) -> Starl
     # Ensure STATIC_DIR is an absolute path string for StaticFiles
     all_routes.append(Mount('/static', app=StaticFiles(directory=str(STATIC_DIR)), name="static_files"))
     
+    # Mount Next.js static files at the expected /_next path
+    next_static_dir = STATIC_DIR / "_next"
+    if next_static_dir.exists():
+        all_routes.append(Mount('/_next', app=StaticFiles(directory=str(next_static_dir)), name="next_static_files"))
+    
+    # Add routes for root-level static assets (favicon, etc.)
+    from starlette.responses import FileResponse, JSONResponse
+    
+    async def favicon_route(request):
+        favicon_path = STATIC_DIR / "favicon.ico"
+        if favicon_path.exists():
+            return FileResponse(str(favicon_path))
+        return JSONResponse({"error": "Not found"}, status_code=404)
+    
+    all_routes.append(Route('/favicon.ico', endpoint=favicon_route, name="favicon"))
+    
     # Create the Starlette application instance
     app = Starlette(
         routes=all_routes,
