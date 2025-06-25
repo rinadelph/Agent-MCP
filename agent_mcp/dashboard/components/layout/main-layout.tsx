@@ -45,8 +45,8 @@ export function MainLayout({ children }: MainLayoutProps) {
   }, [theme, setTheme])
 
   return (
-    <SidebarProvider>
-      <div className="h-screen bg-background flex overflow-hidden">
+    <SidebarProvider defaultOpen={false}>
+      <div className="relative h-screen bg-background flex overflow-hidden">
         {/* Sidebar */}
         <AppSidebar />
         

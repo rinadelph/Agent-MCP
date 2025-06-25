@@ -9,6 +9,7 @@ import {
   SidebarFooter,
   SidebarHeader,
   SidebarRail,
+  useSidebar as useSidebarUI
 } from "@/components/ui/sidebar"
 import { Navigation } from "./navigation"
 import { useSidebar } from "@/lib/store"
@@ -16,6 +17,14 @@ import { cn } from "@/lib/utils"
 
 export function AppSidebar() {
   const { isCollapsed, toggle } = useSidebar()
+  const { openMobile, setOpenMobile, isMobile } = useSidebarUI()
+
+  // Sync mobile state with store
+  React.useEffect(() => {
+    if (isMobile && !isCollapsed) {
+      setOpenMobile(true)
+    }
+  }, [isCollapsed, isMobile, setOpenMobile])
 
   return (
     <Sidebar 
@@ -23,13 +32,13 @@ export function AppSidebar() {
       collapsible="icon"
       className={cn(
         "flex flex-col h-screen z-40 transition-all duration-300",
-        isCollapsed ? "w-16" : "w-64"
+        isCollapsed && !isMobile ? "w-16" : "w-64"
       )}
     >
       {/* Sidebar Header */}
       <SidebarHeader className="border-b px-3 py-3">
         <div className="flex items-center justify-between">
-          {!isCollapsed && (
+          {(!isCollapsed || isMobile) && (
             <div className="flex items-center space-x-2">
               <div className="h-6 w-6 rounded bg-primary/20 flex items-center justify-center">
                 <span className="text-xs font-semibold text-primary">M</span>
@@ -37,19 +46,21 @@ export function AppSidebar() {
               <span className="font-semibold text-sm text-foreground">MCP Control</span>
             </div>
           )}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggle}
-            className="h-8 w-8 shrink-0"
-          >
-            {isCollapsed ? (
-              <PanelLeftOpen className="h-4 w-4" />
-            ) : (
-              <PanelLeftClose className="h-4 w-4" />
-            )}
-            <span className="sr-only">Toggle sidebar</span>
-          </Button>
+          {!isMobile && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggle}
+              className="h-8 w-8 shrink-0"
+            >
+              {isCollapsed ? (
+                <PanelLeftOpen className="h-4 w-4" />
+              ) : (
+                <PanelLeftClose className="h-4 w-4" />
+              )}
+              <span className="sr-only">Toggle sidebar</span>
+            </Button>
+          )}
         </div>
       </SidebarHeader>
 
