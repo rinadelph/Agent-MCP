@@ -229,7 +229,7 @@ export function SystemGraph() {
   const [autoRefresh, setAutoRefresh] = useState(false)
 
   // Convert API data to React Flow format
-  const convertToFlowData = useCallback((graphData: { nodes: GraphNode[], edges: GraphEdge[] }) => {
+  const convertToFlowData = useCallback((graphData: { nodes: GraphNode[], edges: GraphEdge[] }, isDebugMode: boolean) => {
     try {
       if (!graphData || !graphData.nodes || !graphData.edges) {
         console.warn('Invalid graph data structure:', graphData)
@@ -375,7 +375,7 @@ export function SystemGraph() {
       ]
       
       // Test with simple nodes in debug mode
-      if (debugMode) {
+      if (isDebugMode) {
         console.log('Debug mode: Using test nodes')
         setNodes(testNodes)
         setEdges(testEdges)
@@ -412,7 +412,7 @@ export function SystemGraph() {
         throw new Error('No data received from server')
       }
       
-      convertToFlowData(graphData)
+      convertToFlowData(graphData, debugMode)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch graph data'
       setError(errorMessage)
@@ -425,6 +425,7 @@ export function SystemGraph() {
     } finally {
       setLoading(false)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeServerId, activeServer, convertToFlowData, setNodes, setEdges])
 
   // Initial load and auto-refresh
