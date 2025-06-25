@@ -31,28 +31,40 @@ export interface GraphSettings {
     taskRadius: number
     fileRadius: number
   }
+  animation: {
+    enabled: boolean
+    fadeInDuration: number
+    staggerDelay: number
+    batchSize: number
+  }
 }
 
 const DEFAULT_SETTINGS: GraphSettings = {
   physics: {
-    gravitationalConstant: -10000,
-    centralGravity: 0.02,
-    springLength: 250,
-    springConstant: 0.015,
-    damping: 0.3,
-    avoidOverlap: 0.9
+    gravitationalConstant: -30000,
+    centralGravity: 0.005,
+    springLength: 500,
+    springConstant: 0.005,
+    damping: 0.5,
+    avoidOverlap: 1
   },
   crown: {
     adminContextRadius: 400,
     contextMass: 50,
-    barrierMass: 75,
-    clusterMinRadius: 250
+    barrierMass: 100,
+    clusterMinRadius: 350
   },
   layout: {
-    clusterSpacing: 120,
+    clusterSpacing: 150,
     contextRadius: 200,
-    taskRadius: 350,
-    fileRadius: 150
+    taskRadius: 600,
+    fileRadius: 200
+  },
+  animation: {
+    enabled: true,
+    fadeInDuration: 50,
+    staggerDelay: 50,
+    batchSize: 5
   }
 }
 
@@ -146,9 +158,9 @@ export function GraphSettingsPanel({ onSettingsChange, isOpen, onClose }: GraphS
                 <Slider
                   value={[Math.abs(settings.physics.gravitationalConstant)]}
                   onValueChange={([value]) => updateSetting('physics', 'gravitationalConstant', -value)}
-                  min={1000}
-                  max={20000}
-                  step={500}
+                  min={5000}
+                  max={50000}
+                  step={1000}
                   className="w-full"
                 />
               </div>
@@ -356,6 +368,83 @@ export function GraphSettingsPanel({ onSettingsChange, isOpen, onClose }: GraphS
                   className="w-full"
                 />
               </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Animation Settings */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold">Animation</h3>
+            
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs">Enable Animations</Label>
+                <Switch
+                  checked={settings.animation.enabled}
+                  onCheckedChange={(checked) => {
+                    const newSettings = {
+                      ...settings,
+                      animation: {
+                        ...settings.animation,
+                        enabled: checked
+                      }
+                    }
+                    setSettings(newSettings)
+                    setHasChanges(true)
+                    onSettingsChange(newSettings)
+                  }}
+                />
+              </div>
+
+              {settings.animation.enabled && (
+                <>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <Label className="text-xs">Fade Duration (ms)</Label>
+                      <span className="text-xs text-muted-foreground">{settings.animation.fadeInDuration}</span>
+                    </div>
+                    <Slider
+                      value={[settings.animation.fadeInDuration]}
+                      onValueChange={([value]) => updateSetting('animation', 'fadeInDuration', value)}
+                      min={10}
+                      max={200}
+                      step={10}
+                      className="w-full"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <Label className="text-xs">Stagger Delay (ms)</Label>
+                      <span className="text-xs text-muted-foreground">{settings.animation.staggerDelay}</span>
+                    </div>
+                    <Slider
+                      value={[settings.animation.staggerDelay]}
+                      onValueChange={([value]) => updateSetting('animation', 'staggerDelay', value)}
+                      min={10}
+                      max={200}
+                      step={10}
+                      className="w-full"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <Label className="text-xs">Batch Size</Label>
+                      <span className="text-xs text-muted-foreground">{settings.animation.batchSize}</span>
+                    </div>
+                    <Slider
+                      value={[settings.animation.batchSize]}
+                      onValueChange={([value]) => updateSetting('animation', 'batchSize', value)}
+                      min={1}
+                      max={20}
+                      step={1}
+                      className="w-full"
+                    />
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </CardContent>
