@@ -190,7 +190,7 @@ export function TaskDetailsPanel({ task, onClose }: TaskDetailsPanelProps) {
                     <div>
                       <span className="text-muted-foreground text-xs uppercase tracking-wider">Dependencies</span>
                       <div className="flex flex-wrap gap-2 mt-2">
-                        {dependencies.map((depId, index) => (
+                        {dependencies.map((depId: any, index) => (
                           <Badge key={index} variant="outline" className="text-xs font-mono">
                             <GitBranch className="h-3 w-3 mr-1" />
                             {depId}
@@ -205,7 +205,7 @@ export function TaskDetailsPanel({ task, onClose }: TaskDetailsPanelProps) {
                     <div>
                       <span className="text-muted-foreground text-xs uppercase tracking-wider">Subtasks</span>
                       <div className="flex flex-wrap gap-2 mt-2">
-                        {childTasks.map((childId, index) => (
+                        {childTasks.map((childId: any, index) => (
                           <Badge key={index} variant="outline" className="text-xs font-mono">
                             <Hash className="h-3 w-3 mr-1" />
                             {childId}
@@ -220,7 +220,7 @@ export function TaskDetailsPanel({ task, onClose }: TaskDetailsPanelProps) {
                     <div>
                       <span className="text-muted-foreground text-xs uppercase tracking-wider">Notes</span>
                       <div className="space-y-2 mt-2">
-                        {notes.map((note, index) => (
+                        {notes.map((note: any, index) => (
                           <div key={index} className="bg-muted/50 rounded-lg p-3">
                             <div className="flex items-center justify-between mb-2">
                               <span className="text-xs font-medium">{note.author}</span>

@@ -88,12 +88,26 @@ export const useDataStore = create<DataStore>((set, get) => ({
       } catch (err) {
         // Fallback to fetching data from individual endpoints
         console.log('⚠️ All-data endpoint not available, using fallback...')
+        console.log('🔍 All-data endpoint error:', err)
         
         const [agents, tasks, tokens] = await Promise.all([
           apiClient.getAgents(),
           apiClient.getTasks(),
           apiClient.getTokens()
         ])
+        
+        // Try to get context data separately
+        let contextData = []
+        try {
+          const contextResponse = await fetch(`${apiClient.getServerUrl()}/api/all-data`)
+          if (contextResponse.ok) {
+            const fullData = await contextResponse.json()
+            contextData = fullData.context || []
+          }
+        } catch (contextErr) {
+          console.log('⚠️ Could not fetch context data in fallback:', contextErr)
+          console.log('🔍 Server URL:', apiClient.getServerUrl())
+        }
         
         // Merge tokens into agents
         const agentsWithTokens = agents.map(agent => {
@@ -105,7 +119,7 @@ export const useDataStore = create<DataStore>((set, get) => ({
         data = {
           agents: agentsWithTokens,
           tasks,
-          context: [],
+          context: contextData,
           actions: [],
           file_metadata: [],
           file_map: {},
@@ -117,8 +131,10 @@ export const useDataStore = create<DataStore>((set, get) => ({
       console.log('✅ Fetched all data:', {
         agents: data.agents?.length || 0,
         tasks: data.tasks?.length || 0,
+        context: data.context?.length || 0,
         actions: data.actions?.length || 0
       })
+      console.log('🔍 Debug - Context data received:', data.context)
       
       set({ 
         data, 

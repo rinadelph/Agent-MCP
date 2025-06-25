@@ -14,8 +14,13 @@ import { useDataStore } from '@/lib/stores/data-store'
 interface ContextData {
   id: string;
   type: string;
+  context_key: string;
+  context_value: unknown;
   content?: string;
+  summary?: string;
   metadata?: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
 }
 
 interface FileData {
@@ -567,7 +572,7 @@ export function NodeDetailPanel({ nodeId, nodeType, isOpen, onClose, nodeData }:
               <>
                 {(nodeType === 'agent' || nodeType === 'admin') && renderAgentDetails(details as Agent)}
                 {nodeType === 'task' && renderTaskDetails(details as Task)}
-                {nodeType === 'context' && renderContextDetails(details)}
+                {nodeType === 'context' && renderContextDetails(details as ContextData)}
               </>
             )}
 
@@ -578,7 +583,7 @@ export function NodeDetailPanel({ nodeId, nodeType, isOpen, onClose, nodeData }:
                     <Hash className="h-5 w-5 text-primary" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-semibold">{nodeData.label || nodeId}</h3>
+                    <h3 className="text-lg font-semibold">{(nodeData as any)?.label || nodeId}</h3>
                     <p className="text-sm text-muted-foreground capitalize">{nodeType}</p>
                   </div>
                 </div>

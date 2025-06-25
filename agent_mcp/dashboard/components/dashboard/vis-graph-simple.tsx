@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useRef, useCallback, useState } from 'react'
+import React, { useEffect, useRef, useCallback, useState, Profiler } from 'react'
 import { Network, DataSet } from 'vis-network/standalone'
 
 interface VisNode {
@@ -77,14 +77,6 @@ const physicsOptions = {
         enabled: true,
         min: 8,
         max: 20
-      }
-    },
-    chosen: {
-      node: function(values, id, selected, hovering) {
-        if (hovering) {
-          values.borderWidth = 4
-          values.shadowSize = 10
-        }
       }
     }
   },
@@ -235,6 +227,13 @@ interface VisGraphProps {
   onClosePanel?: () => void
 }
 
+// Performance profiling callback for vis graph
+const onVisGraphRender = (id: string, phase: "mount" | "update" | "nested-update", actualDuration: number) => {
+  if (actualDuration > 16.67) { // Log if render takes longer than 60fps (16.67ms)
+    console.warn(`[VisGraph] Slow render detected: ${actualDuration.toFixed(2)}ms for ${phase}`)
+  }
+}
+
 export function VisGraph({ 
   fullscreen = false, 
   onNodeSelect
@@ -265,6 +264,8 @@ export function VisGraph({
 
   // Convert API data to vis.js format with smart diffing
   const convertToVisData = useCallback((graphData: any) => {
+    performance.mark('vis-data-conversion-start')
+    
     if (!graphData || !graphData.nodes || !graphData.edges) {
       console.warn('Invalid graph data structure:', graphData)
       return
@@ -305,15 +306,13 @@ export function VisGraph({
       // Fixed position for admin node at center
       if (node.group === 'admin') {
         return {
-          id: node.id,
+          ...node,
           label: node.label || node.id,
-          group: node.group,
           fixed: { x: true, y: true },
           x: 0,
           y: 0,
           physics: false, // Disable physics for admin node
           ...styling,
-          ...node,
           title: undefined // Explicitly remove any title that might come from node data
         }
       }
@@ -326,15 +325,13 @@ export function VisGraph({
         const radius = 400 // Fixed radius for the crown
         
         return {
-          id: node.id,
+          ...node,
           label: node.label || node.id,
-          group: node.group,
           x: Math.cos(angle) * radius,
           y: Math.sin(angle) * radius,
           fixed: { x: true, y: true }, // Fix context nodes in crown position
           physics: false, // Disable physics for context nodes
           ...styling,
-          ...node,
           title: undefined // Explicitly remove any title that might come from node data
         }
       }
@@ -347,24 +344,20 @@ export function VisGraph({
         const radius = 600 + (taskIndex % 2) * 100 // Alternate between two radii
         
         return {
-          id: node.id,
+          ...node,
           label: node.label || node.id,
-          group: node.group,
           x: Math.cos(angle) * radius,
           y: Math.sin(angle) * radius,
           ...styling,
-          ...node,
           title: undefined // Explicitly remove any title that might come from node data
         }
       }
       
       // Let other nodes use physics
       return {
-        id: node.id,
+        ...node,
         label: node.label || node.id,
-        group: node.group,
-        ...styling,
-        ...node
+        ...styling
       }
     })
 
@@ -498,6 +491,9 @@ export function VisGraph({
         }
       }, 100)
     }
+    
+    performance.mark('vis-data-conversion-end')
+    performance.measure('vis-data-conversion', 'vis-data-conversion-start', 'vis-data-conversion-end')
   }, [])
 
   // Fetch graph data
@@ -570,11 +566,12 @@ export function VisGraph({
           const node = nodesDataSetRef.current.get(nodeId)
           
           if (node) {
-            if (node.group === 'admin') {
+            const nodeData = node as any
+            if (nodeData.group === 'admin') {
               // Special handling for admin node
               onNodeSelect('admin', 'admin' as any, node)
-            } else if (node.group === 'agent' || node.group === 'task' || node.group === 'context' || node.group === 'file') {
-              onNodeSelect(nodeId, node.group as 'agent' | 'task' | 'context' | 'file', node)
+            } else if (nodeData.group === 'agent' || nodeData.group === 'task' || nodeData.group === 'context' || nodeData.group === 'file') {
+              onNodeSelect(nodeId, nodeData.group as 'agent' | 'task' | 'context' | 'file', node)
             }
           }
         }
@@ -666,9 +663,10 @@ export function VisGraph({
 
 
   return (
-    <div className={cn("w-full h-full flex", fullscreen ? "" : "graph-container rounded-lg border")}>
-      {/* Main Content Area - Graph */}
-      <div className="relative flex-1 min-w-0 bg-muted/20">
+    <React.Profiler id="VisGraph" onRender={onVisGraphRender}>
+      <div className={cn("w-full h-full flex", fullscreen ? "" : "graph-container rounded-lg border")}>
+        {/* Main Content Area - Graph */}
+        <div className="relative flex-1 min-w-0 bg-muted/20">
         {/* Controls Bar - Positioned over the graph */}
         <div className="absolute top-[var(--space-fluid-sm)] left-[var(--space-fluid-sm)] right-[var(--space-fluid-sm)] z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-[var(--space-fluid-xs)]">
           {/* Left side - Layout controls */}
@@ -759,7 +757,8 @@ export function VisGraph({
             onMouseEnter={() => console.log('🖱️ Mouse entered graph container')}
           />
         )}
+        </div>
       </div>
-    </div>
+    </React.Profiler>
   )
 }

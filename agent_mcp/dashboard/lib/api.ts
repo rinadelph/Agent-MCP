@@ -185,8 +185,8 @@ class ApiClient {
     return {
       agent: { ...agent, auth_token: agentToken },
       token: agentToken,
-      tasks: nodeDetails.related?.assigned_tasks || [],
-      actions: nodeDetails.actions || []
+      tasks: (nodeDetails.related?.assigned_tasks as Task[]) || [],
+      actions: (nodeDetails.actions as any[]) || []
     }
   }
 

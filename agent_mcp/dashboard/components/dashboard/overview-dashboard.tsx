@@ -94,17 +94,12 @@ export function OverviewDashboard() {
       <div className="bg-card/30 border border-border/50 rounded-lg backdrop-blur-sm overflow-hidden" style={{ height: 'calc(100vh - 280px)' }}>
         <VisGraph 
           fullscreen 
-          selectedNodeId={selectedNodeId}
-          selectedNodeType={selectedNodeType}
-          selectedNodeData={selectedNodeData}
-          isPanelOpen={isPanelOpen}
           onNodeSelect={(nodeId, nodeType, nodeData) => {
             setSelectedNodeId(nodeId)
             setSelectedNodeType(nodeType)
             setSelectedNodeData(nodeData)
             setIsPanelOpen(true)
           }}
-          onClosePanel={handleClosePanel}
         />
       </div>
       
@@ -112,7 +107,7 @@ export function OverviewDashboard() {
       <NodeDetailPanel
         nodeId={selectedNodeId}
         nodeType={selectedNodeType}
-        nodeData={selectedNodeData}
+        nodeData={selectedNodeData as any}
         isOpen={isPanelOpen}
         onClose={handleClosePanel}
       />

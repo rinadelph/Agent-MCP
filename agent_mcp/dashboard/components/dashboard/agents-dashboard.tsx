@@ -345,6 +345,18 @@ const CreateAgentModal = ({ onCreateAgent }: { onCreateAgent: (data: CreateAgent
   )
 }
 
+// Performance profiling callback
+const onRender = (id: string, phase: "mount" | "update" | "nested-update", actualDuration: number, baseDuration: number, startTime: number, commitTime: number) => {
+  if (process.env.NODE_ENV === 'development') {
+    console.log(`[Profiler] ${id} ${phase}:`, {
+      actualDuration: `${actualDuration.toFixed(2)}ms`,
+      baseDuration: `${baseDuration.toFixed(2)}ms`,
+      startTime: `${startTime.toFixed(2)}ms`,
+      commitTime: `${commitTime.toFixed(2)}ms`
+    })
+  }
+}
+
 export function AgentsDashboard() {
   const { servers, activeServerId } = useServerStore()
   const activeServer = servers.find(s => s.id === activeServerId)
@@ -474,10 +486,11 @@ export function AgentsDashboard() {
   }
 
   return (
-    <div className="w-full space-y-[var(--space-fluid-lg)] -mx-[var(--container-padding)] px-[var(--container-padding)] -my-[var(--space-fluid-lg)] py-[var(--space-fluid-lg)]" style={{
-      paddingRight: selectedAgent ? `calc(360px + var(--container-padding))` : 'var(--container-padding)',
-      transition: 'padding-right 0.5s ease-in-out'
-    }}>
+    <React.Profiler id="AgentsDashboard" onRender={onRender}>
+      <div className="w-full space-y-[var(--space-fluid-lg)] -mx-[var(--container-padding)] px-[var(--container-padding)] -my-[var(--space-fluid-lg)] py-[var(--space-fluid-lg)]" style={{
+        paddingRight: selectedAgent ? `calc(360px + var(--container-padding))` : 'var(--container-padding)',
+        transition: 'padding-right 0.5s ease-in-out'
+      }}>
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -622,6 +635,7 @@ export function AgentsDashboard() {
           if (!open) setSelectedTask(null)
         }}
       />
-    </div>
+      </div>
+    </React.Profiler>
   )
 }
