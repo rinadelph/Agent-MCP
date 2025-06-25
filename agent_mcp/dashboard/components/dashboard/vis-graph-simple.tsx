@@ -11,17 +11,17 @@ import { apiClient } from '@/lib/api'
 import { useServerStore } from '@/lib/stores/server-store'
 import { cn } from '@/lib/utils'
 
-// Physics options from the original implementation
+// Physics options with better spacing and clustering
 const physicsOptions = {
   physics: {
     enabled: true,
     barnesHut: {
-      gravitationalConstant: -5000,
-      centralGravity: 0.2,
-      springLength: 150,
-      springConstant: 0.08,
-      damping: 0.12,
-      avoidOverlap: 0.5
+      gravitationalConstant: -8000, // Increased for better separation
+      centralGravity: 0.1, // Reduced to allow more spread
+      springLength: 200, // Increased for more spacing
+      springConstant: 0.05, // Reduced for softer connections
+      damping: 0.15,
+      avoidOverlap: 0.8 // Increased to prevent overlapping
     },
     maxVelocity: 50,
     minVelocity: 0.1,
@@ -95,23 +95,37 @@ const physicsOptions = {
     },
     admin: {
       shape: 'star',
-      borderWidth: 3,
-      color: { background: '#607D8B', border: '#455A64' }
+      borderWidth: 4,
+      color: { background: '#e11d48', border: '#be123c' },
+      font: { size: 16, color: '#ffffff', bold: true }
     }
   }
 }
 
 const hierarchicalOptions = {
-  physics: { enabled: false },
+  physics: { 
+    enabled: true,
+    hierarchicalRepulsion: {
+      centralGravity: 0,
+      springLength: 200,
+      springConstant: 0.01,
+      nodeDistance: 250,
+      damping: 0.09
+    },
+    solver: 'hierarchicalRepulsion'
+  },
   layout: {
     hierarchical: {
       enabled: true,
-      levelSeparation: 250,
-      nodeSpacing: 200,
-      treeSpacing: 300,
+      levelSeparation: 300,
+      nodeSpacing: 250,
+      treeSpacing: 400,
       direction: 'UD', // Up-Down for vertical layout
       sortMethod: 'directed',
-      shakeTowards: 'roots'
+      shakeTowards: 'roots',
+      parentCentralization: true,
+      edgeMinimization: true,
+      blockShifting: true
     }
   },
   nodes: physicsOptions.nodes,
@@ -165,9 +179,9 @@ const getNodeStyling = (node: any) => {
     shape = 'triangle'
     color = { background: '#795548', border: '#5D4037' }
   } else if (node.group === 'admin') {
-    size = baseSize + 10
+    size = baseSize + 20
     shape = 'star'
-    color = { background: '#607D8B', border: '#455A64' }
+    color = { background: '#e11d48', border: '#be123c' }
   }
 
   return { size, color, shape }
@@ -213,15 +227,53 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
     const currentNodeIds = new Set(nodesDataSetRef.current.getIds())
     const currentEdgeIds = new Set(edgesDataSetRef.current.getIds())
 
+    // Filter out idle agents (agents with no edges connecting to them)
+    const nodeIdsWithConnections = new Set<string>()
+    graphData.edges.forEach((edge: any) => {
+      nodeIdsWithConnections.add(edge.from)
+      nodeIdsWithConnections.add(edge.to)
+    })
+
+    // Filter nodes - keep admin, non-agents, and agents with connections
+    const filteredNodes = graphData.nodes.filter((node: any) => {
+      if (node.group === 'admin') return true // Always show admin
+      if (node.group !== 'agent') return true // Show all non-agents
+      return nodeIdsWithConnections.has(node.id) // Only show agents with connections
+    })
+
     // Convert nodes
-    const visNodes = graphData.nodes.map((node: any) => {
+    const visNodes = filteredNodes.map((node: any) => {
       const styling = getNodeStyling(node)
+      
+      // Fixed position for admin node
+      const fixedPosition = node.group === 'admin' ? {
+        fixed: { x: true, y: true },
+        x: 0,
+        y: 0
+      } : {}
+      
+      // Position context nodes in a separate area
+      if (node.group === 'context') {
+        const angle = Math.random() * Math.PI * 2
+        const radius = 300 + Math.random() * 100
+        return {
+          id: node.id,
+          label: node.label || node.id,
+          title: node.title || `${node.group}: ${node.label}`,
+          group: node.group,
+          x: Math.cos(angle) * radius,
+          y: Math.sin(angle) * radius,
+          ...styling,
+          ...node, // Include all original properties
+        }
+      }
       
       return {
         id: node.id,
         label: node.label || node.id,
         title: node.title || `${node.group}: ${node.label}`,
         group: node.group,
+        ...fixedPosition,
         ...styling,
         ...node // Include all original properties
       }
@@ -241,20 +293,31 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
         edgeStyle.title = edge.title
         
         if (edge.title.includes('Created by')) {
-          edgeStyle.color = { color: '#555555', opacity: 0.3 }
+          edgeStyle.color = { color: '#555555', opacity: 0.2 }
           edgeStyle.width = 0.5
+          edgeStyle.dashes = [2, 4]
         } else if (edge.title.includes('Parent of')) {
           edgeStyle.color = { color: '#10b981' }
-          edgeStyle.width = 2
+          edgeStyle.width = 3
+          edgeStyle.smooth = { enabled: true, type: 'curvedCW', roundness: 0.2 }
         } else if (edge.title.includes('Depends on')) {
           edgeStyle.color = { color: '#f59e0b' }
-          edgeStyle.width = 1.5
+          edgeStyle.width = 2
           edgeStyle.dashes = true
+          edgeStyle.smooth = { enabled: true, type: 'curvedCCW', roundness: 0.2 }
         } else if (edge.title.includes('Working on')) {
           edgeStyle.color = { color: '#3b82f6' }
-          edgeStyle.width = 2
+          edgeStyle.width = 3
           edgeStyle.smooth = { enabled: true, type: 'continuous' }
         }
+      }
+      
+      // Special styling for edges to/from context nodes
+      if (edge.from.includes('context') || edge.to.includes('context')) {
+        edgeStyle.color = { color: '#9333ea', opacity: 0.5 }
+        edgeStyle.width = 1
+        edgeStyle.dashes = [5, 5]
+        edgeStyle.smooth = { enabled: true, type: 'diagonalCross' }
       }
 
       // Apply any custom edge properties from the API
