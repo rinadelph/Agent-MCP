@@ -12,26 +12,26 @@ import { useServerStore } from '@/lib/stores/server-store'
 import { cn } from '@/lib/utils'
 import { GraphSettings, GraphSettingsPanel } from './graph-settings-panel'
 
-// Physics options with better spacing and clustering
+// Physics options with better spacing and animation
 const physicsOptions = {
   physics: {
     enabled: true,
     barnesHut: {
-      gravitationalConstant: -12000, // Strong repulsion for better separation
-      centralGravity: 0.05, // Very low to prevent clustering at center
-      springLength: 250, // Longer springs for more space
-      springConstant: 0.02, // Softer springs
-      damping: 0.2,
+      gravitationalConstant: -15000, // Stronger repulsion to keep crown clear
+      centralGravity: 0.03, // Low central gravity
+      springLength: 300, // Longer springs for better spacing
+      springConstant: 0.02, // Soft springs
+      damping: 0.3, // Higher damping for smoother animation
       avoidOverlap: 1 // Maximum overlap avoidance
     },
-    maxVelocity: 50,
+    maxVelocity: 40,
     minVelocity: 0.1,
     solver: 'barnesHut',
     stabilization: {
       enabled: true,
-      iterations: 1000,
+      iterations: 200, // Fewer iterations for faster initial render
       updateInterval: 25,
-      fit: true
+      fit: false // Don't auto-fit during stabilization
     },
     adaptiveTimestep: true,
     timestep: 0.5
@@ -215,6 +215,7 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
   const [isMounted, setIsMounted] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [settings, setSettings] = useState<GraphSettings | undefined>(undefined)
+  const fetchDataRef = useRef<((isInitialLoad: boolean) => Promise<void>) | null>(null)
   
   // Track mounted state
   useEffect(() => {
@@ -257,6 +258,99 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
       groups: physicsOptions.groups
     }
   }, [settings])
+
+  // Simple progressive node addition for initial load
+  const addNodesProgressively = useCallback((nodes: any[], edges: any[]) => {
+    // Clear existing data
+    nodesDataSetRef.current.clear()
+    edgesDataSetRef.current.clear()
+    
+    // Group nodes by type
+    const adminNode = nodes.find(n => n.group === 'admin')
+    const contextNodes = nodes.filter(n => n.group === 'context')
+    const otherNodes = nodes.filter(n => n.group !== 'admin' && n.group !== 'context')
+    
+    let delay = 0
+    
+    // 1. Add admin node immediately with fade effect
+    if (adminNode) {
+      nodesDataSetRef.current.add({
+        ...adminNode,
+        opacity: 0
+      })
+      // Fade in admin node
+      setTimeout(() => {
+        nodesDataSetRef.current.update({
+          id: adminNode.id,
+          opacity: 1
+        })
+      }, 50)
+    }
+    
+    // 2. Add context nodes one by one with fade
+    contextNodes.forEach((node, index) => {
+      setTimeout(() => {
+        nodesDataSetRef.current.add({
+          ...node,
+          opacity: 0
+        })
+        // Fade in after a moment
+        setTimeout(() => {
+          nodesDataSetRef.current.update({
+            id: node.id,
+            opacity: 1
+          })
+        }, 50)
+        // Add edges to admin
+        const adminEdges = edges.filter(e => 
+          (e.from === adminNode?.id && e.to === node.id) ||
+          (e.to === adminNode?.id && e.from === node.id)
+        )
+        edgesDataSetRef.current.add(adminEdges)
+      }, delay + index * 50)
+    })
+    
+    delay += contextNodes.length * 50 + 200
+    
+    // 3. Add other nodes in small batches with fade
+    const batchSize = 5
+    for (let i = 0; i < otherNodes.length; i += batchSize) {
+      const batch = otherNodes.slice(i, i + batchSize)
+      setTimeout(() => {
+        // Add nodes with initial opacity
+        const fadeBatch = batch.map(node => ({
+          ...node,
+          opacity: 0
+        }))
+        nodesDataSetRef.current.add(fadeBatch)
+        
+        // Fade in nodes
+        setTimeout(() => {
+          const updates = batch.map(node => ({
+            id: node.id,
+            opacity: 1
+          }))
+          nodesDataSetRef.current.update(updates)
+        }, 50)
+        
+        // Add their edges
+        batch.forEach(node => {
+          const nodeEdges = edges.filter(e => e.from === node.id || e.to === node.id)
+          edgesDataSetRef.current.add(nodeEdges)
+        })
+      }, delay + (i / batchSize) * 100)
+    }
+    
+    // Fit view after all nodes are added
+    setTimeout(() => {
+      networkRef.current?.fit({
+        animation: {
+          duration: 1000,
+          easingFunction: 'easeInOutQuad'
+        }
+      })
+    }, delay + (otherNodes.length / batchSize) * 100 + 500)
+  }, [])
 
   // Convert API data to vis.js format with smart diffing
   const convertToVisData = useCallback((graphData: any) => {
@@ -348,12 +442,31 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
         }
       }
       
-      // Let other nodes use physics
+      // Let other nodes use physics but ensure they're outside crown
+      const minRadius = (settings?.crown.adminContextRadius || 400) + 150
+      let x = node.x || 0
+      let y = node.y || 0
+      const currentRadius = Math.sqrt(x * x + y * y)
+      
+      // If node would be inside crown, push it out
+      if (currentRadius < minRadius && currentRadius > 0) {
+        const scale = minRadius / currentRadius
+        x *= scale
+        y *= scale
+      } else if (currentRadius === 0) {
+        // Random position outside crown
+        const angle = Math.random() * 2 * Math.PI
+        x = Math.cos(angle) * minRadius
+        y = Math.sin(angle) * minRadius
+      }
+      
       return {
         id: node.id,
         label: node.label || node.id,
         title: node.title || `${node.group}: ${node.label}`,
         group: node.group,
+        x: x,
+        y: y,
         ...styling,
         ...node
       }
@@ -470,15 +583,21 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
     setNodeCount(visNodes.length)
     setEdgeCount(visEdges.length)
 
-    // Only fit to view if it's the first load or significant changes
-    if (currentNodeIds.size === 0 || nodesToAdd.length > 5) {
-      setTimeout(() => {
-        if (networkRef.current) {
-          networkRef.current.fit({ animation: true })
-        }
-      }, 100)
+    // For initial load, use progressive animation
+    if (currentNodeIds.size === 0 && networkRef.current) {
+      addNodesProgressively(visNodes, visEdges)
+    } else {
+      // Otherwise, apply updates normally
+      // Only fit to view if significant changes
+      if (nodesToAdd.length > 5) {
+        setTimeout(() => {
+          if (networkRef.current) {
+            networkRef.current.fit({ animation: true })
+          }
+        }, 100)
+      }
     }
-  }, [settings])
+  }, [settings, addNodesProgressively])
 
   // Fetch graph data
   const fetchGraphData = useCallback(async (isInitialLoad = false) => {
@@ -510,6 +629,11 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
       setLoading(false)
     }
   }, [activeServerId, activeServer, convertToVisData, nodeCount])
+  
+  // Store fetchGraphData in ref to avoid dependency issues
+  useEffect(() => {
+    fetchDataRef.current = fetchGraphData
+  }, [fetchGraphData])
 
   // Initialize vis.js network
   useEffect(() => {
@@ -638,7 +762,9 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
       networkRef.current.setOptions(options)
     }
     // Re-fetch data to apply new layout settings
-    fetchGraphData(false)
+    if (fetchDataRef.current) {
+      fetchDataRef.current(false)
+    }
   }, [layoutMode])
 
   return (
