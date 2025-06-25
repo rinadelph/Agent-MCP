@@ -38,6 +38,12 @@ const navigationItems: NavItem[] = [
     icon: CheckSquare,
     view: "tasks",
     description: "Task orchestration and management"
+  },
+  {
+    title: "Memories",
+    icon: Brain,
+    view: "memories",
+    description: "Memory bank and context management"
   }
 ]
 
