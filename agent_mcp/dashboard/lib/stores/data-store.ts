@@ -154,17 +154,23 @@ export const useDataStore = create<DataStore>((set, get) => ({
     
     // Strip prefix if present for consistent matching
     const cleanAgentId = agentId.startsWith('agent_') ? agentId.substring(6) : agentId
+    // Handle admin variations - both 'Admin' and 'admin' are used in the system
+    const normalizedAgentId = cleanAgentId === 'Admin' ? 'admin' : cleanAgentId
     
-    console.log(`🔍 getAgentTasks for agentId: "${agentId}" -> cleanAgentId: "${cleanAgentId}"`)
-    
-    // Get tasks assigned to this agent
-    const assignedTasks = state.data.tasks.filter(t => t.assigned_to === cleanAgentId)
-    console.log(`📋 Found ${assignedTasks.length} assigned tasks for ${cleanAgentId}:`, assignedTasks.map(t => `${t.task_id} (${t.status})`))
+    // Get tasks assigned to this agent (handle both admin variations)
+    const assignedTasks = state.data.tasks.filter(t => 
+      t.assigned_to === normalizedAgentId || 
+      t.assigned_to === cleanAgentId ||
+      (normalizedAgentId === 'admin' && (t.assigned_to === 'Admin' || t.assigned_to === 'admin'))
+    )
     
     // Get tasks this agent has worked on (via actions)
     const workedOnTaskIds = new Set<string>()
-    const agentActions = state.data.actions.filter(a => a.agent_id === cleanAgentId)
-    console.log(`🎯 Found ${agentActions.length} actions for ${cleanAgentId}`)
+    const agentActions = state.data.actions.filter(a => 
+      a.agent_id === normalizedAgentId || 
+      a.agent_id === cleanAgentId ||
+      (normalizedAgentId === 'admin' && (a.agent_id === 'Admin' || a.agent_id === 'admin'))
+    )
     
     agentActions.forEach(action => {
       if (action.task_id) {
@@ -174,9 +180,11 @@ export const useDataStore = create<DataStore>((set, get) => ({
     
     // Get tasks worked on but not assigned
     const workedOnTasks = state.data.tasks.filter(t => 
-      workedOnTaskIds.has(t.task_id) && t.assigned_to !== cleanAgentId
+      workedOnTaskIds.has(t.task_id) && 
+      t.assigned_to !== normalizedAgentId && 
+      t.assigned_to !== cleanAgentId &&
+      !(normalizedAgentId === 'admin' && (t.assigned_to === 'Admin' || t.assigned_to === 'admin'))
     )
-    console.log(`🔧 Found ${workedOnTasks.length} worked-on (non-assigned) tasks for ${cleanAgentId}:`, workedOnTasks.map(t => `${t.task_id} (${t.status})`))
     
     // Combine and deduplicate
     const allTasks = [...assignedTasks, ...workedOnTasks]
@@ -184,7 +192,6 @@ export const useDataStore = create<DataStore>((set, get) => ({
       arr.findIndex(t => t.task_id === task.task_id) === index
     )
     
-    console.log(`✅ Total unique tasks for ${cleanAgentId}: ${uniqueTasks.length}`)
     return uniqueTasks
   },
 
@@ -194,7 +201,14 @@ export const useDataStore = create<DataStore>((set, get) => ({
     
     // Strip prefix if present for consistent matching
     const cleanAgentId = agentId.startsWith('agent_') ? agentId.substring(6) : agentId
-    return state.data.actions.filter(a => a.agent_id === cleanAgentId)
+    // Handle admin variations - both 'Admin' and 'admin' are used in the system
+    const normalizedAgentId = cleanAgentId === 'Admin' ? 'admin' : cleanAgentId
+    
+    return state.data.actions.filter(a => 
+      a.agent_id === normalizedAgentId || 
+      a.agent_id === cleanAgentId ||
+      (normalizedAgentId === 'admin' && (a.agent_id === 'Admin' || a.agent_id === 'admin'))
+    )
   },
 
   getTask: (taskId: string) => {
@@ -231,24 +245,38 @@ export const useDataStore = create<DataStore>((set, get) => ({
       assignedTasks: [],
       workedOnTasks: [],
       completedTasks: [],
+      completionActions: [],
       totalTasks: 0,
       assignedCount: 0,
       workedOnCount: 0,
-      completedCount: 0
+      completedCount: 0,
+      completionActionCount: 0
     }
     
     const cleanAgentId = agentId.startsWith('agent_') ? agentId.substring(6) : agentId
+    // Handle admin variations
+    const normalizedAgentId = cleanAgentId === 'Admin' ? 'admin' : cleanAgentId
+    
     const allTasks = get().getAgentTasks(agentId)
     
-    const assignedTasks = allTasks.filter(t => t.assigned_to === cleanAgentId)
-    const workedOnTasks = allTasks.filter(t => t.assigned_to !== cleanAgentId)
+    const assignedTasks = allTasks.filter(t => 
+      t.assigned_to === normalizedAgentId || 
+      t.assigned_to === cleanAgentId ||
+      (normalizedAgentId === 'admin' && (t.assigned_to === 'Admin' || t.assigned_to === 'admin'))
+    )
+    const workedOnTasks = allTasks.filter(t => 
+      t.assigned_to !== normalizedAgentId && 
+      t.assigned_to !== cleanAgentId &&
+      !(normalizedAgentId === 'admin' && (t.assigned_to === 'Admin' || t.assigned_to === 'admin'))
+    )
     const completedTasks = allTasks.filter(t => t.status === 'completed')
     
     // Get completion actions for this agent
     const completionActions = state.data.actions.filter(a => 
-      a.agent_id === cleanAgentId && 
+      (a.agent_id === normalizedAgentId || a.agent_id === cleanAgentId) && 
       (a.action_type === 'task_completed' || a.action_type === 'complete_task' || a.action_type.includes('complet'))
     )
+    
     
     return {
       assignedTasks,

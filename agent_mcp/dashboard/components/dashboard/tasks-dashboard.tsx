@@ -16,6 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { apiClient, Task } from "@/lib/api"
 import { useServerStore } from "@/lib/stores/server-store"
 import { cn } from "@/lib/utils"
+import { TaskDetailsPanel } from "./task-details-panel"
 
 // Cache for tasks data
 const tasksCache = new Map<string, { data: Task[], timestamp: number }>()
@@ -133,7 +134,7 @@ const PriorityIcon = React.memo(({ priority }: { priority: Task['priority'] }) =
 })
 PriorityIcon.displayName = 'PriorityIcon'
 
-const CompactTaskRow = React.memo(({ task }: { task: Task }) => {
+const CompactTaskRow = React.memo(({ task, onTaskClick }: { task: Task, onTaskClick: (task: Task) => void }) => {
   const [mounted, setMounted] = useState(false)
   
   useEffect(() => {
@@ -151,7 +152,7 @@ const CompactTaskRow = React.memo(({ task }: { task: Task }) => {
   }, [mounted])
 
   return (
-    <TableRow className="border-teal-500/10 dark:border-teal-500/10 border-teal-600/20 hover:bg-teal-500/5 dark:hover:bg-teal-500/5 hover:bg-teal-600/10 group transition-all duration-200">
+    <TableRow className="border-teal-500/10 dark:border-teal-500/10 border-teal-600/20 hover:bg-teal-500/5 dark:hover:bg-teal-500/5 hover:bg-teal-600/10 group transition-all duration-200 cursor-pointer" onClick={() => onTaskClick(task)}>
       <TableCell className="py-3">
         <div className="flex items-center gap-3">
           <StatusDot status={task.status} />
@@ -413,6 +414,7 @@ export function TasksDashboard() {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [priorityFilter, setPriorityFilter] = useState<string>('all')
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null)
 
   // Memoize filtered tasks to prevent unnecessary recalculations
   const filteredTasks = useMemo(() => {
@@ -443,6 +445,14 @@ export function TasksDashboard() {
       console.error('Failed to create task:', error)
     }
   }, [refresh])
+
+  const handleTaskClick = useCallback((task: Task) => {
+    setSelectedTask(task)
+  }, [])
+
+  const handleCloseTaskPanel = useCallback(() => {
+    setSelectedTask(null)
+  }, [])
 
   if (!isConnected) {
     return (
@@ -484,7 +494,10 @@ export function TasksDashboard() {
   }
 
   return (
-    <div className="w-full space-y-[var(--space-fluid-lg)]">
+    <div className="w-full space-y-[var(--space-fluid-lg)]" style={{
+      paddingRight: selectedTask ? `calc(420px)` : '0px',
+      transition: 'padding-right 0.5s ease-in-out'
+    }}>
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -610,6 +623,7 @@ export function TasksDashboard() {
               <CompactTaskRow
                 key={task.task_id}
                 task={task}
+                onTaskClick={handleTaskClick}
               />
             ))}
           </TableBody>
@@ -626,6 +640,12 @@ export function TasksDashboard() {
           </div>
         )}
       </div>
+      
+      {/* Task Details Panel */}
+      <TaskDetailsPanel 
+        task={selectedTask} 
+        onClose={handleCloseTaskPanel} 
+      />
     </div>
   )
 }
