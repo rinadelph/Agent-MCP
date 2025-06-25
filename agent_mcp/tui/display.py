@@ -11,7 +11,7 @@ try:
     import requests
 except ImportError:
     requests = None
-from .colors import TUITheme, AGENT_MCP_LOGO, STATUS_SYMBOLS
+from .colors import TUITheme, AGENT_MCP_LOGO, STATUS_SYMBOLS, get_responsive_agent_mcp_banner
 from ..core.config import VERSION, AUTHOR, GITHUB_URL, GITHUB_REPO
 
 class TUIDisplay:
@@ -64,6 +64,12 @@ class TUIDisplay:
         self.terminal_width = shutil.get_terminal_size().columns
         self.terminal_height = shutil.get_terminal_size().lines
     
+    def _strip_ansi_codes(self, text: str) -> str:
+        """Strip ANSI escape codes from text for length calculation."""
+        import re
+        ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+        return ansi_escape.sub('', text)
+    
     def draw_header(self, clear_first: bool = True):
         """Draw the application header with logo, credits, and version info."""
         if clear_first:
@@ -85,13 +91,16 @@ class TUIDisplay:
             print(' ' * padding + TUITheme.error(update_msg))
             current_row += 2
         
-        # Center the logo
-        logo_lines = AGENT_MCP_LOGO.strip().split('\n')
+        # Center the AGENT MCP logo with gradient - responsive to terminal width
+        agent_mcp_banner = get_responsive_agent_mcp_banner(self.terminal_width)
+        logo_lines = agent_mcp_banner.split('\n')
         for line in logo_lines:
             self.move_cursor(current_row, 1)
             self.clear_line()
-            padding = (self.terminal_width - len(line)) // 2
-            print(' ' * padding + TUITheme.header(line))
+            # Calculate padding without ANSI codes for proper centering
+            clean_line = self._strip_ansi_codes(line)
+            padding = (self.terminal_width - len(clean_line)) // 2
+            print(' ' * padding + line)
             current_row += 1
         
         # Add credits and version info

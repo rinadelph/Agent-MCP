@@ -391,7 +391,7 @@ async def all_data_api_route(request: Request) -> JSONResponse:
         tasks_data = [dict(row) for row in cursor.fetchall()]
         
         # Get all context entries
-        cursor.execute("SELECT * FROM project_context ORDER BY created_at DESC")
+        cursor.execute("SELECT * FROM project_context ORDER BY last_updated DESC")
         context_data = [dict(row) for row in cursor.fetchall()]
         
         # Get recent agent actions (last 100)
@@ -448,7 +448,6 @@ async def handle_options(request: Request) -> Response:
 
 # --- Route Definitions List ---
 routes = [
-    Route('/', endpoint=dashboard_home_route, name="dashboard_home"),
     Route('/api/all-data', endpoint=all_data_api_route, name="all_data_api", methods=['GET', 'OPTIONS']),
     Route('/api/status', endpoint=simple_status_api_route, name="simple_status_api", methods=['GET', 'OPTIONS']),
     Route('/api/graph-data', endpoint=graph_data_api_route, name="graph_data_api", methods=['GET', 'OPTIONS']),
@@ -468,3 +467,288 @@ routes = [
     # Catch-all OPTIONS handler for any API route
     Route('/api/{path:path}', endpoint=handle_options, methods=['OPTIONS']),
 ]
+
+# --- Test/Demo Data Endpoint ---
+async def create_sample_memories_route(request: Request) -> JSONResponse:
+    """Create sample memory entries for testing"""
+    if request.method == 'OPTIONS':
+        return await handle_options(request)
+    
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Sample memory entries
+        sample_memories = [
+            {
+                'context_key': 'api.config.base_url',
+                'value': json.dumps('https://api.example.com'),
+                'description': 'Main API base URL for external services',
+                'updated_by': 'system'
+            },
+            {
+                'context_key': 'app.settings.theme',
+                'value': json.dumps({'theme': 'dark', 'accent': 'blue'}),
+                'description': 'Application theme preferences',
+                'updated_by': 'admin'
+            },
+            {
+                'context_key': 'database.connection.timeout',
+                'value': json.dumps(30),
+                'description': 'Database connection timeout in seconds',
+                'updated_by': 'system'
+            },
+            {
+                'context_key': 'cache.redis.config',
+                'value': json.dumps({
+                    'host': 'localhost',
+                    'port': 6379,
+                    'ttl': 3600
+                }),
+                'description': 'Redis cache configuration',
+                'updated_by': 'admin'
+            }
+        ]
+        
+        current_time = datetime.datetime.now().isoformat()
+        created_count = 0
+        
+        for memory in sample_memories:
+            cursor.execute("""
+                INSERT OR REPLACE INTO project_context (context_key, value, last_updated, updated_by, description)
+                VALUES (?, ?, ?, ?, ?)
+            """, (
+                memory['context_key'],
+                memory['value'],
+                current_time,
+                memory['updated_by'],
+                memory['description']
+            ))
+            created_count += 1
+        
+        conn.commit()
+        
+        return JSONResponse({
+            "success": True,
+            "message": f"Created {created_count} sample memory entries",
+            "created_count": created_count
+        })
+        
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        logger.error(f"Error creating sample memories: {e}", exc_info=True)
+        return JSONResponse({
+            "success": False,
+            "error": str(e)
+        }, status_code=500)
+    finally:
+        if conn:
+            conn.close()
+
+# Memory CRUD API endpoints
+async def create_memory_api_route(request: Request) -> JSONResponse:
+    """Create a new memory entry"""
+    if request.method == 'OPTIONS':
+        return await handle_options(request)
+    
+    if request.method != 'POST':
+        return JSONResponse({"error": "Method not allowed"}, status_code=405)
+    
+    conn = None
+    try:
+        data = await get_sanitized_json_body(request)
+        admin_token = data.get('token')
+        context_key = data.get('context_key')
+        context_value = data.get('context_value')
+        description = data.get('description')
+        
+        if not verify_token(admin_token, required_role='admin'):
+            return JSONResponse({"error": "Invalid admin token"}, status_code=403)
+        
+        if not context_key:
+            return JSONResponse({"error": "context_key is required"}, status_code=400)
+        
+        requesting_admin_id = auth_get_agent_id(admin_token)
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Check if key already exists
+        cursor.execute("SELECT context_key FROM project_context WHERE context_key = ?", (context_key,))
+        if cursor.fetchone():
+            return JSONResponse({"error": "Memory with this key already exists"}, status_code=409)
+        
+        current_time = datetime.datetime.now().isoformat()
+        
+        cursor.execute("""
+            INSERT INTO project_context (context_key, value, last_updated, updated_by, description)
+            VALUES (?, ?, ?, ?, ?)
+        """, (
+            context_key,
+            json.dumps(context_value),
+            current_time,
+            requesting_admin_id,
+            description
+        ))
+        
+        # Log the action
+        log_agent_action_to_db(cursor, requesting_admin_id, "created_memory", details={"context_key": context_key})
+        conn.commit()
+        
+        return JSONResponse({
+            "success": True,
+            "message": f"Memory '{context_key}' created successfully"
+        })
+        
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        logger.error(f"Error creating memory: {e}", exc_info=True)
+        return JSONResponse({"error": f"Failed to create memory: {str(e)}"}, status_code=500)
+    finally:
+        if conn:
+            conn.close()
+
+async def update_memory_api_route(request: Request) -> JSONResponse:
+    """Update an existing memory entry"""
+    if request.method == 'OPTIONS':
+        return await handle_options(request)
+    
+    if request.method != 'PUT':
+        return JSONResponse({"error": "Method not allowed"}, status_code=405)
+    
+    # Extract context_key from URL path
+    path_parts = request.url.path.split('/')
+    if len(path_parts) < 4 or not path_parts[-1]:
+        return JSONResponse({"error": "context_key is required in URL"}, status_code=400)
+    
+    context_key = path_parts[-1]
+    
+    conn = None
+    try:
+        data = await get_sanitized_json_body(request)
+        admin_token = data.get('token')
+        context_value = data.get('context_value')
+        description = data.get('description')
+        
+        if not verify_token(admin_token, required_role='admin'):
+            return JSONResponse({"error": "Invalid admin token"}, status_code=403)
+        
+        requesting_admin_id = auth_get_agent_id(admin_token)
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Check if memory exists
+        cursor.execute("SELECT context_key FROM project_context WHERE context_key = ?", (context_key,))
+        if not cursor.fetchone():
+            return JSONResponse({"error": "Memory not found"}, status_code=404)
+        
+        current_time = datetime.datetime.now().isoformat()
+        
+        # Build update query dynamically
+        update_fields = ["last_updated = ?", "updated_by = ?"]
+        params = [current_time, requesting_admin_id]
+        
+        if context_value is not None:
+            update_fields.append("value = ?")
+            params.append(json.dumps(context_value))
+        
+        if description is not None:
+            update_fields.append("description = ?")
+            params.append(description)
+        
+        params.append(context_key)
+        
+        query = f"UPDATE project_context SET {', '.join(update_fields)} WHERE context_key = ?"
+        cursor.execute(query, params)
+        
+        # Log the action
+        log_agent_action_to_db(cursor, requesting_admin_id, "updated_memory", details={"context_key": context_key})
+        conn.commit()
+        
+        return JSONResponse({
+            "success": True,
+            "message": f"Memory '{context_key}' updated successfully"
+        })
+        
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        logger.error(f"Error updating memory: {e}", exc_info=True)
+        return JSONResponse({"error": f"Failed to update memory: {str(e)}"}, status_code=500)
+    finally:
+        if conn:
+            conn.close()
+
+async def delete_memory_api_route(request: Request) -> JSONResponse:
+    """Delete a memory entry"""
+    if request.method == 'OPTIONS':
+        return await handle_options(request)
+    
+    if request.method != 'DELETE':
+        return JSONResponse({"error": "Method not allowed"}, status_code=405)
+    
+    # Extract context_key from URL path
+    path_parts = request.url.path.split('/')
+    if len(path_parts) < 4 or not path_parts[-1]:
+        return JSONResponse({"error": "context_key is required in URL"}, status_code=400)
+    
+    context_key = path_parts[-1]
+    
+    conn = None
+    try:
+        data = await get_sanitized_json_body(request)
+        admin_token = data.get('token')
+        
+        if not verify_token(admin_token, required_role='admin'):
+            return JSONResponse({"error": "Invalid admin token"}, status_code=403)
+        
+        requesting_admin_id = auth_get_agent_id(admin_token)
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Check if memory exists
+        cursor.execute("SELECT context_key FROM project_context WHERE context_key = ?", (context_key,))
+        if not cursor.fetchone():
+            return JSONResponse({"error": "Memory not found"}, status_code=404)
+        
+        # Delete the memory
+        cursor.execute("DELETE FROM project_context WHERE context_key = ?", (context_key,))
+        
+        # Log the action
+        log_agent_action_to_db(cursor, requesting_admin_id, "deleted_memory", details={"context_key": context_key})
+        conn.commit()
+        
+        return JSONResponse({
+            "success": True,
+            "message": f"Memory '{context_key}' deleted successfully"
+        })
+        
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        logger.error(f"Error deleting memory: {e}", exc_info=True)
+        return JSONResponse({"error": f"Failed to delete memory: {str(e)}"}, status_code=500)
+    finally:
+        if conn:
+            conn.close()
+
+# Add the memory CRUD routes
+routes.extend([
+    Route('/api/memories', endpoint=create_memory_api_route, name="create_memory_api", methods=['POST', 'OPTIONS']),
+    Route('/api/memories/{context_key}', endpoint=update_memory_api_route, name="update_memory_api", methods=['PUT', 'OPTIONS']),
+    Route('/api/memories/{context_key}', endpoint=delete_memory_api_route, name="delete_memory_api", methods=['DELETE', 'OPTIONS']),
+])
+
+# Add the sample data route
+routes.append(Route('/api/create-sample-memories', endpoint=create_sample_memories_route, name="create_sample_memories", methods=['POST', 'OPTIONS']))

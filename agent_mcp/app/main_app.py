@@ -7,7 +7,6 @@ import os # Added os import
 
 from starlette.applications import Starlette
 from starlette.routing import Mount, Route # Added Route
-from starlette.staticfiles import StaticFiles # For serving static files
 from starlette.middleware import Middleware # If any middleware is needed
 from starlette.middleware.cors import CORSMiddleware # Example if CORS is needed
 
@@ -19,7 +18,7 @@ import mcp.types as mcp_types # For MCP tool types
 # Project-specific imports
 from ..core.config import logger
 from ..core import globals as g # For g.connections (if still used for SSE tracking)
-from .routes import routes as http_routes, STATIC_DIR # Import defined HTTP routes and STATIC_DIR
+from .routes import routes as http_routes # Import defined HTTP routes
 from .server_lifecycle import application_startup, application_shutdown, start_background_tasks
 from ..tools.registry import list_available_tools, dispatch_tool_call
 
@@ -108,14 +107,20 @@ def create_app(project_dir: str, admin_token_cli: Optional[str] = None) -> Starl
         logger.info("Starlette app shutdown complete.")
 
     # Define middleware (if any)
-    # Enable CORS for dashboard integration - allow ANY origin
+    # Enable CORS for dashboard integration - comprehensive CORS config
     middleware_stack = [
         Middleware(
             CORSMiddleware,
-            allow_origins=['*'],  # Allow ALL origins
+            allow_origins=[
+                'http://localhost:3847',  # Primary dashboard port
+                'http://127.0.0.1:3847',  # Alternative localhost
+                'http://localhost:3000',  # Next.js default
+                'http://localhost:3001',  # Common alternative
+                '*'  # Fallback for any other ports during development
+            ],
             allow_credentials=True,
-            allow_methods=['*'],  # Allow ALL methods
-            allow_headers=['*'],  # Allow ALL headers
+            allow_methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'HEAD', 'PATCH'],
+            allow_headers=['*'],
             expose_headers=['*'],
             max_age=3600,  # Cache preflight for 1 hour
         )
@@ -134,25 +139,7 @@ def create_app(project_dir: str, admin_token_cli: Optional[str] = None) -> Starl
     # Mount the SseServerTransport's POST message handler
     all_routes.append(Mount('/messages', app=sse_transport.handle_post_message, name="mcp_post_message"))
 
-    # Mount static files (Original main.py:2120)
-    # Ensure STATIC_DIR is an absolute path string for StaticFiles
-    all_routes.append(Mount('/static', app=StaticFiles(directory=str(STATIC_DIR)), name="static_files"))
-    
-    # Mount Next.js static files at the expected /_next path
-    next_static_dir = STATIC_DIR / "_next"
-    if next_static_dir.exists():
-        all_routes.append(Mount('/_next', app=StaticFiles(directory=str(next_static_dir)), name="next_static_files"))
-    
-    # Add routes for root-level static assets (favicon, etc.)
-    from starlette.responses import FileResponse, JSONResponse
-    
-    async def favicon_route(request):
-        favicon_path = STATIC_DIR / "favicon.ico"
-        if favicon_path.exists():
-            return FileResponse(str(favicon_path))
-        return JSONResponse({"error": "Not found"}, status_code=404)
-    
-    all_routes.append(Route('/favicon.ico', endpoint=favicon_route, name="favicon"))
+    # Note: Static file serving removed - dashboard is now served separately via npm run dev
     
     # Create the Starlette application instance
     app = Starlette(

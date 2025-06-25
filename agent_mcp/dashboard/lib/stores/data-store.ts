@@ -1,6 +1,45 @@
 import { create } from 'zustand'
 import { Agent, Task, apiClient } from '../api'
 
+// Memoization cache for expensive computations
+const memoCache = new Map<string, { data: any, timestamp: number }>()
+const CACHE_DURATION = 5000 // 5 seconds cache
+
+function memoize<T>(key: string, computation: () => T): T {
+  const cached = memoCache.get(key)
+  const now = Date.now()
+  
+  if (cached && now - cached.timestamp < CACHE_DURATION) {
+    return cached.data as T
+  }
+  
+  const result = computation()
+  memoCache.set(key, { data: result, timestamp: now })
+  return result
+}
+
+function clearMemoCache() {
+  memoCache.clear()
+}
+
+// Debounce utility for API calls
+function debounce<T extends (...args: any[]) => any>(
+  func: T,
+  wait: number
+): (...args: Parameters<T>) => void {
+  let timeout: NodeJS.Timeout | null = null
+  
+  return (...args: Parameters<T>) => {
+    if (timeout) {
+      clearTimeout(timeout)
+    }
+    
+    timeout = setTimeout(() => {
+      func(...args)
+    }, wait)
+  }
+}
+
 interface AllData {
   agents: Agent[]
   tasks: Task[]
@@ -136,6 +175,9 @@ export const useDataStore = create<DataStore>((set, get) => ({
       })
       console.log('🔍 Debug - Context data received:', data.context)
       
+      // Clear memoization cache when data updates
+      clearMemoCache()
+      
       set({ 
         data, 
         loading: false,
@@ -171,47 +213,52 @@ export const useDataStore = create<DataStore>((set, get) => ({
     const state = get()
     if (!state.data) return []
     
-    // Strip prefix if present for consistent matching
-    const cleanAgentId = agentId.startsWith('agent_') ? agentId.substring(6) : agentId
-    // Handle admin variations - both 'Admin' and 'admin' are used in the system
-    const normalizedAgentId = cleanAgentId === 'Admin' ? 'admin' : cleanAgentId
+    // Create cache key including data timestamp for cache invalidation
+    const cacheKey = `agent-tasks-${agentId}-${state.data.timestamp}`
     
-    // Get tasks assigned to this agent (handle both admin variations)
-    const assignedTasks = state.data.tasks.filter(t => 
-      t.assigned_to === normalizedAgentId || 
-      t.assigned_to === cleanAgentId ||
-      (normalizedAgentId === 'admin' && (t.assigned_to === 'Admin' || t.assigned_to === 'admin'))
-    )
-    
-    // Get tasks this agent has worked on (via actions)
-    const workedOnTaskIds = new Set<string>()
-    const agentActions = state.data.actions.filter(a => 
-      a.agent_id === normalizedAgentId || 
-      a.agent_id === cleanAgentId ||
-      (normalizedAgentId === 'admin' && (a.agent_id === 'Admin' || a.agent_id === 'admin'))
-    )
-    
-    agentActions.forEach(action => {
-      if (action.task_id) {
-        workedOnTaskIds.add(action.task_id)
-      }
+    return memoize(cacheKey, () => {
+      // Strip prefix if present for consistent matching
+      const cleanAgentId = agentId.startsWith('agent_') ? agentId.substring(6) : agentId
+      // Handle admin variations - both 'Admin' and 'admin' are used in the system
+      const normalizedAgentId = cleanAgentId === 'Admin' ? 'admin' : cleanAgentId
+      
+      // Get tasks assigned to this agent (handle both admin variations)
+      const assignedTasks = state.data!.tasks.filter(t => 
+        t.assigned_to === normalizedAgentId || 
+        t.assigned_to === cleanAgentId ||
+        (normalizedAgentId === 'admin' && (t.assigned_to === 'Admin' || t.assigned_to === 'admin'))
+      )
+      
+      // Get tasks this agent has worked on (via actions)
+      const workedOnTaskIds = new Set<string>()
+      const agentActions = state.data!.actions.filter(a => 
+        a.agent_id === normalizedAgentId || 
+        a.agent_id === cleanAgentId ||
+        (normalizedAgentId === 'admin' && (a.agent_id === 'Admin' || a.agent_id === 'admin'))
+      )
+      
+      agentActions.forEach(action => {
+        if (action.task_id) {
+          workedOnTaskIds.add(action.task_id)
+        }
+      })
+      
+      // Get tasks worked on but not assigned
+      const workedOnTasks = state.data!.tasks.filter(t => 
+        workedOnTaskIds.has(t.task_id) && 
+        t.assigned_to !== normalizedAgentId && 
+        t.assigned_to !== cleanAgentId &&
+        !(normalizedAgentId === 'admin' && (t.assigned_to === 'Admin' || t.assigned_to === 'admin'))
+      )
+      
+      // Combine and deduplicate
+      const allTasks = [...assignedTasks, ...workedOnTasks]
+      const uniqueTasks = allTasks.filter((task, index, arr) => 
+        arr.findIndex(t => t.task_id === task.task_id) === index
+      )
+      
+      return uniqueTasks
     })
-    
-    // Get tasks worked on but not assigned
-    const workedOnTasks = state.data.tasks.filter(t => 
-      workedOnTaskIds.has(t.task_id) && 
-      t.assigned_to !== normalizedAgentId && 
-      t.assigned_to !== cleanAgentId &&
-      !(normalizedAgentId === 'admin' && (t.assigned_to === 'Admin' || t.assigned_to === 'admin'))
-    )
-    
-    // Combine and deduplicate
-    const allTasks = [...assignedTasks, ...workedOnTasks]
-    const uniqueTasks = allTasks.filter((task, index, arr) => 
-      arr.findIndex(t => t.task_id === task.task_id) === index
-    )
-    
-    return uniqueTasks
   },
 
   getAgentActions: (agentId: string) => {
@@ -348,6 +395,11 @@ export const useDataStore = create<DataStore>((set, get) => ({
     // Force refresh
     await get().fetchAllData(true)
   },
+  
+  // Debounced refresh to prevent rapid successive calls
+  debouncedRefresh: debounce(async () => {
+    await get().fetchAllData()
+  }, 500),
 
   // Agent lifecycle management
   shouldDisplayAgent: (agent: any) => {
@@ -396,12 +448,12 @@ export const useDataStore = create<DataStore>((set, get) => ({
   }
 }))
 
-// Auto-refresh every 30 seconds
+// Auto-refresh every 60 seconds (reduced from 30s for better performance)
 if (typeof window !== 'undefined') {
   setInterval(() => {
     const store = useDataStore.getState()
     if (store.data) {
       store.refreshData()
     }
-  }, 30000)
+  }, 60000)
 }

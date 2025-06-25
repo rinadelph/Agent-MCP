@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-mcp"
-version = "0.1.0"
-description = "Agent MCP Template for creating multi-agent systems"
+version = "2.2.0"
+description = "AgentMCP Dashboard v2.2 - Improved multi-agent system with enhanced dashboard"
 authors = [
     {name = "AIမ့်CURSOR", email = "accounts@cursor.com"},
 ]

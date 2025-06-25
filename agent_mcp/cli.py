@@ -157,23 +157,17 @@ def main_cli(port: int, transport: str, project_dir: str, admin_token_cli: Optio
         # Simple tracking of server status for display
         async def get_server_status():
             try:
-                agents = get_all_active_agents_from_db()
-                tasks = get_all_tasks_from_db()
                 return {
                     'running': globals_module.server_running,
                     'status': 'Running' if globals_module.server_running else 'Stopped',
-                    'port': cli_port,
-                    'agent_count': len(agents),
-                    'task_count': len(tasks)
+                    'port': cli_port
                 }
             except Exception as e:
                 logger.error(f"Error getting server status: {e}")
                 return {
                     'running': globals_module.server_running,
                     'status': 'Error',
-                    'port': cli_port,
-                    'agent_count': 0,
-                    'task_count': 0
+                    'port': cli_port
                 }
         
         try:
@@ -201,177 +195,64 @@ def main_cli(port: int, transport: str, project_dir: str, admin_token_cli: Optio
                 # Position cursor for status bar
                 tui.move_cursor(current_row, 1)
                 tui.draw_status_bar(server_status)
-                current_row += 1
+                current_row += 2
                 
-                # Display basic info
+                # Display simplified server info
                 tui.move_cursor(current_row, 1)
                 tui.clear_line()
-                print(TUITheme.header(" Server Information"))
-                current_row += 1
-                
-                tui.move_cursor(current_row, 1)
-                tui.clear_line()
-                print(f"Transport: {cli_transport}")
-                current_row += 1
+                print(TUITheme.header(" MCP Server Running"))
+                current_row += 2
                 
                 tui.move_cursor(current_row, 1)
                 tui.clear_line()
-                print(f"Project Directory: {cli_project_dir}")
+                print(f"Project Directory: {TUITheme.info(cli_project_dir)}")
                 current_row += 1
                 
-                # Display full dashboard URL
-                dashboard_url = f"http://localhost:{cli_port}"
                 tui.move_cursor(current_row, 1)
                 tui.clear_line()
-                print(f"Dashboard URL: {TUITheme.info(dashboard_url)}")
+                print(f"Transport: {TUITheme.info(cli_transport)}")
                 current_row += 1
                 
-                # Display full admin token in bold
                 tui.move_cursor(current_row, 1)
                 tui.clear_line()
-                print(f"Admin Token: {TUITheme.bold(globals_module.admin_token)}" if globals_module.admin_token else "Admin Token: N/A")
+                print(f"MCP Port: {TUITheme.info(str(cli_port))}")
+                current_row += 3
+                
+                # Display dashboard instructions
+                tui.move_cursor(current_row, 1)
+                tui.clear_line()
+                print(TUITheme.header(" Next Steps"))
+                current_row += 2
+                
+                tui.move_cursor(current_row, 1)
+                tui.clear_line()
+                print("1. Open a new terminal window")
                 current_row += 1
                 
-                # Display agents section
-                current_row += 1
                 tui.move_cursor(current_row, 1)
                 tui.clear_line()
-                print(TUITheme.header(" Agents"))
+                dashboard_path = f"{cli_project_dir}/agent_mcp/dashboard" if cli_project_dir != "." else "agent_mcp/dashboard"
+                print(f"2. Navigate to: {TUITheme.info(dashboard_path)}")
                 current_row += 1
-                if server_status['agent_count'] > 0:
-                    agents = get_all_active_agents_from_db()
-                    for i, agent in enumerate(agents):
-                        agent_color = agent.get('color', '#FFFFFF')
-                        agent_status_db = agent.get('status', 'idle')
-                        agent_token = agent.get('token', 'Unknown')
-                        current_task = agent.get('current_task')
-                        
-                        # Determine actual status based on tasks
-                        actual_status = agent_status_db
-                        status_color = TUITheme.success
-                        
-                        if current_task:
-                            task = get_task_by_id(current_task)
-                            if task:
-                                task_status = task.get('status', 'unknown')
-                                if task_status == 'completed':
-                                    # Check if there's a next task
-                                    pending_tasks = get_tasks_by_agent_id(agent['agent_id'], status_filter='pending')
-                                    next_tasks = [t for t in pending_tasks if t['task_id'] != current_task]
-                                    if not next_tasks:
-                                        actual_status = 'inactive'
-                                        status_color = TUITheme.dim
-                                    else:
-                                        actual_status = 'ready'
-                                        status_color = TUITheme.info
-                                elif task_status in ['in_progress', 'working']:
-                                    actual_status = 'working...'
-                                    status_color = TUITheme.warning
-                                else:
-                                    actual_status = task_status
-                        else:
-                            # No current task, check for pending tasks
-                            pending_tasks = get_tasks_by_agent_id(agent['agent_id'], status_filter='pending')
-                            if pending_tasks:
-                                actual_status = 'ready'
-                                status_color = TUITheme.info
-                            else:
-                                actual_status = 'inactive'
-                                status_color = TUITheme.dim
-                        
-                        # Convert color to ANSI codes
-                        color_code = agent_color.replace('#', '')
-                        try:
-                            r = int(color_code[0:2], 16)
-                            g = int(color_code[2:4], 16) 
-                            b = int(color_code[4:6], 16)
-                            color_start = f"\033[38;2;{r};{g};{b}m"
-                            color_end = "\033[0m"
-                        except:
-                            color_start = ""
-                            color_end = ""
-                        
-                        # Agent header with colored bullet
-                        tui.move_cursor(current_row, 1)
-                        tui.clear_line()
-                        print(f"{color_start}● {agent['agent_id']}{color_end}")
-                        current_row += 1
-                        
-                        tui.move_cursor(current_row, 1)
-                        tui.clear_line()
-                        print(f"  Status: {status_color(actual_status.capitalize())}")
-                        current_row += 1
-                        
-                        tui.move_cursor(current_row, 1)
-                        tui.clear_line()
-                        print(f"  Token: {TUITheme.dim(agent_token)}")
-                        current_row += 1
-                        
-                        # Current task info
-                        if current_task:
-                            task = get_task_by_id(current_task)
-                            if task:
-                                task_title = task.get('title', 'Unknown Task')
-                                task_status = task.get('status', 'unknown')
-                                
-                                tui.move_cursor(current_row, 1)
-                                tui.clear_line()
-                                print(f"  Current Task: {TUITheme.info(task_title)}")
-                                current_row += 1
-                                
-                                tui.move_cursor(current_row, 1)
-                                tui.clear_line()
-                                print(f"  Task Status: {task_status}")
-                                current_row += 1
-                                
-                                # Calculate how long they've been working on it
-                                if task.get('assigned_at'):
-                                    started = datetime.fromisoformat(task['assigned_at'])
-                                    duration = datetime.now() - started
-                                    total_minutes = duration.total_seconds() / 60
-                                    hours = int(total_minutes // 60)
-                                    minutes = int(total_minutes % 60)
-                                    
-                                    if hours > 0:
-                                        time_str = f"{hours}h {minutes}m"
-                                    else:
-                                        time_str = f"{minutes}m"
-                                    
-                                    tui.move_cursor(current_row, 1)
-                                    tui.clear_line()
-                                    print(f"  Working for: {TUITheme.warning(time_str)}")
-                                    current_row += 1
-                        else:
-                            tui.move_cursor(current_row, 1)
-                            tui.clear_line()
-                            print(f"  Current Task: {TUITheme.dim('None')}")
-                            current_row += 1
-                        
-                        # Show next task if available
-                        pending_tasks = get_tasks_by_agent_id(agent['agent_id'], status_filter='pending')
-                        if pending_tasks:
-                            # Filter out current task from pending tasks
-                            next_tasks = [t for t in pending_tasks if t['task_id'] != current_task]
-                            if next_tasks:
-                                next_task = next_tasks[0]
-                                tui.move_cursor(current_row, 1)
-                                tui.clear_line()
-                                print(f"  Next Task: {TUITheme.dim(next_task.get('title', 'Unknown Task'))}")
-                                current_row += 1
-                        
-                        # Add spacing between agents
-                        if i < len(agents) - 1:
-                            current_row += 1
-                else:
-                    tui.move_cursor(current_row, 1)
-                    tui.clear_line()
-                    print(TUITheme.dim("No active agents"))
-                    current_row += 1
                 
-                current_row += 1
                 tui.move_cursor(current_row, 1)
                 tui.clear_line()
-                print(TUITheme.info("Press Ctrl+C to quit"))
+                print(f"3. Run: {TUITheme.bold('npm run dev')}")
+                current_row += 1
+                
+                tui.move_cursor(current_row, 1)
+                tui.clear_line()
+                print(f"4. Open: {TUITheme.info('http://localhost:3847')}")
+                current_row += 3
+                
+                tui.move_cursor(current_row, 1)
+                tui.clear_line()
+                print(TUITheme.warning("Keep this MCP server running while using the dashboard"))
+                current_row += 2
+                
+                tui.move_cursor(current_row, 1)
+                tui.clear_line()
+                print(TUITheme.info("Press Ctrl+C to stop the MCP server"))
                 current_row += 1
                 
                 # Clear remaining lines to prevent artifacts
@@ -382,7 +263,7 @@ def main_cli(port: int, transport: str, project_dir: str, admin_token_cli: Optio
                 if initial_display:
                     initial_display = False
                 
-                await anyio.sleep(2)  # Refresh TUI display every 2 seconds
+                await anyio.sleep(5)  # Refresh less frequently since display is simpler
         except anyio.get_cancelled_exc_class():
             logger.info("TUI display loop cancelled.")
         finally:
@@ -438,9 +319,21 @@ def main_cli(port: int, transport: str, project_dir: str, admin_token_cli: Optio
                     
                     # Show standard startup messages only if TUI is not active
                     if not tui_active:
-                        print(f"MCP Server running on http://0.0.0.0:{port} (SSE Transport)")
-                        print(f"Dashboard: http://localhost:{port}")
-                        print("Press Ctrl+C to quit.")
+                        # Show AGENT MCP banner
+                        from .tui.colors import get_responsive_agent_mcp_banner
+                        print()
+                        print(get_responsive_agent_mcp_banner())
+                        print()
+                        print(f"🚀 MCP Server running on port {port}")
+                        print(f"📁 Project: {project_dir}")
+                        print()
+                        print("Next steps:")
+                        dashboard_path = f"{project_dir}/agent_mcp/dashboard" if project_dir != "." else "agent_mcp/dashboard"
+                        print(f"1. Open new terminal → cd {dashboard_path}")
+                        print("2. Run: npm run dev")
+                        print("3. Open: http://localhost:3847")
+                        print()
+                        print("Keep this server running. Press Ctrl+C to quit.")
                     
                     await server.serve()
                     
@@ -485,12 +378,17 @@ def main_cli(port: int, transport: str, project_dir: str, admin_token_cli: Optio
                         await tg.start(tui_display_loop, 0, transport, project_dir)  # Port is 0 for stdio
                     
                     logger.info("Starting MCP server with stdio transport.")
-                    logger.info(f"Admin token: {g.admin_token}") # Display admin token for stdio mode
                     logger.info("Press Ctrl+C to shut down.")
                     
                     # Show standard startup messages only if TUI is not active
                     if not tui_active:
-                        print(f"MCP Server running (stdio Transport). Admin Token: {g.admin_token}")
+                        # Show AGENT MCP banner
+                        from .tui.colors import get_responsive_agent_mcp_banner
+                        print()
+                        print(get_responsive_agent_mcp_banner())
+                        print()
+                        print("🚀 MCP Server running (stdio transport)")
+                        print("Server is ready for AI assistant connections.")
                         print("Use Ctrl+C to quit.")
                     
                     # Import stdio_server from mcp library

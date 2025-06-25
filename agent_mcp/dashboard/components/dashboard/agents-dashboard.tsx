@@ -20,7 +20,7 @@ import { AgentDetailsPanel } from "./agent-details-panel"
 import { TaskDetailsDialog } from "./task-details-dialog"
 
 
-const StatusDot = ({ status }: { status: Agent['status'] }) => {
+const StatusDot = React.memo(({ status }: { status: Agent['status'] }) => {
   const config = {
     running: "bg-primary shadow-primary/50 shadow-md",
     pending: "bg-warning shadow-warning/50 shadow-md animate-pulse",
@@ -34,9 +34,9 @@ const StatusDot = ({ status }: { status: Agent['status'] }) => {
       config[status] || config.pending
     )} />
   )
-}
+})
 
-const AgentTypeIcon = ({ agentId }: { agentId: string }) => {
+const AgentTypeIcon = React.memo(({ agentId }: { agentId: string }) => {
   const getIcon = () => {
     if (agentId.includes('admin')) return Shield
     if (agentId.includes('worker')) return Cpu
@@ -47,9 +47,9 @@ const AgentTypeIcon = ({ agentId }: { agentId: string }) => {
   
   const Icon = getIcon()
   return <Icon className="h-4 w-4 text-muted-foreground" />
-}
+})
 
-const CompactAgentRow = ({ agent, onTerminate, onSelect, onTaskClick }: { 
+const CompactAgentRow = React.memo(({ agent, onTerminate, onSelect, onTaskClick }: { 
   agent: Agent, 
   onTerminate: (id: string) => void, 
   onSelect: (agent: Agent) => void,
@@ -216,7 +216,7 @@ const CompactAgentRow = ({ agent, onTerminate, onSelect, onTaskClick }: {
       </TableCell>
     </TableRow>
   )
-}
+})
 
 const StatsCard = ({ icon: Icon, label, value, change, trend }: {
   icon: React.ComponentType<{ className?: string }>

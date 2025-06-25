@@ -5,7 +5,8 @@ import {
   LayoutDashboard, 
   Users, 
   CheckSquare,
-  Brain
+  Brain,
+  BookOpen
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -15,7 +16,7 @@ import { useDashboard, useSidebar } from "@/lib/store"
 interface NavItem {
   title: string
   icon: React.ComponentType<{ className?: string }>
-  view: 'overview' | 'agents' | 'tasks' | 'memories'
+  view: 'overview' | 'agents' | 'tasks' | 'memories' | 'prompts'
   description?: string
   badge?: string
 }
@@ -44,6 +45,12 @@ const navigationItems: NavItem[] = [
     icon: Brain,
     view: "memories",
     description: "Memory bank and context management"
+  },
+  {
+    title: "Prompt Book",
+    icon: BookOpen,
+    view: "prompts",
+    description: "Standardized prompts and workflows"
   }
 ]
 

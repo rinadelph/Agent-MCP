@@ -131,21 +131,44 @@ class ApiClient {
     
     const url = `${this.baseUrl}/api${endpoint}`
     
-    const response = await fetch(url, {
+    // Enhanced CORS configuration
+    const fetchOptions: RequestInit = {
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Origin': 'http://localhost:3847', // Explicit origin for CORS
         ...options.headers,
       },
       credentials: 'include', // Include cookies for CORS
       mode: 'cors', // Explicitly set CORS mode
+      cache: 'no-cache', // Always get fresh data
       ...options,
-    })
-
-    if (!response.ok) {
-      throw new Error(`API Error: ${response.status} ${response.statusText}`)
     }
 
-    return response.json()
+    // Add timeout support
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
+    
+    try {
+      const response = await fetch(url, {
+        ...fetchOptions,
+        signal: controller.signal
+      })
+      
+      clearTimeout(timeoutId)
+
+      if (!response.ok) {
+        throw new Error(`API Error: ${response.status} ${response.statusText}`)
+      }
+      
+      return await response.json()
+    } catch (error) {
+      clearTimeout(timeoutId)
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error('Request timeout')
+      }
+      throw error
+    }
   }
 
   // System endpoints
