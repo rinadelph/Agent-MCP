@@ -192,11 +192,16 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
   const [autoRefresh, setAutoRefresh] = useState(false)
   const [nodeCount, setNodeCount] = useState(0)
   const [edgeCount, setEdgeCount] = useState(0)
+  const [isMounted, setIsMounted] = useState(false)
   
-  // Debug effect
+  // Track mounted state
   useEffect(() => {
     console.log('🚀 VisGraph mounted with props:', { fullscreen })
-    return () => console.log('🔚 VisGraph unmounted')
+    setIsMounted(true)
+    return () => {
+      console.log('🔚 VisGraph unmounted')
+      setIsMounted(false)
+    }
   }, [])
 
   // Convert API data to vis.js format
@@ -323,60 +328,90 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
 
   // Initialize vis.js network
   useEffect(() => {
-    console.log('🔧 Initializing vis.js network...')
-    console.log('Container ref:', containerRef.current)
-    console.log('Container dimensions:', containerRef.current?.offsetWidth, 'x', containerRef.current?.offsetHeight)
-    
-    if (!containerRef.current) {
-      console.error('❌ Container ref is null!')
+    if (!isMounted) {
       return
     }
 
-    const options = layoutMode === 'physics' ? physicsOptions : hierarchicalOptions
-    console.log('Layout mode:', layoutMode)
+    // Small delay to ensure DOM is ready
+    const initTimer = setTimeout(() => {
+      console.log('🔧 Initializing vis.js network...')
+      console.log('Container ref:', containerRef.current)
+      console.log('Container dimensions:', containerRef.current?.offsetWidth, 'x', containerRef.current?.offsetHeight)
+      
+      if (!containerRef.current) {
+        console.warn('⚠️ Container ref is not ready yet')
+        return
+      }
 
-    const data = {
-      nodes: nodesDataSetRef.current,
-      edges: edgesDataSetRef.current
-    }
-    console.log('Initial nodes count:', nodesDataSetRef.current.length)
-    console.log('Initial edges count:', edgesDataSetRef.current.length)
+      // Check if container has dimensions
+      const { offsetWidth, offsetHeight } = containerRef.current
+      if (offsetWidth === 0 || offsetHeight === 0) {
+        console.warn('⚠️ Container has no dimensions yet')
+        return
+      }
 
-    // Create network
-    const network = new Network(containerRef.current, data, options)
-    networkRef.current = network
-    console.log('✅ Network created:', network)
-    
-    // Force physics to start
-    if (layoutMode === 'physics') {
-      network.startSimulation()
-      console.log('🏃 Physics simulation started')
-    }
+      const options = layoutMode === 'physics' ? physicsOptions : hierarchicalOptions
+      console.log('Layout mode:', layoutMode)
 
-    // Add resize observer for responsive sizing
-    const resizeObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        if (entry.target === containerRef.current && networkRef.current) {
-          console.log('📐 Container resized:', entry.contentRect.width, 'x', entry.contentRect.height)
-          // Redraw the network on resize
-          networkRef.current.redraw()
-          // Optionally fit to view after resize
-          setTimeout(() => {
-            networkRef.current?.fit({ animation: false })
-          }, 100)
+      const data = {
+        nodes: nodesDataSetRef.current,
+        edges: edgesDataSetRef.current
+      }
+      console.log('Initial nodes count:', nodesDataSetRef.current.length)
+      console.log('Initial edges count:', edgesDataSetRef.current.length)
+
+      // Create network
+      const network = new Network(containerRef.current, data, options)
+      networkRef.current = network
+      console.log('✅ Network created:', network)
+      
+      // Force physics to start
+      if (layoutMode === 'physics') {
+        network.startSimulation()
+        console.log('🏃 Physics simulation started')
+      }
+
+      // Add resize observer for responsive sizing
+      const resizeObserver = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          if (entry.target === containerRef.current && networkRef.current) {
+            console.log('📐 Container resized:', entry.contentRect.width, 'x', entry.contentRect.height)
+            // Redraw the network on resize
+            networkRef.current.redraw()
+            // Optionally fit to view after resize
+            setTimeout(() => {
+              networkRef.current?.fit({ animation: false })
+            }, 100)
+          }
+        }
+      })
+
+      if (containerRef.current) {
+        resizeObserver.observe(containerRef.current)
+      }
+
+      // Store cleanup function
+      const cleanup = () => {
+        resizeObserver.disconnect()
+        if (networkRef.current) {
+          networkRef.current.destroy()
+          networkRef.current = null
         }
       }
-    })
 
-    resizeObserver.observe(containerRef.current)
+      // Store cleanup in a ref for later use
+      (window as any).__visCleanup = cleanup
+    }, 100) // 100ms delay to ensure DOM is ready
 
     // Cleanup
     return () => {
-      resizeObserver.disconnect()
-      network.destroy()
-      networkRef.current = null
+      clearTimeout(initTimer)
+      if ((window as any).__visCleanup) {
+        (window as any).__visCleanup()
+        delete (window as any).__visCleanup
+      }
     }
-  }, [layoutMode])
+  }, [layoutMode, isMounted])
 
   // Fetch data on mount and handle auto-refresh
   useEffect(() => {
