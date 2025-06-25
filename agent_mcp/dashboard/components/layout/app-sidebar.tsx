@@ -62,8 +62,8 @@ export function AppSidebar() {
       <SidebarFooter className="border-t p-3">
         {!isCollapsed && (
           <div className="text-xs text-muted-foreground text-center">
-            <div className="font-medium text-foreground">Agent MCP Dashboard</div>
-            <div className="text-muted-foreground">v2.0 • Premium UI</div>
+            <div className="font-medium text-foreground">AgentMCP Dashboard</div>
+            <div className="text-muted-foreground">v2.2 • Improved Dashboard</div>
           </div>
         )}
       </SidebarFooter>

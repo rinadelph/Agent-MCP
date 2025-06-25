@@ -67,7 +67,7 @@ export function TaskDetailsPanel({ task, onClose }: TaskDetailsPanelProps) {
   }
 
   // Parse JSON fields safely
-  const parseJsonField = (field: any): any[] => {
+  const parseJsonField = (field: unknown): unknown[] => {
     if (Array.isArray(field)) return field
     if (typeof field === 'string') {
       try {

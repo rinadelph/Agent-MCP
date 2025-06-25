@@ -4,7 +4,8 @@ import React from "react"
 import { 
   LayoutDashboard, 
   Users, 
-  CheckSquare
+  CheckSquare,
+  Brain
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -14,7 +15,7 @@ import { useDashboard, useSidebar } from "@/lib/store"
 interface NavItem {
   title: string
   icon: React.ComponentType<{ className?: string }>
-  view: 'overview' | 'agents' | 'tasks'
+  view: 'overview' | 'agents' | 'tasks' | 'memories'
   description?: string
   badge?: string
 }

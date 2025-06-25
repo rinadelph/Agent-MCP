@@ -2,6 +2,31 @@
 
 import React, { useEffect, useRef, useCallback, useState } from 'react'
 import { Network, DataSet } from 'vis-network/standalone'
+
+interface VisNode {
+  id: string;
+  label?: string;
+  group?: string;
+  x?: number;
+  y?: number;
+  fixed?: boolean;
+  physics?: boolean;
+  color?: string | { background?: string; border?: string; highlight?: { background?: string; border?: string } };
+  shape?: string;
+  size?: number;
+  [key: string]: unknown;
+}
+
+interface VisEdge {
+  id?: string;
+  from: string;
+  to: string;
+  arrows?: { to?: { enabled?: boolean; scaleFactor?: number } };
+  color?: string | { color?: string; highlight?: string; hover?: string };
+  width?: number;
+  dashes?: boolean;
+  [key: string]: unknown;
+}
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { 
@@ -212,17 +237,12 @@ interface VisGraphProps {
 
 export function VisGraph({ 
   fullscreen = false, 
-  selectedNodeId: _selectedNodeId, 
-  selectedNodeType: _selectedNodeType, 
-  selectedNodeData: _selectedNodeData, 
-  isPanelOpen: _isPanelOpen, 
-  onNodeSelect, 
-  onClosePanel: _onClosePanel 
-}: VisGraphProps) {
+  onNodeSelect
+}: Pick<VisGraphProps, 'fullscreen' | 'onNodeSelect'>) {
   const containerRef = useRef<HTMLDivElement>(null)
   const networkRef = useRef<Network | null>(null)
-  const nodesDataSetRef = useRef<DataSet<any>>(new DataSet())
-  const edgesDataSetRef = useRef<DataSet<any>>(new DataSet())
+  const nodesDataSetRef = useRef<DataSet<VisNode>>(new DataSet())
+  const edgesDataSetRef = useRef<DataSet<VisEdge>>(new DataSet())
   
   const { activeServerId, servers } = useServerStore()
   const activeServer = servers.find(s => s.id === activeServerId)
@@ -256,13 +276,13 @@ export function VisGraph({
 
     // Filter out idle agents (agents with no edges connecting to them)
     const nodeIdsWithConnections = new Set<string>()
-    graphData.edges.forEach((edge: any) => {
+    graphData.edges.forEach((edge: { from: string; to: string }) => {
       nodeIdsWithConnections.add(edge.from)
       nodeIdsWithConnections.add(edge.to)
     })
 
     // Filter nodes - keep admin, non-agents, and agents with connections
-    const filteredNodes = graphData.nodes.filter((node: any) => {
+    const filteredNodes = graphData.nodes.filter((node: { group?: string; id: string }) => {
       // In tree mode, only show tasks
       if (layoutMode === 'hierarchical') {
         return node.group === 'task' || node.group === 'file'
@@ -275,11 +295,11 @@ export function VisGraph({
     })
 
     // Separate nodes by type for better organization
-    const contextNodes = filteredNodes.filter((n: any) => n.group === 'context')
-    const taskNodes = filteredNodes.filter((n: any) => n.group === 'task')
+    const contextNodes = filteredNodes.filter((n: { group?: string }) => n.group === 'context')
+    const taskNodes = filteredNodes.filter((n: { group?: string }) => n.group === 'task')
     
     // Convert nodes with organized positioning
-    const visNodes = filteredNodes.map((node: any) => {
+    const visNodes = filteredNodes.map((node: { id: string; group?: string; label?: string; [key: string]: unknown }) => {
       const styling = getNodeStyling(node)
       
       // Fixed position for admin node at center
