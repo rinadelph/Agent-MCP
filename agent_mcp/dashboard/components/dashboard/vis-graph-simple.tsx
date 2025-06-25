@@ -5,11 +5,12 @@ import { Network, DataSet } from 'vis-network/standalone'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { 
-  RefreshCw, GitBranch, Activity, Layers
+  RefreshCw, GitBranch, Activity, Layers, Settings
 } from 'lucide-react'
 import { apiClient } from '@/lib/api'
 import { useServerStore } from '@/lib/stores/server-store'
 import { cn } from '@/lib/utils'
+import { GraphSettings, GraphSettingsPanel } from './graph-settings-panel'
 
 // Physics options with better spacing and clustering
 const physicsOptions = {
@@ -212,6 +213,8 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
   const [nodeCount, setNodeCount] = useState(0)
   const [edgeCount, setEdgeCount] = useState(0)
   const [isMounted, setIsMounted] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
+  const [settings, setSettings] = useState<GraphSettings | undefined>(undefined)
   
   // Track mounted state
   useEffect(() => {
@@ -220,6 +223,40 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
       setIsMounted(false)
     }
   }, [])
+
+  // Create physics options from settings
+  const getPhysicsOptions = useCallback(() => {
+    if (!settings) return physicsOptions
+    
+    return {
+      physics: {
+        enabled: true,
+        barnesHut: {
+          gravitationalConstant: settings.physics.gravitationalConstant,
+          centralGravity: settings.physics.centralGravity,
+          springLength: settings.physics.springLength,
+          springConstant: settings.physics.springConstant,
+          damping: settings.physics.damping,
+          avoidOverlap: settings.physics.avoidOverlap
+        },
+        maxVelocity: 50,
+        minVelocity: 0.1,
+        solver: 'barnesHut',
+        stabilization: {
+          enabled: true,
+          iterations: 1000,
+          updateInterval: 25,
+          fit: true
+        },
+        adaptiveTimestep: true,
+        timestep: 0.5
+      },
+      layout: physicsOptions.layout,
+      nodes: physicsOptions.nodes,
+      edges: physicsOptions.edges,
+      groups: physicsOptions.groups
+    }
+  }, [settings])
 
   // Convert API data to vis.js format with smart diffing
   const convertToVisData = useCallback((graphData: any) => {
@@ -276,7 +313,7 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
         const contextIndex = contextNodes.findIndex((n: any) => n.id === node.id)
         const angleStep = (2 * Math.PI) / contextNodes.length
         const angle = contextIndex * angleStep
-        const radius = 400 // Fixed radius for the crown
+        const radius = settings?.crown.adminContextRadius || 400
         
         return {
           id: node.id,
@@ -441,7 +478,7 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
         }
       }, 100)
     }
-  }, [])
+  }, [settings])
 
   // Fetch graph data
   const fetchGraphData = useCallback(async (isInitialLoad = false) => {
@@ -492,7 +529,7 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
         return
       }
 
-      const options = layoutMode === 'physics' ? physicsOptions : hierarchicalOptions
+      const options = layoutMode === 'physics' ? getPhysicsOptions() : hierarchicalOptions
 
       const data = {
         nodes: nodesDataSetRef.current,
@@ -552,7 +589,7 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
         delete (window as any).__visCleanup
       }
     }
-  }, [layoutMode, isMounted])
+  }, [layoutMode, isMounted, getPhysicsOptions])
 
   // Fetch data on mount and handle auto-refresh
   useEffect(() => {
@@ -568,7 +605,7 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
   const handleLayoutChange = useCallback((mode: 'physics' | 'hierarchical') => {
     setLayoutMode(mode)
     if (networkRef.current) {
-      const options = mode === 'physics' ? physicsOptions : hierarchicalOptions
+      const options = mode === 'physics' ? getPhysicsOptions() : hierarchicalOptions
       networkRef.current.setOptions(options)
       if (mode === 'physics') {
         // Force physics simulation to restart
@@ -579,7 +616,30 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
         networkRef.current?.fit({ animation: true })
       }, 100)
     }
-  }, [])
+  }, [getPhysicsOptions])
+
+  // Handle settings change
+  const handleSettingsChange = useCallback((newSettings: GraphSettings) => {
+    setSettings(newSettings)
+    if (networkRef.current && layoutMode === 'physics') {
+      const options = {
+        physics: {
+          enabled: true,
+          barnesHut: {
+            gravitationalConstant: newSettings.physics.gravitationalConstant,
+            centralGravity: newSettings.physics.centralGravity,
+            springLength: newSettings.physics.springLength,
+            springConstant: newSettings.physics.springConstant,
+            damping: newSettings.physics.damping,
+            avoidOverlap: newSettings.physics.avoidOverlap
+          }
+        }
+      }
+      networkRef.current.setOptions(options)
+    }
+    // Re-fetch data to apply new layout settings
+    fetchGraphData(false)
+  }, [layoutMode])
 
   return (
     <div className={cn("relative w-full bg-background", fullscreen ? "h-full" : "graph-container rounded-lg border")}>
@@ -616,8 +676,16 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
           </Badge>
         </div>
 
-        {/* Right side - Refresh controls */}
+        {/* Right side - Settings and Refresh controls */}
         <div className="flex items-center gap-1 sm:gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowSettings(!showSettings)}
+            className={cn("bg-background/95 backdrop-blur h-7 sm:h-8 px-2 sm:px-3", showSettings && "bg-primary/10")}
+          >
+            <Settings className="h-3 sm:h-4 w-3 sm:w-4" />
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -673,6 +741,13 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
           onMouseEnter={() => console.log('🖱️ Mouse entered graph container')}
         />
       )}
+      
+      {/* Settings Panel */}
+      <GraphSettingsPanel
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+        onSettingsChange={handleSettingsChange}
+      />
     </div>
   )
 }
