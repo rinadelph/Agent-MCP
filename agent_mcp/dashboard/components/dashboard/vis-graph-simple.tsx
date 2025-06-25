@@ -351,54 +351,57 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
   }, [])
 
   return (
-    <div className={cn("relative w-full bg-background", fullscreen ? "h-full" : "h-[800px] rounded-lg border")}>
+    <div className={cn("relative w-full bg-background", fullscreen ? "h-full" : "h-[80vh] max-h-[800px] rounded-lg border")}>
       {/* Controls Bar */}
-      <div className="absolute top-4 left-4 right-4 z-10 flex items-center justify-between">
+      <div className="absolute top-2 sm:top-4 left-2 sm:left-4 right-2 sm:right-4 z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
         {/* Left side - Layout controls */}
-        <div className="flex items-center gap-2">
-          <div className="bg-background/95 backdrop-blur rounded-lg border p-1 flex gap-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="bg-background/95 backdrop-blur rounded-lg border p-0.5 sm:p-1 flex gap-0.5 sm:gap-1">
             <Button
               variant={layoutMode === 'physics' ? 'default' : 'ghost'}
               size="sm"
               onClick={() => handleLayoutChange('physics')}
-              className="h-8"
+              className="h-7 sm:h-8 px-2 sm:px-3 text-xs sm:text-sm"
             >
-              <Layers className="h-4 w-4 mr-1" />
-              Physics
+              <Layers className="h-3 sm:h-4 w-3 sm:w-4 mr-0.5 sm:mr-1" />
+              <span className="hidden sm:inline">Physics</span>
+              <span className="sm:hidden">P</span>
             </Button>
             <Button
               variant={layoutMode === 'hierarchical' ? 'default' : 'ghost'}
               size="sm"
               onClick={() => handleLayoutChange('hierarchical')}
-              className="h-8"
+              className="h-7 sm:h-8 px-2 sm:px-3 text-xs sm:text-sm"
             >
-              <GitBranch className="h-4 w-4 mr-1" />
-              Tree
+              <GitBranch className="h-3 sm:h-4 w-3 sm:w-4 mr-0.5 sm:mr-1" />
+              <span className="hidden sm:inline">Tree</span>
+              <span className="sm:hidden">T</span>
             </Button>
           </div>
           
-          <Badge variant="outline" className="bg-background/95 backdrop-blur">
-            {nodeCount} nodes, {edgeCount} edges
+          <Badge variant="outline" className="bg-background/95 backdrop-blur text-xs sm:text-sm">
+            <span className="hidden sm:inline">{nodeCount} nodes, {edgeCount} edges</span>
+            <span className="sm:hidden">{nodeCount}n, {edgeCount}e</span>
           </Badge>
         </div>
 
         {/* Right side - Refresh controls */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2">
           <Button
             variant="outline"
             size="sm"
             onClick={() => setAutoRefresh(!autoRefresh)}
-            className={cn("bg-background/95 backdrop-blur", autoRefresh && "bg-primary/10")}
+            className={cn("bg-background/95 backdrop-blur h-7 sm:h-8 px-2 sm:px-3 text-xs sm:text-sm", autoRefresh && "bg-primary/10")}
           >
             {autoRefresh ? (
               <>
-                <Activity className="h-4 w-4 mr-1 animate-pulse" />
-                Live
+                <Activity className="h-3 sm:h-4 w-3 sm:w-4 mr-0.5 sm:mr-1 animate-pulse" />
+                <span className="hidden sm:inline">Live</span>
               </>
             ) : (
               <>
-                <RefreshCw className="h-4 w-4 mr-1" />
-                Manual
+                <RefreshCw className="h-3 sm:h-4 w-3 sm:w-4 mr-0.5 sm:mr-1" />
+                <span className="hidden sm:inline">Manual</span>
               </>
             )}
           </Button>
@@ -407,9 +410,9 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
             size="sm"
             onClick={fetchGraphData}
             disabled={loading}
-            className="bg-background/95 backdrop-blur"
+            className="bg-background/95 backdrop-blur h-7 sm:h-8 px-2 sm:px-3"
           >
-            {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            {loading ? <RefreshCw className="h-3 sm:h-4 w-3 sm:w-4 animate-spin" /> : <RefreshCw className="h-3 sm:h-4 w-3 sm:w-4" />}
           </Button>
         </div>
       </div>

@@ -8,23 +8,24 @@ import { Activity } from 'lucide-react'
 // Main System Dashboard
 export function SystemDashboard() {
   return (
-    <div className="flex flex-col -m-6" style={{ height: 'calc(100vh - 4rem)' }}>
+    <div className="flex flex-col -m-3 sm:-m-4 md:-m-6 h-[calc(100vh-3.5rem)]">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b">
+      <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b bg-background/95 backdrop-blur">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">System</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">System</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">
             System architecture and real-time graph visualization
           </p>
         </div>
-        <Badge variant="outline" className="status-online">
+        <Badge variant="outline" className="status-online text-xs sm:text-sm">
           <Activity className="h-3 w-3 mr-1" />
-          All Systems Operational
+          <span className="hidden sm:inline">All Systems Operational</span>
+          <span className="sm:hidden">Online</span>
         </Badge>
       </div>
 
       {/* Full Page Graph */}
-      <div className="flex-1" style={{ minHeight: '0' }}>
+      <div className="flex-1 min-h-0 overflow-hidden">
         <VisGraph fullscreen />
       </div>
     </div>
