@@ -2,6 +2,7 @@
 
 import React from "react"
 import { SystemGraph } from "./system-graph"
+import { TestGraph } from "./test-graph"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
@@ -121,14 +122,14 @@ const SystemLogs = () => {
     }
   ]
 
-  const levelIcons = {
+  const levelIcons: { [key: string]: React.ReactNode } = {
     info: <Info className="h-4 w-4 text-blue-600" />,
     warning: <AlertCircle className="h-4 w-4 text-yellow-600" />,
     error: <XCircle className="h-4 w-4 text-red-600" />,
     success: <CheckCircle2 className="h-4 w-4 text-green-600" />
   }
 
-  const levelColors = {
+  const levelColors: { [key: string]: string } = {
     info: 'text-blue-600 bg-blue-50',
     warning: 'text-yellow-600 bg-yellow-50',
     error: 'text-red-600 bg-red-50',
@@ -220,10 +221,13 @@ export function SystemDashboard() {
 
       {/* Main Content */}
       <Tabs defaultValue="graph" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="graph">
             <Network className="h-4 w-4 mr-2" />
             System Graph
+          </TabsTrigger>
+          <TabsTrigger value="test">
+            Test Graph
           </TabsTrigger>
           <TabsTrigger value="resources">
             <Database className="h-4 w-4 mr-2" />
@@ -237,6 +241,18 @@ export function SystemDashboard() {
 
         <TabsContent value="graph" className="space-y-4">
           <SystemGraph />
+        </TabsContent>
+        
+        <TabsContent value="test" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>React Flow Test</CardTitle>
+              <CardDescription>Simple test to verify React Flow is working</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <TestGraph />
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="resources" className="space-y-4">

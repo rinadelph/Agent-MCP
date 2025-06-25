@@ -332,14 +332,6 @@ export function OverviewDashboard() {
               </div>
               <Progress value={completionRate} className="h-3" />
             </div>
-            
-            <div className="space-y-3">
-              <div className="flex justify-between text-sm">
-                <span className="text-foreground">System Uptime</span>
-                <span className="text-primary font-semibold">{systemData.systemUptime}</span>
-              </div>
-              <Progress value={parseFloat(systemData.systemUptime)} className="h-3" />
-            </div>
           </CardContent>
         </Card>
 

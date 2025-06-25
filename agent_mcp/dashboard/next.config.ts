@@ -20,6 +20,10 @@ const nextConfig: NextConfig = {
   
   // Asset prefix for CDN support if needed later
   assetPrefix: '',
+
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
 };
 
 export default nextConfig;

@@ -659,9 +659,9 @@ export function SystemGraph() {
             </TabsTrigger>
           </TabsList>
           
-          <TabsContent value="graph" className="h-[600px] m-0">
+          <TabsContent value="graph" className="h-[600px] m-0 relative overflow-hidden">
             <ReactFlowProvider>
-              <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+              <div className="absolute inset-0" style={{ width: '100%', height: '100%' }}>
                 <ReactFlow
                   nodes={nodes}
                   edges={edges}
@@ -671,7 +671,7 @@ export function SystemGraph() {
                   nodeTypes={debugMode ? defaultNodeTypes : nodeTypes}
                   edgeTypes={debugMode ? {} : edgeTypes}
                   connectionMode={ConnectionMode.Loose}
-                  fitView={false}
+                  fitView={true}
                   minZoom={0.1}
                   maxZoom={2}
                   defaultViewport={{ x: 0, y: 0, zoom: 0.5 }}
