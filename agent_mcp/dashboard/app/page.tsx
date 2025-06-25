@@ -4,21 +4,8 @@ import { MainLayout } from "@/components/layout/main-layout"
 import { OverviewDashboard } from "@/components/dashboard/overview-dashboard"
 import { AgentsDashboard } from "@/components/dashboard/agents-dashboard"
 import { TasksDashboard } from "@/components/dashboard/tasks-dashboard"
+import { SystemDashboard } from "@/components/dashboard/system-dashboard"
 import { useDashboard } from "@/lib/store"
-
-function SystemView() {
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">System</h1>
-        <p className="text-muted-foreground">Monitor system health and performance</p>
-      </div>
-      <div className="glass-container p-8 text-center">
-        <p className="text-muted-foreground">System monitoring view coming soon...</p>
-      </div>
-    </div>
-  )
-}
 
 export default function HomePage() {
   const { currentView } = useDashboard()
@@ -32,7 +19,7 @@ export default function HomePage() {
       case 'tasks':
         return <TasksDashboard />
       case 'system':
-        return <SystemView />
+        return <SystemDashboard />
       default:
         return <OverviewDashboard />
     }

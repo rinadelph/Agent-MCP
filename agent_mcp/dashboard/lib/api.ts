@@ -76,6 +76,11 @@ class ApiClient {
     endpoint: string, 
     options: RequestInit = {}
   ): Promise<T> {
+    // Check if a server is connected
+    if (!this.baseUrl) {
+      throw new Error('No server connected. Please select a server from the dropdown.')
+    }
+    
     const url = `${this.baseUrl}/api${endpoint}`
     
     const response = await fetch(url, {
