@@ -126,8 +126,8 @@ export const useNotifications = create<NotificationState>()((set, get) => ({
 interface SearchState {
   query: string
   setQuery: (query: string) => void
-  results: any[]
-  setResults: (results: any[]) => void
+  results: unknown[]
+  setResults: (results: unknown[]) => void
   isSearching: boolean
   setSearching: (searching: boolean) => void
 }

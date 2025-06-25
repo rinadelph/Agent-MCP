@@ -11,7 +11,7 @@ export function formatTimestamp(timestamp: string | Date): string {
   try {
     const date = new Date(timestamp)
     return date.toLocaleString()
-  } catch (e) {
+  } catch {
     return String(timestamp)
   }
 }
@@ -33,7 +33,7 @@ export function formatRelativeTime(timestamp: string | Date): string {
     if (hours > 0) return `${hours}h ago`
     if (minutes > 0) return `${minutes}m ago`
     return `${seconds}s ago`
-  } catch (e) {
+  } catch {
     return String(timestamp)
   }
 }
@@ -56,7 +56,7 @@ export function getStatusVariant(status: string): "default" | "success" | "warni
   }
 }
 
-export function debounce<T extends (...args: any[]) => any>(
+export function debounce<T extends (...args: unknown[]) => unknown>(
   func: T,
   wait: number
 ): (...args: Parameters<T>) => void {
@@ -67,7 +67,7 @@ export function debounce<T extends (...args: any[]) => any>(
   }
 }
 
-export function throttle<T extends (...args: any[]) => any>(
+export function throttle<T extends (...args: unknown[]) => unknown>(
   func: T,
   limit: number
 ): (...args: Parameters<T>) => void {
@@ -110,7 +110,7 @@ export function isValidUrl(string: string): boolean {
   try {
     new URL(string)
     return true
-  } catch (_) {
+  } catch {
     return false
   }
 }

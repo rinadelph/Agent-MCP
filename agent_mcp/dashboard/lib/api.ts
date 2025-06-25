@@ -35,7 +35,7 @@ export interface GraphNode {
   label: string
   type: 'agent' | 'task' | 'context' | 'file' | 'admin'
   status?: string
-  metadata?: Record<string, any>
+  metadata?: Record<string, unknown>
 }
 
 export interface GraphEdge {
@@ -163,7 +163,7 @@ class ApiClient {
   // Node details endpoint
   async getNodeDetails(nodeId: string): Promise<{
     node_type: string
-    details: Record<string, any>
+    details: Record<string, unknown>
   }> {
     return this.request(`/node-details/${nodeId}`)
   }

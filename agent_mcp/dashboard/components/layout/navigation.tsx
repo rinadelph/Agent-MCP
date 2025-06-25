@@ -10,7 +10,6 @@ import {
   BarChart3,
   Shield,
   Database,
-  Activity,
   Zap
 } from "lucide-react"
 import { cn } from "@/lib/utils"
