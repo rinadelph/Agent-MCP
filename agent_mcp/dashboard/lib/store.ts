@@ -15,15 +15,19 @@ export const useTheme = create<ThemeState>()(
       isDark: false,
       setTheme: (theme) => {
         set({ theme })
-        const isDark = theme === 'dark' || 
-          (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
-        set({ isDark })
         
-        // Update document class
-        if (isDark) {
-          document.documentElement.classList.add('dark')
-        } else {
-          document.documentElement.classList.remove('dark')
+        // Only run in browser environment
+        if (typeof window !== 'undefined') {
+          const isDark = theme === 'dark' || 
+            (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+          set({ isDark })
+          
+          // Update document class
+          if (isDark) {
+            document.documentElement.classList.add('dark')
+          } else {
+            document.documentElement.classList.remove('dark')
+          }
         }
       },
       toggleTheme: () => {
