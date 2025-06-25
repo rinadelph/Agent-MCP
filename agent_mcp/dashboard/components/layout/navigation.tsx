@@ -53,28 +53,6 @@ const navigationItems: NavItem[] = [
   }
 ]
 
-const secondaryItems = [
-  {
-    title: "Analytics",
-    icon: BarChart3,
-    description: "Performance analytics"
-  },
-  {
-    title: "Security",
-    icon: Shield,
-    description: "Security and permissions"
-  },
-  {
-    title: "Database",
-    icon: Database,
-    description: "Database management"
-  },
-  {
-    title: "Integrations",
-    icon: Zap,
-    description: "External integrations"
-  }
-]
 
 export function Navigation() {
   const { currentView, setCurrentView } = useDashboard()
@@ -141,66 +119,6 @@ export function Navigation() {
           ))}
         </div>
 
-        <Separator />
-
-        {/* Secondary Navigation */}
-        <div className="space-y-1">
-          {!isCollapsed && (
-            <h3 className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Tools
-            </h3>
-          )}
-          {secondaryItems.map((item) => {
-            const button = (
-              <Button
-                variant="ghost"
-                className={cn(
-                  "w-full justify-start gap-3 h-11",
-                  isCollapsed && "justify-center px-2"
-                )}
-                disabled
-              >
-                <item.icon className="h-5 w-5 text-muted-foreground" />
-                {!isCollapsed && (
-                  <span className="truncate text-muted-foreground">{item.title}</span>
-                )}
-              </Button>
-            )
-
-            if (isCollapsed && item.description) {
-              return (
-                <Tooltip key={item.title}>
-                  <TooltipTrigger asChild>
-                    {button}
-                  </TooltipTrigger>
-                  <TooltipContent side="right">
-                    <p className="font-medium">{item.title}</p>
-                    <p className="text-sm text-muted-foreground">{item.description}</p>
-                    <p className="text-xs text-muted-foreground">Coming soon</p>
-                  </TooltipContent>
-                </Tooltip>
-              )
-            }
-
-            return <div key={item.title}>{button}</div>
-          })}
-        </div>
-
-        <Separator />
-
-        {/* Settings */}
-        <div className="space-y-1">
-          <Button
-            variant="ghost"
-            className={cn(
-              "w-full justify-start gap-3 h-11",
-              isCollapsed && "justify-center px-2"
-            )}
-          >
-            <Settings className="h-5 w-5" />
-            {!isCollapsed && <span>Settings</span>}
-          </Button>
-        </div>
 
         {/* System Status Indicator */}
         {!isCollapsed && (
