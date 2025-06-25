@@ -29,17 +29,19 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { 
-  Users, CheckSquare, FileText, Database, Activity, 
-  Zap, GitBranch, Network, Workflow, LayoutGrid,
-  Eye, EyeOff, RefreshCw, Maximize, Minimize
+  FileText, Database, 
+  GitBranch, Network, Workflow,
+  Eye, EyeOff, RefreshCw, AlertCircle
 } from 'lucide-react'
 import { useTheme } from '@/lib/store'
 import { apiClient } from '@/lib/api'
 import { useServerStore } from '@/lib/stores/server-store'
 import { cn } from '@/lib/utils'
+import type { GraphNode, GraphEdge } from '@/lib/api'
 
 // Custom Node Types
 const AgentNode = ({ data, selected }: NodeProps) => {
+  console.log('Rendering AgentNode:', data.label, data)
   const statusColors = {
     active: 'bg-green-500',
     created: 'bg-blue-500',
@@ -69,6 +71,7 @@ const AgentNode = ({ data, selected }: NodeProps) => {
 }
 
 const TaskNode = ({ data, selected }: NodeProps) => {
+  console.log('Rendering TaskNode:', data.label, data)
   const statusColors = {
     pending: 'bg-yellow-500',
     in_progress: 'bg-blue-500',
@@ -212,7 +215,7 @@ const edgeTypes: EdgeTypes = {
 
 // Main System Graph Component
 export function SystemGraph() {
-  const { theme } = useTheme()
+  const { } = useTheme() // theme available if needed
   const { activeServerId, servers } = useServerStore()
   const activeServer = servers.find(s => s.id === activeServerId)
   
@@ -226,7 +229,7 @@ export function SystemGraph() {
   const [autoRefresh, setAutoRefresh] = useState(false)
 
   // Convert API data to React Flow format
-  const convertToFlowData = useCallback((graphData: any) => {
+  const convertToFlowData = useCallback((graphData: { nodes: GraphNode[], edges: GraphEdge[] }) => {
     try {
       if (!graphData || !graphData.nodes || !graphData.edges) {
         console.warn('Invalid graph data structure:', graphData)
@@ -234,9 +237,11 @@ export function SystemGraph() {
       }
 
       console.log(`Converting ${graphData.nodes.length} nodes and ${graphData.edges.length} edges`)
+      console.log('Sample node:', graphData.nodes[0])
+      console.log('Sample edge:', graphData.edges[0])
 
       // Convert nodes
-      const flowNodes: Node[] = graphData.nodes.map((node: any, index: number) => {
+      const flowNodes: Node[] = graphData.nodes.map((node: GraphNode, index: number) => {
         let type = 'default'
         let position = { x: 0, y: 0 }
 
@@ -258,7 +263,7 @@ export function SystemGraph() {
           position = { x: 400, y: 50 }
         }
 
-        return {
+        const flowNode = {
           id: node.id,
           type,
           position,
@@ -271,6 +276,9 @@ export function SystemGraph() {
             ...node
           }
         }
+        
+        console.log(`Created node: ${node.id}, type: ${type}, group: ${node.group}, position:`, position)
+        return flowNode
       })
 
       // Create a set of valid node IDs for edge validation
@@ -279,7 +287,7 @@ export function SystemGraph() {
 
       // Convert edges and validate node references
       const flowEdges: Edge[] = []
-      graphData.edges.forEach((edge: any, index: number) => {
+      graphData.edges.forEach((edge: GraphEdge, index: number) => {
         // Validate edge has required fields
         if (!edge.from || !edge.to) {
           console.warn(`Edge ${index} missing from/to:`, edge)
@@ -328,8 +336,54 @@ export function SystemGraph() {
       })
 
       console.log(`Converted to ${flowNodes.length} nodes and ${flowEdges.length} valid edges`)
-      setNodes(flowNodes)
-      setEdges(flowEdges)
+      
+      // Test with simple nodes first
+      const testNodes: Node[] = [
+        {
+          id: 'test-1',
+          type: 'default',
+          position: { x: 250, y: 100 },
+          data: { label: 'Test Node 1' }
+        },
+        {
+          id: 'test-2',
+          type: 'default',
+          position: { x: 100, y: 200 },
+          data: { label: 'Test Node 2' }
+        },
+        {
+          id: 'test-3',
+          type: 'default',
+          position: { x: 400, y: 200 },
+          data: { label: 'Test Node 3' }
+        }
+      ]
+      
+      const testEdges: Edge[] = [
+        {
+          id: 'e1-2',
+          source: 'test-1',
+          target: 'test-2',
+          type: 'default'
+        },
+        {
+          id: 'e1-3',
+          source: 'test-1',
+          target: 'test-3',
+          type: 'default'
+        }
+      ]
+      
+      // Test with simple nodes in debug mode
+      if (debugMode) {
+        console.log('Debug mode: Using test nodes')
+        setNodes(testNodes)
+        setEdges(testEdges)
+      } else {
+        // Use real data
+        setNodes(flowNodes)
+        setEdges(flowEdges)
+      }
     } catch (error) {
       console.error('Error converting graph data:', error)
       setError('Failed to process graph data')
@@ -375,6 +429,7 @@ export function SystemGraph() {
 
   // Initial load and auto-refresh
   useEffect(() => {
+    console.log('SystemGraph mounted, fetching initial data...')
     fetchGraphData()
 
     if (autoRefresh) {
@@ -382,6 +437,34 @@ export function SystemGraph() {
       return () => clearInterval(interval)
     }
   }, [fetchGraphData, autoRefresh])
+  
+  // Re-fetch when debug mode changes
+  useEffect(() => {
+    fetchGraphData()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchGraphData])
+  
+  // Debug: Check if nodes have valid positions
+  useEffect(() => {
+    if (nodes.length > 0) {
+      const nodesWithInvalidPos = nodes.filter(n => !n.position || n.position.x === undefined || n.position.y === undefined)
+      if (nodesWithInvalidPos.length > 0) {
+        console.error('Nodes with invalid positions:', nodesWithInvalidPos)
+      }
+    }
+  }, [nodes])
+
+  // Debug logging for React Flow
+  useEffect(() => {
+    console.log('React Flow State:', {
+      nodesCount: nodes.length,
+      edgesCount: edges.length,
+      nodes: nodes.slice(0, 5), // Log first 5 nodes
+      edges: edges.slice(0, 5), // Log first 5 edges
+      loading,
+      error
+    })
+  }, [nodes, edges, loading, error])
 
   // Handle node selection
   const onNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
@@ -483,6 +566,49 @@ export function SystemGraph() {
     )
   }
 
+  // Show loading state
+  if (loading && nodes.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>System Graph</CardTitle>
+          <CardDescription>Visual representation of agents, tasks, and their relationships</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center h-[600px]">
+            <div className="text-center space-y-4">
+              <RefreshCw className="h-12 w-12 mx-auto animate-spin text-primary" />
+              <p className="text-muted-foreground">Loading graph data...</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // Show error state
+  if (error && nodes.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>System Graph</CardTitle>
+          <CardDescription>Visual representation of agents, tasks, and their relationships</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center h-[600px]">
+            <div className="text-center space-y-4">
+              <AlertCircle className="h-12 w-12 mx-auto text-destructive" />
+              <p className="text-muted-foreground">{error}</p>
+              <Button onClick={() => fetchGraphData()} variant="outline">
+                Retry
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
     <Card className="h-full">
       <CardHeader>
@@ -492,6 +618,9 @@ export function SystemGraph() {
             <CardDescription>Visual representation of agents, tasks, and their relationships</CardDescription>
           </div>
           <div className="flex items-center gap-2">
+            <div className="text-xs text-muted-foreground">
+              {nodes.length} nodes, {edges.length} edges
+            </div>
             <Button
               variant="outline"
               size="sm"
@@ -513,7 +642,7 @@ export function SystemGraph() {
               onClick={fetchGraphData}
               disabled={loading}
             >
-              Refresh
+              {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : 'Refresh'}
             </Button>
           </div>
         </div>
@@ -531,21 +660,44 @@ export function SystemGraph() {
             </TabsTrigger>
           </TabsList>
           
-          <TabsContent value="graph" className="relative h-[600px] m-0">
-            <div className="absolute inset-0">
-              <ReactFlowProvider>
+          <TabsContent value="graph" className="h-[600px] m-0">
+            <ReactFlowProvider>
+              <div style={{ width: '100%', height: '100%', position: 'relative' }}>
                 <ReactFlow
-                nodes={nodes}
-                edges={edges}
-                onNodesChange={onNodesChange}
-                onEdgesChange={onEdgesChange}
-                onNodeClick={onNodeClick}
-                nodeTypes={nodeTypes}
-                edgeTypes={edgeTypes}
-                connectionMode={ConnectionMode.Loose}
-                fitView
-                className="bg-background"
-              >
+                  nodes={nodes}
+                  edges={edges}
+                  onNodesChange={onNodesChange}
+                  onEdgesChange={onEdgesChange}
+                  onNodeClick={onNodeClick}
+                  nodeTypes={nodeTypes}
+                  edgeTypes={edgeTypes}
+                  connectionMode={ConnectionMode.Loose}
+                  fitView={false}
+                  minZoom={0.1}
+                  maxZoom={2}
+                  defaultViewport={{ x: 0, y: 0, zoom: 0.5 }}
+                  className="bg-background"
+                  onInit={(instance) => {
+                    console.log('React Flow initialized:', instance)
+                    console.log('Nodes in view:', instance.getNodes())
+                    console.log('Edges in view:', instance.getEdges())
+                    console.log('Viewport:', instance.getViewport())
+                    console.log('Node types registered:', Object.keys(nodeTypes))
+                    // Force a fit view after initialization
+                    setTimeout(() => {
+                      instance.fitView({ padding: 0.2, maxZoom: 1 })
+                      console.log('After fit view - Viewport:', instance.getViewport())
+                      console.log('Bounds:', instance.getNodesBounds(instance.getNodes()))
+                    }, 500)
+                  }}
+                  onNodesInitialized={(nodes) => {
+                    console.log('Nodes initialized:', nodes.length)
+                    console.log('First few nodes:', nodes.slice(0, 3))
+                  }}
+                  onError={(id, message) => {
+                    console.error('React Flow error:', id, message)
+                  }}
+                >
                 <Background 
                   variant={BackgroundVariant.Dots}
                   gap={12}
@@ -596,9 +748,9 @@ export function SystemGraph() {
                     </div>
                   </div>
                 </Panel>
-              </ReactFlow>
-              </ReactFlowProvider>
-            </div>
+                </ReactFlow>
+              </div>
+            </ReactFlowProvider>
           </TabsContent>
           
           <TabsContent value="details" className="p-6">

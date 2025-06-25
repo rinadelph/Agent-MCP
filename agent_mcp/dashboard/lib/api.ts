@@ -33,17 +33,24 @@ export interface Task {
 export interface GraphNode {
   id: string
   label: string
-  type: 'agent' | 'task' | 'context' | 'file' | 'admin'
+  group?: 'agent' | 'task' | 'context' | 'file' | 'admin'
+  type?: 'agent' | 'task' | 'context' | 'file' | 'admin'
   status?: string
+  priority?: string
+  assigned_to?: string
+  current_task?: string
   metadata?: Record<string, unknown>
+  [key: string]: unknown
 }
 
 export interface GraphEdge {
-  id: string
+  id?: string
   from: string
   to: string
-  type: string
+  type?: string
+  title?: string
   label?: string
+  [key: string]: unknown
 }
 
 export interface SystemStatus {
