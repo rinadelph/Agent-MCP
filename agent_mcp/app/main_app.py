@@ -9,7 +9,7 @@ from starlette.applications import Starlette
 from starlette.routing import Mount, Route # Added Route
 from starlette.staticfiles import StaticFiles # For serving static files
 from starlette.middleware import Middleware # If any middleware is needed
-# from starlette.middleware.cors import CORSMiddleware # Example if CORS is needed
+from starlette.middleware.cors import CORSMiddleware # Example if CORS is needed
 
 # MCP Server specific imports
 from mcp.server.lowlevel import Server as MCPLowLevelServer # Renamed to avoid conflict
@@ -108,8 +108,16 @@ def create_app(project_dir: str, admin_token_cli: Optional[str] = None) -> Starl
         logger.info("Starlette app shutdown complete.")
 
     # Define middleware (if any)
-    # Example: middleware = [Middleware(CORSMiddleware, allow_origins=['*'])]
-    middleware_stack = [] # No specific middleware in original beyond what Starlette/MCP provide
+    # Enable CORS for dashboard integration
+    middleware_stack = [
+        Middleware(
+            CORSMiddleware,
+            allow_origins=['http://localhost:3000'],  # Next.js dev server
+            allow_credentials=True,
+            allow_methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+            allow_headers=['*'],
+        )
+    ]
 
     # Create the Starlette app
     # The original main.py:2100 created `web_app = Starlette()`

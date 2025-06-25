@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
 import { ThemeToggle } from "./theme-toggle"
+import { ProjectPicker } from "@/components/server/project-picker"
 import { useNotifications, useSearch, useCommandPalette } from "@/lib/store"
 import { cn } from "@/lib/utils"
 
@@ -52,6 +53,11 @@ export function Header() {
               <p className="text-xs text-muted-foreground">Multi-Agent Dashboard</p>
             </div>
           </div>
+        </div>
+
+        {/* Project Picker */}
+        <div className="mx-4">
+          <ProjectPicker />
         </div>
 
         {/* Search Bar */}

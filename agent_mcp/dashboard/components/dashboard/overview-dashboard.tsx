@@ -1,37 +1,62 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
-import { Activity, Users, CheckSquare, TrendingUp, Zap } from "lucide-react"
+import { Activity, Users, CheckSquare, TrendingUp, Zap, Server } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Button } from "@/components/ui/button"
+import { apiClient, SystemStatus } from "@/lib/api"
+import { useServerStore } from "@/lib/stores/server-store"
 
-// Real data hooks - will be populated by API calls
+// Real data hook for system status
 const useSystemData = () => {
-  const [data, setData] = useState({
-    totalAgents: 0,
-    activeAgents: 0,
-    totalTasks: 0,
-    completedTasks: 0,
-    pendingTasks: 0,
-    systemUptime: "0%"
+  const { activeServerId, servers } = useServerStore()
+  const activeServer = servers.find(s => s.id === activeServerId)
+  
+  const [data, setData] = useState<SystemStatus>({
+    server_running: false,
+    total_agents: 0,
+    active_agents: 0,
+    total_tasks: 0,
+    completed_tasks: 0,
+    pending_tasks: 0,
+    last_updated: ""
   })
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    // TODO: Fetch real data from API
-    // This will be replaced with actual API calls
-    setData({
-      totalAgents: 0,
-      activeAgents: 0,
-      totalTasks: 0,
-      completedTasks: 0,
-      pendingTasks: 0,
-      systemUptime: "0%"
-    })
-  }, [])
+    // Don't fetch if no server is connected
+    if (!activeServerId || !activeServer || activeServer.status !== 'connected') {
+      setLoading(false)
+      setError(null)
+      return
+    }
 
-  return data
+    const fetchData = async () => {
+      setLoading(true)
+      try {
+        const status = await apiClient.getSystemStatus()
+        setData(status)
+        setError(null)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to fetch system status')
+        console.error('Error fetching system status:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchData()
+    
+    // Set up polling for real-time updates only when connected
+    const interval = setInterval(fetchData, 10000) // Update every 10 seconds
+    
+    return () => clearInterval(interval)
+  }, [activeServerId, activeServer])
+
+  return { data, loading, error, isConnected: !!activeServerId && activeServer?.status === 'connected' }
 }
 
 const StatCard = ({ 
@@ -77,17 +102,97 @@ const StatCard = ({
 }
 
 export function OverviewDashboard() {
-  const [lastUpdate, setLastUpdate] = useState<string>("")
   const [mounted, setMounted] = useState(false)
-  const systemData = useSystemData()
+  const { data: systemData, loading, error, isConnected } = useSystemData()
+  const { servers, activeServerId } = useServerStore()
+  const activeServer = servers.find(s => s.id === activeServerId)
   
   useEffect(() => {
     setMounted(true)
-    setLastUpdate(new Date().toLocaleString())
   }, [])
   
-  const completionRate = systemData.totalTasks > 0 ? Math.round((systemData.completedTasks / systemData.totalTasks) * 100) : 0
-  const agentUtilization = systemData.totalAgents > 0 ? Math.round((systemData.activeAgents / systemData.totalAgents) * 100) : 0
+  const completionRate = systemData.total_tasks > 0 ? Math.round((systemData.completed_tasks / systemData.total_tasks) * 100) : 0
+  const agentUtilization = systemData.total_agents > 0 ? Math.round((systemData.active_agents / systemData.total_agents) * 100) : 0
+
+  // Show connection prompt if no server is selected
+  if (!isConnected) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Overview</h1>
+            <p className="text-muted-foreground">System dashboard and performance metrics</p>
+          </div>
+          <Badge variant="secondary">
+            <Server className="w-4 h-4 mr-2" />
+            No Server Connected
+          </Badge>
+        </div>
+
+        <Card className="card-premium">
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <Server className="h-12 w-12 text-muted-foreground mb-4" />
+            <h3 className="text-lg font-medium mb-2">Connect to an MCP Server</h3>
+            <p className="text-muted-foreground text-center mb-4">
+              Select an MCP server from the project picker in the header to view system metrics and manage agents.
+            </p>
+            {activeServer && activeServer.status === 'error' && (
+              <div className="text-sm text-destructive">
+                Failed to connect to {activeServer.name} ({activeServer.host}:{activeServer.port})
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Overview</h1>
+            <p className="text-muted-foreground">Loading system data...</p>
+          </div>
+          <Badge variant="outline">
+            <div className="w-2 h-2 bg-blue-500 rounded-full mr-2 animate-pulse"></div>
+            Connecting
+          </Badge>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {[...Array(4)].map((_, i) => (
+            <Card key={i} className="card-premium">
+              <CardContent className="p-6">
+                <div className="animate-pulse">
+                  <div className="h-4 bg-muted rounded w-1/2 mb-2"></div>
+                  <div className="h-8 bg-muted rounded w-1/3 mb-2"></div>
+                  <div className="h-3 bg-muted rounded w-2/3"></div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Overview</h1>
+            <p className="text-destructive">Error loading system data: {error}</p>
+          </div>
+          <Badge variant="destructive">
+            <div className="w-2 h-2 bg-red-500 rounded-full mr-2"></div>
+            Connection Error
+          </Badge>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -100,9 +205,13 @@ export function OverviewDashboard() {
           </p>
         </div>
         <div className="flex items-center space-x-2">
-          <Badge variant="outline" className="status-online">
-            <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
-            System Online
+          <Badge variant="outline" className={systemData.server_running ? "status-online" : "status-error"}>
+            <div className={`w-2 h-2 rounded-full mr-2 ${systemData.server_running ? 'bg-green-500' : 'bg-red-500'}`}></div>
+            {systemData.server_running ? 'Server Online' : 'Server Offline'}
+          </Badge>
+          <Badge variant="secondary">
+            <Server className="w-4 h-4 mr-2" />
+            {activeServer?.name}
           </Badge>
           <Button variant="outline" size="sm">
             <Activity className="h-4 w-4 mr-2" />
@@ -115,19 +224,19 @@ export function OverviewDashboard() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <StatCard
           title="Total Agents"
-          value={systemData.totalAgents}
+          value={systemData.total_agents}
           description="Registered in system"
           icon={Users}
         />
         <StatCard
           title="Active Agents"
-          value={systemData.activeAgents}
+          value={systemData.active_agents}
           description="Currently running"
           icon={Zap}
         />
         <StatCard
           title="Total Tasks"
-          value={systemData.totalTasks}
+          value={systemData.total_tasks}
           description="All time created"
           icon={CheckSquare}
         />
@@ -224,7 +333,7 @@ export function OverviewDashboard() {
 
       {/* Footer */}
       <div className="text-center text-sm text-muted-foreground">
-        {mounted ? `Last updated: ${lastUpdate}` : "Loading..."}
+        {mounted ? `Last updated: ${systemData.last_updated || new Date().toLocaleTimeString()}` : "Loading..."}
       </div>
     </div>
   )

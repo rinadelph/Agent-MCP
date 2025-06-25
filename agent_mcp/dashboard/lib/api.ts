@@ -63,6 +63,15 @@ class ApiClient {
     this.baseUrl = baseUrl
   }
 
+  // Dynamic server connection
+  setServer(host: string, port: number) {
+    this.baseUrl = `http://${host}:${port}`
+  }
+
+  getServerUrl(): string {
+    return this.baseUrl
+  }
+
   private async request<T>(
     endpoint: string, 
     options: RequestInit = {}
