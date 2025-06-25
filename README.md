@@ -10,147 +10,68 @@ Multi-Agent Collaboration Protocol for coordinated AI software development.
 
 Think **Obsidian for your AI agents** - a living knowledge graph where multiple AI agents collaborate through shared context, intelligent task management, and real-time visualization. Watch your codebase evolve as specialized agents work in parallel, never losing context or stepping on each other's work.
 
-## The Philosophy: Short-Lived Agents, Granular Tasks
+## How It Works: Breaking Complexity into Simple Steps
 
-Most AI development approaches suffer from a fundamental flaw: they try to maintain massive context windows with a single, long-running agent. This leads to:
+```mermaid
+graph LR
+    A[Step 1] --> B[Step 2] --> C[Step 3] --> D[Step 4] --> E[Done!]
+    style A fill:#4ecdc4,color:#fff
+    style E fill:#ff6b6b,color:#fff
+```
 
-- **Context pollution** - Irrelevant information drowns out what matters
-- **Hallucination risks** - Agents invent connections between unrelated parts
-- **Security vulnerabilities** - Agents with full context can be manipulated
-- **Performance degradation** - Large contexts slow down reasoning
-- **Unpredictable behavior** - Too much context creates chaos
+Every task can be broken down into linear steps. This is the core insight that makes Agent-MCP powerful.
 
-### Our Solution: Ephemeral Agents with Shared Memory
-
-Agent-MCP implements a radically different approach:
-
-**Short-Lived, Focused Agents**  
-Each agent lives only as long as their specific task. They:
-- Start with minimal context (just what they need)
-- Execute granular, linear tasks with clear boundaries
-- Document their work in shared memory
-- Terminate upon completion
-
-**Shared Knowledge Graph (RAG)**  
-Instead of cramming everything into context windows:
-- Persistent memory stores all project knowledge
-- Agents query only what's relevant to their task
-- Knowledge accumulates without overwhelming any single agent
-- Clear separation between working memory and reference material
-
-**Result**: Agents that are fast, focused, and safe. They can't be manipulated to reveal full project details because they never have access to it all at once.
-
-### Why This Matters for Safety
-
-Traditional long-context agents are like giving someone your entire codebase, documentation, and secrets in one conversation. Our approach is like having specialized contractors who only see the blueprint for their specific room.
-
-- **Reduced attack surface** - Agents can't leak what they don't know
-- **Deterministic behavior** - Limited context means predictable outputs
-- **Audit trails** - Every agent action is logged and traceable
-- **Rollback capability** - Mistakes are isolated to specific tasks
-
-### The Cleanup Protocol: Keeping Your System Lean
-
-Agent-MCP enforces strict lifecycle management:
-
-**Maximum 10 Active Agents**
-- Hard limit prevents resource exhaustion
-- Forces thoughtful task allocation
-- Maintains system performance
-
-**Automatic Cleanup Rules**
-- Agent finishes task → Immediately terminated
-- Agent idle 60+ seconds → Killed and task reassigned
-- Need more than 10 agents → Least productive agents removed
-
-**Why This Matters**
-- **No zombie processes** eating resources
-- **Fresh context** for every task
-- **Predictable resource usage**
-- **Clean system state** always
-
-This isn't just housekeeping - it's fundamental to the security and performance benefits of the short-lived agent model.
-
-## The Theory: Linear Task Decomposition
-
-Complex software development becomes tractable through deterministic linear decomposition:
+### The Problem with Complex Tasks
 
 ```mermaid
 graph TD
-    A[Complex Project Goal] -->|Decompose| B{Task Analysis}
-    B --> C[Linear Chain 1]
-    B --> D[Linear Chain 2]
-    B --> E[Linear Chain 3]
-    
-    C --> C1[Setup Database Schema]
-    C1 --> C2[Create User Model]
-    C2 --> C3[Implement Auth Logic]
-    C3 --> C4[Write Auth Tests]
-    
-    D --> D1[Design UI Components]
-    D1 --> D2[Build Login Form]
-    D2 --> D3[Connect to Auth API]
-    D3 --> D4[Add Error Handling]
-    
-    E --> E1[Setup CI Pipeline]
-    E1 --> E2[Configure Tests]
-    E2 --> E3[Deploy Scripts]
-    E3 --> E4[Monitor Setup]
-    
-    C4 --> F[Integration Point 1]
-    D4 --> F
-    E4 --> G[Integration Point 2]
-    F --> G
-    G --> H[Complete System]
-    
+    A["Build User Authentication"] -->|Single Agent Tries Everything| B{???}
+    B --> C[Database?]
+    B --> D[API?]
+    B --> E[Frontend?]
+    B --> F[Security?]
+    B --> G[Tests?]
+    C -.->|Confused| H[Incomplete Implementation]
+    D -.->|Overwhelmed| H
+    E -.->|Context Lost| H
+    F -.->|Assumptions| H
+    G -.->|Forgotten| H
     style A fill:#ff6b6b,color:#fff
-    style H fill:#4ecdc4,color:#fff
-    style F fill:#ffe66d,color:#333
-    style G fill:#ffe66d,color:#333
+    style H fill:#666,color:#fff
 ```
 
-### The Fundamental Principle
+### The Agent-MCP Solution
 
-**Any task that cannot be expressed as `Step 1 → Step 2 → Step N` is not atomic enough.**
-
-This principle drives everything in Agent-MCP:
-
-1. **Complex goals** must decompose into **linear sequences**
-2. **Linear sequences** can execute **in parallel** when independent
-3. **Each step** must have **clear prerequisites** and **deterministic outputs**
-4. **Integration points** are **explicit** and **well-defined**
-
-### Why Linear Decomposition Works
-
-**Traditional Approach**: "Build a user authentication system"
-- Vague requirements lead to varied implementations
-- Agents make different assumptions
-- Integration becomes a nightmare
-
-**Agent-MCP Approach**: 
-```
-Chain 1: Database Layer
-  1.1: Create users table with id, email, password_hash
-  1.2: Add unique index on email
-  1.3: Create sessions table with user_id, token, expiry
-  1.4: Write migration scripts
-  
-Chain 2: API Layer  
-  2.1: Implement POST /auth/register endpoint
-  2.2: Implement POST /auth/login endpoint
-  2.3: Implement POST /auth/logout endpoint
-  2.4: Add JWT token generation
-  
-Chain 3: Frontend Layer
-  3.1: Create AuthContext provider
-  3.2: Build LoginForm component
-  3.3: Build RegisterForm component
-  3.4: Implement protected routes
+```mermaid
+graph TD
+    A["Build User Authentication"] -->|Break Down| B[Linear Tasks]
+    B --> C["Agent 1: Database"]
+    B --> D["Agent 2: API"]
+    B --> E["Agent 3: Frontend"]
+    
+    C --> C1[Create users table]
+    C1 --> C2[Add indexes]
+    C2 --> C3[Create sessions table]
+    
+    D --> D1[POST /register]
+    D1 --> D2[POST /login]
+    D2 --> D3[POST /logout]
+    
+    E --> E1[Login Form]
+    E1 --> E2[Register Form]
+    E2 --> E3[Auth Context]
+    
+    C3 --> F[Working System]
+    D3 --> F
+    E3 --> F
+    
+    style A fill:#4ecdc4,color:#fff
+    style F fill:#4ecdc4,color:#fff
 ```
 
-Each step is atomic, testable, and has zero ambiguity. Multiple agents can work these chains in parallel without conflict.
+Each agent focuses on their linear chain. No confusion. No context pollution. Just clear, deterministic progress.
 
-## The Problem with Single-Agent Development
+## Why Multiple Agents?
 
 Beyond the philosophical issues, traditional AI coding assistants hit practical limitations:
 - **Context windows overflow** on large codebases
@@ -382,54 +303,173 @@ This happens automatically - no manual coordination needed.
 
 ### Traditional Long-Lived Agents
 Most AI coding assistants maintain conversations across entire projects:
-- **10,000+ tokens** of accumulated context
-- **Confused priorities** from mixing unrelated tasks
-- **Hallucination breeding ground** with too many connections
-- **Slow responses** from processing irrelevant context
-- **Security nightmare** - one prompt could expose everything
+- **Accumulated context grows unbounded** - mixing unrelated code, decisions, and conversations
+- **Confused priorities** - yesterday's bug fix mingles with today's feature request
+- **Hallucination risks increase** - agents invent connections between unrelated parts
+- **Performance degrades over time** - every response processes irrelevant history
+- **Security vulnerability** - one carefully crafted prompt could expose your entire project
 
 ### Agent-MCP's Ephemeral Agents
 Each agent is purpose-built for a single task:
-- **500-2000 tokens** of focused context
-- **Crystal clear objectives** with defined boundaries
-- **Deterministic outputs** from limited, relevant information
-- **Lightning fast** responses without context overhead
-- **Secure by design** - can only access what they need
+- **Minimal, focused context** - only what's needed for the specific task
+- **Crystal clear objectives** - one task, one goal, no ambiguity
+- **Deterministic behavior** - limited context means predictable outputs
+- **Consistently fast responses** - no context bloat to slow things down
+- **Secure by design** - agents literally cannot access what they don't need
 
-### The Results Speak for Themselves
+### A Practical Example
 
-**Performance Comparison**:
-- Task completion speed: **3-5x faster** with focused agents
-- Error rates: **85% lower** with granular tasks
-- Context relevance: **95%** vs 30% in long conversations
-- Security incidents: **Zero** reported data leaks
+**Traditional Approach**: "Update the user authentication system"
+```
+Agent: I'll update your auth system. I see from our previous conversation about 
+database migrations, UI components, API endpoints, deployment scripts, and that 
+bug in the payment system... wait, which auth approach did we decide on? Let me 
+try to piece this together from our 50+ message history...
 
-**Real Example**:
-- Long-lived agent: "Update the user authentication system" → 45 minutes, 3 revisions, confused implementation mixing old and new patterns
-- Short-lived agents: Same task split into 5 granular subtasks → 15 minutes total, zero revisions, each component perfectly isolated
+[Agent produces confused implementation mixing multiple patterns]
+```
 
-## Real-World Results
+**Agent-MCP Approach**: Same request, broken into focused tasks
+```
+Agent 1 (Database): Create auth tables with exactly these fields...
+Agent 2 (API): Implement /auth endpoints following REST patterns...
+Agent 3 (Frontend): Build login forms using existing component library...
+Agent 4 (Tests): Write auth tests covering these specific scenarios...
+Agent 5 (Integration): Connect components following documented interfaces...
 
-Teams using Agent-MCP report:
-- **70% faster development** on complex features
-- **90% reduction** in context-related errors
-- **Parallel execution** of previously sequential tasks
-- **Zero conflicts** between agent implementations
-- **Complete audit trail** of all development decisions
+[Each agent completes their specific task without confusion]
+```
+
+## The Theory Behind Linear Decomposition
+
+### The Philosophy: Short-Lived Agents, Granular Tasks
+
+Most AI development approaches suffer from a fundamental flaw: they try to maintain massive context windows with a single, long-running agent. This leads to:
+
+- **Context pollution** - Irrelevant information drowns out what matters
+- **Hallucination risks** - Agents invent connections between unrelated parts
+- **Security vulnerabilities** - Agents with full context can be manipulated
+- **Performance degradation** - Large contexts slow down reasoning
+- **Unpredictable behavior** - Too much context creates chaos
+
+### Our Solution: Ephemeral Agents with Shared Memory
+
+Agent-MCP implements a radically different approach:
+
+**Short-Lived, Focused Agents**  
+Each agent lives only as long as their specific task. They:
+- Start with minimal context (just what they need)
+- Execute granular, linear tasks with clear boundaries
+- Document their work in shared memory
+- Terminate upon completion
+
+**Shared Knowledge Graph (RAG)**  
+Instead of cramming everything into context windows:
+- Persistent memory stores all project knowledge
+- Agents query only what's relevant to their task
+- Knowledge accumulates without overwhelming any single agent
+- Clear separation between working memory and reference material
+
+**Result**: Agents that are fast, focused, and safe. They can't be manipulated to reveal full project details because they never have access to it all at once.
+
+### Why This Matters for Safety
+
+Traditional long-context agents are like giving someone your entire codebase, documentation, and secrets in one conversation. Our approach is like having specialized contractors who only see the blueprint for their specific room.
+
+- **Reduced attack surface** - Agents can't leak what they don't know
+- **Deterministic behavior** - Limited context means predictable outputs
+- **Audit trails** - Every agent action is logged and traceable
+- **Rollback capability** - Mistakes are isolated to specific tasks
+
+### The Cleanup Protocol: Keeping Your System Lean
+
+Agent-MCP enforces strict lifecycle management:
+
+**Maximum 10 Active Agents**
+- Hard limit prevents resource exhaustion
+- Forces thoughtful task allocation
+- Maintains system performance
+
+**Automatic Cleanup Rules**
+- Agent finishes task → Immediately terminated
+- Agent idle 60+ seconds → Killed and task reassigned
+- Need more than 10 agents → Least productive agents removed
+
+**Why This Matters**
+- **No zombie processes** eating resources
+- **Fresh context** for every task
+- **Predictable resource usage**
+- **Clean system state** always
+
+This isn't just housekeeping - it's fundamental to the security and performance benefits of the short-lived agent model.
+
+### The Fundamental Principle
+
+**Any task that cannot be expressed as `Step 1 → Step 2 → Step N` is not atomic enough.**
+
+This principle drives everything in Agent-MCP:
+
+1. **Complex goals** must decompose into **linear sequences**
+2. **Linear sequences** can execute **in parallel** when independent
+3. **Each step** must have **clear prerequisites** and **deterministic outputs**
+4. **Integration points** are **explicit** and **well-defined**
+
+### Why Linear Decomposition Works
+
+**Traditional Approach**: "Build a user authentication system"
+- Vague requirements lead to varied implementations
+- Agents make different assumptions
+- Integration becomes a nightmare
+
+**Agent-MCP Approach**: 
+```
+Chain 1: Database Layer
+  1.1: Create users table with id, email, password_hash
+  1.2: Add unique index on email
+  1.3: Create sessions table with user_id, token, expiry
+  1.4: Write migration scripts
+  
+Chain 2: API Layer  
+  2.1: Implement POST /auth/register endpoint
+  2.2: Implement POST /auth/login endpoint
+  2.3: Implement POST /auth/logout endpoint
+  2.4: Add JWT token generation
+  
+Chain 3: Frontend Layer
+  3.1: Create AuthContext provider
+  3.2: Build LoginForm component
+  3.3: Build RegisterForm component
+  3.4: Implement protected routes
+```
+
+Each step is atomic, testable, and has zero ambiguity. Multiple agents can work these chains in parallel without conflict.
 
 ## Why Developers Choose Agent-MCP
 
-**For Solo Developers**  
-Transform your single AI assistant into a full development team. Work on frontend and backend simultaneously while maintaining perfect coordination.
+**The Power of Parallel Development**  
+Instead of waiting for one agent to finish the backend before starting the frontend, deploy specialized agents to work simultaneously. Your development speed is limited only by how well you decompose tasks.
 
-**For Small Teams**  
-Augment your team with specialized AI agents that never forget project context. Perfect for startups moving fast without sacrificing quality.
+**No More Lost Context**  
+Every decision, implementation detail, and architectural choice is stored in the shared knowledge graph. New agents instantly understand the project state without reading through lengthy conversation histories.
 
-**For Complex Projects**  
-Handle intricate codebases with multiple moving parts. The knowledge graph ensures every agent understands the full system architecture.
+**Predictable, Reliable Outputs**  
+Focused agents with limited context produce consistent results. The same task produces the same quality output every time, making development predictable and testable.
 
-**For Learning**  
-See exactly how professional development works by watching agents collaborate. Every decision is logged and can be traced.
+**Built-in Conflict Prevention**  
+File-level locking and task assignment prevent agents from stepping on each other's work. No more merge conflicts from simultaneous edits.
+
+**Complete Development Transparency**  
+Watch your AI team work in real-time through the dashboard. Every action is logged, every decision traceable. It's like having a live view into your development pipeline.
+
+**For Different Team Sizes**
+
+**Solo Developers**: Transform one AI assistant into a coordinated team. Work on multiple features simultaneously without losing track.
+
+**Small Teams**: Augment human developers with AI specialists that maintain perfect context across sessions.
+
+**Large Projects**: Handle complex systems where no single agent could hold all the context. The shared memory scales infinitely.
+
+**Learning & Teaching**: Perfect for understanding software architecture. Watch how tasks decompose and integrate in real-time.
 
 ## System Requirements
 
