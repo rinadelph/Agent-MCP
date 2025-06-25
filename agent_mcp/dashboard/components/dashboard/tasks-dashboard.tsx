@@ -494,7 +494,7 @@ export function TasksDashboard() {
   }
 
   return (
-    <div className="w-full space-y-[var(--space-fluid-lg)]" style={{
+    <div className="relative w-full space-y-[var(--space-fluid-lg)]" style={{
       paddingRight: selectedTask ? `calc(420px)` : '0px',
       transition: 'padding-right 0.5s ease-in-out'
     }}>

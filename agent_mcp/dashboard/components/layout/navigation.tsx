@@ -21,7 +21,7 @@ import { useDashboard, useSidebar } from "@/lib/store"
 interface NavItem {
   title: string
   icon: React.ComponentType<{ className?: string }>
-  view: 'overview' | 'agents' | 'tasks' | 'system'
+  view: 'overview' | 'agents' | 'tasks'
   description?: string
   badge?: string
 }
@@ -44,12 +44,6 @@ const navigationItems: NavItem[] = [
     icon: CheckSquare,
     view: "tasks",
     description: "Task orchestration and management"
-  },
-  {
-    title: "System",
-    icon: Monitor,
-    view: "system",
-    description: "System monitoring and logs"
   }
 ]
 

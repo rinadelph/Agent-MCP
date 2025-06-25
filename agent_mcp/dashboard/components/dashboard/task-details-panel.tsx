@@ -86,7 +86,7 @@ export function TaskDetailsPanel({ task, onClose }: TaskDetailsPanelProps) {
 
   return (
     <div className={cn(
-      "fixed right-0 top-16 h-[calc(100vh-4rem)] bg-background border-l transform transition-all duration-500 z-30",
+      "fixed right-0 top-0 h-screen bg-background border-l transform transition-all duration-500 z-30",
       "shadow-lg",
       task ? "translate-x-0 w-[420px]" : "translate-x-full w-0"
     )}>

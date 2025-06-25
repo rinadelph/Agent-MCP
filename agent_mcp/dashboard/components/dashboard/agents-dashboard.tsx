@@ -57,7 +57,16 @@ const CompactAgentRow = ({ agent, onTerminate, onSelect, onTaskClick }: {
   onTaskClick: (task: Task) => void 
 }) => {
   const [mounted, setMounted] = useState(false)
-  const { getAgentTasks, getAgentActions } = useDataStore()
+  const { getAgentTasks, getAgentActions, shouldDisplayAgent } = useDataStore()
+  
+  // Check if agent is new (less than 10 minutes old)
+  const isNewAgent = () => {
+    if (agent.agent_id === 'Admin' || agent.created_at === 'N/A') return false
+    const now = new Date()
+    const createdAt = new Date(agent.created_at)
+    const ageInMinutes = (now.getTime() - createdAt.getTime()) / (1000 * 60)
+    return ageInMinutes <= 10 && !agent.current_task
+  }
   
   // Get agent's tasks and recent actions
   const agentTasks = getAgentTasks(agent.agent_id)
@@ -117,18 +126,25 @@ const CompactAgentRow = ({ agent, onTerminate, onSelect, onTaskClick }: {
       </TableCell>
       
       <TableCell className="py-3">
-        <Badge 
-          variant="outline" 
-          className={cn(
-            "text-xs font-semibold border-0 px-3 py-1.5 rounded-md",
-            agent.status === 'running' && "bg-primary/15 text-primary ring-1 ring-primary/20",
-            agent.status === 'pending' && "bg-warning/15 text-warning ring-1 ring-warning/20",
-            agent.status === 'terminated' && "bg-muted/50 text-muted-foreground ring-1 ring-border",
-            agent.status === 'failed' && "bg-destructive/15 text-destructive ring-1 ring-destructive/20"
+        <div className="flex items-center gap-2">
+          <Badge 
+            variant="outline" 
+            className={cn(
+              "text-xs font-semibold border-0 px-3 py-1.5 rounded-md",
+              agent.status === 'running' && "bg-primary/15 text-primary ring-1 ring-primary/20",
+              agent.status === 'pending' && "bg-warning/15 text-warning ring-1 ring-warning/20",
+              agent.status === 'terminated' && "bg-muted/50 text-muted-foreground ring-1 ring-border",
+              agent.status === 'failed' && "bg-destructive/15 text-destructive ring-1 ring-destructive/20"
+            )}
+          >
+            {agent.status.toUpperCase()}
+          </Badge>
+          {isNewAgent() && (
+            <Badge variant="outline" className="text-xs bg-blue-500/15 text-blue-600 border-blue-500/30 font-medium">
+              NEW
+            </Badge>
           )}
-        >
-          {agent.status.toUpperCase()}
-        </Badge>
+        </div>
       </TableCell>
       
       <TableCell className="py-3 max-w-xs">
@@ -341,7 +357,7 @@ const CreateAgentModal = ({ onCreateAgent }: { onCreateAgent: (data: any) => voi
 export function AgentsDashboard() {
   const { servers, activeServerId } = useServerStore()
   const activeServer = servers.find(s => s.id === activeServerId)
-  const { data, loading, error, fetchAllData, refreshData } = useDataStore()
+  const { data, loading, error, fetchAllData, refreshData, getActiveAgents, getIdleAgentsForCleanup } = useDataStore()
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
@@ -354,8 +370,38 @@ export function AgentsDashboard() {
       fetchAllData()
     }
   }, [activeServerId, activeServer?.status, fetchAllData])
+
+  // Automatic agent cleanup - check every 2 minutes
+  useEffect(() => {
+    if (!isConnected) return
+
+    const cleanupInterval = setInterval(async () => {
+      const idleAgents = getIdleAgentsForCleanup()
+      
+      if (idleAgents.length > 0) {
+        console.log(`🧹 Found ${idleAgents.length} idle agents for cleanup:`, idleAgents.map(a => a.agent_id))
+        
+        // Terminate each idle agent
+        for (const agent of idleAgents) {
+          try {
+            await handleTerminateAgent(agent.agent_id)
+            console.log(`✅ Terminated idle agent: ${agent.agent_id}`)
+          } catch (error) {
+            console.error(`❌ Failed to terminate idle agent ${agent.agent_id}:`, error)
+          }
+        }
+        
+        // Refresh data after cleanup
+        await refreshData()
+      }
+    }, 2 * 60 * 1000) // Check every 2 minutes
+
+    return () => clearInterval(cleanupInterval)
+  }, [isConnected, getIdleAgentsForCleanup, refreshData])
   
-  const agents = data?.agents || []
+  // Get filtered agents (only active or new agents)
+  const allAgents = data?.agents || []
+  const agents = getActiveAgents()
   const isConnected = !!activeServerId && activeServer?.status === 'connected'
   
   
@@ -376,6 +422,9 @@ export function AgentsDashboard() {
     running: agents.filter(a => a.status === 'running').length,
     pending: agents.filter(a => a.status === 'pending').length,
     failed: agents.filter(a => a.status === 'failed').length,
+    // Also track cleanup statistics
+    totalInSystem: allAgents.length,
+    idleForCleanup: getIdleAgentsForCleanup().length
   }
 
   const handleCreateAgent = async (data: any) => {
@@ -453,6 +502,11 @@ export function AgentsDashboard() {
             <span className="text-xs text-muted-foreground">
               Last updated: {new Date(data.timestamp).toLocaleTimeString()}
             </span>
+          )}
+          {stats.idleForCleanup > 0 && (
+            <Badge variant="outline" className="text-xs bg-orange-500/15 text-orange-600 border-orange-500/30 font-medium">
+              {stats.idleForCleanup} pending cleanup
+            </Badge>
           )}
           <Button 
             variant="outline" 
