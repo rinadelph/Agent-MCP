@@ -2,11 +2,15 @@
 
 import React from "react"
 import { VisGraph } from "./vis-graph-simple"
+import { GraphComparison } from "./graph-comparison"
 import { Badge } from "@/components/ui/badge"
 import { Activity } from 'lucide-react'
 
 // Main System Dashboard
 export function SystemDashboard() {
+  // Temporary: Show comparison view to test improved layout
+  const showComparison = true
+  
   return (
     <div className="flex flex-col h-full w-full">
       {/* Header */}
@@ -26,7 +30,7 @@ export function SystemDashboard() {
 
       {/* Full Page Graph */}
       <div className="flex-1 min-h-0 overflow-hidden">
-        <VisGraph fullscreen />
+        {showComparison ? <GraphComparison /> : <VisGraph fullscreen />}
       </div>
     </div>
   )
