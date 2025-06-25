@@ -87,7 +87,7 @@ const CompactAgentRow = ({ agent, onTerminate, onSelect, onTaskClick }: {
   }
 
   return (
-    <TableRow className="border-border/50 hover:bg-muted/30 group transition-colors">
+    <TableRow className="border-border/50 hover:bg-muted/30 group transition-all duration-200">
       <TableCell className="py-3">
         <div className="flex items-center gap-3">
           <StatusDot status={agent.status} />
@@ -114,12 +114,12 @@ const CompactAgentRow = ({ agent, onTerminate, onSelect, onTaskClick }: {
         </Badge>
       </TableCell>
       
-      <TableCell className="py-3">
+      <TableCell className="py-3 max-w-xs">
         {currentTask ? (
-          <div className="max-w-md">
+          <div>
             <button
               onClick={() => onTaskClick(currentTask)}
-              className="text-sm text-foreground hover:text-primary truncate block text-left hover:underline max-w-full"
+              className="text-sm text-foreground hover:text-primary truncate block text-left hover:underline"
             >
               {currentTask.title}
             </button>
@@ -129,7 +129,7 @@ const CompactAgentRow = ({ agent, onTerminate, onSelect, onTaskClick }: {
           </div>
         ) : (
           <div>
-            <div className="text-sm text-muted-foreground">No active task</div>
+            <div className="text-sm text-muted-foreground truncate">No active task</div>
             {taskStats.total > 0 && (
               <div className="text-xs text-muted-foreground mt-1">
                 {taskStats.total} tasks total
@@ -162,16 +162,15 @@ const CompactAgentRow = ({ agent, onTerminate, onSelect, onTaskClick }: {
         )}
       </TableCell>
       
-      <TableCell className="py-3 text-right pr-4">
-        <div className="flex items-center gap-1 justify-end">
+      <TableCell className="py-3">
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
           <Button 
             variant="ghost" 
             size="sm" 
             onClick={() => onSelect(agent)}
-            className="h-7 px-2 text-xs"
+            className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground hover:bg-muted"
           >
-            <Eye className="h-3.5 w-3.5 mr-1" />
-            Details
+            <Eye className="h-3.5 w-3.5" />
           </Button>
           {agent.status === 'running' && (
             <Button 
@@ -183,6 +182,13 @@ const CompactAgentRow = ({ agent, onTerminate, onSelect, onTaskClick }: {
               <PowerOff className="h-3.5 w-3.5" />
             </Button>
           )}
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground hover:bg-muted"
+          >
+            <MoreVertical className="h-3.5 w-3.5" />
+          </Button>
         </div>
       </TableCell>
     </TableRow>
@@ -497,31 +503,29 @@ export function AgentsDashboard() {
       </div>
 
       {/* Agents Table */}
-      <div className="bg-card/30 border border-border/50 rounded-lg backdrop-blur-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <Table className="w-full">
-            <TableHeader>
-              <TableRow className="border-border/50 hover:bg-transparent">
-                <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider w-[25%]">Agent</TableHead>
-                <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider w-[15%]">Status</TableHead>
-                <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider w-[30%]">Tasks</TableHead>
-                <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider w-[20%]">Token</TableHead>
-                <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider w-[10%] text-right pr-4">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredAgents.map((agent) => (
-                <CompactAgentRow
-                  key={agent.agent_id}
-                  agent={agent}
-                  onTerminate={handleTerminateAgent}
-                  onSelect={setSelectedAgent}
-                  onTaskClick={handleTaskClick}
-                />
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+      <div className="bg-card/30 border border-border/50 rounded-lg backdrop-blur-sm overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow className="border-border/50 hover:bg-transparent">
+              <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider">Agent</TableHead>
+              <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider">Status</TableHead>
+              <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider">Tasks</TableHead>
+              <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider">Token</TableHead>
+              <TableHead className="text-muted-foreground font-medium text-xs uppercase tracking-wider w-24">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filteredAgents.map((agent) => (
+              <CompactAgentRow
+                key={agent.agent_id}
+                agent={agent}
+                onTerminate={handleTerminateAgent}
+                onSelect={setSelectedAgent}
+                onTaskClick={handleTaskClick}
+              />
+            ))}
+          </TableBody>
+        </Table>
         
         {filteredAgents.length === 0 && (
           <div className="p-12 text-center">
