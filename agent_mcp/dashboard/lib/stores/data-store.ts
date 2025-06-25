@@ -129,24 +129,12 @@ export const useDataStore = create<DataStore>((set, get) => ({
         console.log('⚠️ All-data endpoint not available, using fallback...')
         console.log('🔍 All-data endpoint error:', err)
         
-        const [agents, tasks, tokens] = await Promise.all([
+        const [agents, tasks, tokens, contextData] = await Promise.all([
           apiClient.getAgents(),
           apiClient.getTasks(),
-          apiClient.getTokens()
+          apiClient.getTokens(),
+          fetch(`${apiClient.getServerUrl()}/api/context-data`).then(res => res.ok ? res.json() : [])
         ])
-        
-        // Try to get context data separately
-        let contextData = []
-        try {
-          const contextResponse = await fetch(`${apiClient.getServerUrl()}/api/all-data`)
-          if (contextResponse.ok) {
-            const fullData = await contextResponse.json()
-            contextData = fullData.context || []
-          }
-        } catch (contextErr) {
-          console.log('⚠️ Could not fetch context data in fallback:', contextErr)
-          console.log('🔍 Server URL:', apiClient.getServerUrl())
-        }
         
         // Merge tokens into agents
         const agentsWithTokens = agents.map(agent => {
@@ -457,3 +445,4 @@ if (typeof window !== 'undefined') {
     }
   }, 60000)
 }
+

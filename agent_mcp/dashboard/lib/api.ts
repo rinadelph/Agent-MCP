@@ -136,10 +136,10 @@ class ApiClient {
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'Origin': 'http://localhost:3847', // Explicit origin for CORS
+        // Don't set Origin header - let browser handle it automatically
         ...options.headers,
       },
-      credentials: 'include', // Include cookies for CORS
+      credentials: 'omit', // Don't include credentials for CORS
       mode: 'cors', // Explicitly set CORS mode
       cache: 'no-cache', // Always get fresh data
       ...options,
@@ -158,15 +158,32 @@ class ApiClient {
       clearTimeout(timeoutId)
 
       if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Unknown error')
+        console.error(`API Error [${response.status}]:`, errorText)
         throw new Error(`API Error: ${response.status} ${response.statusText}`)
       }
       
       return await response.json()
     } catch (error) {
       clearTimeout(timeoutId)
-      if (error instanceof Error && error.name === 'AbortError') {
-        throw new Error('Request timeout')
+      
+      // Enhanced error logging for CORS debugging
+      if (error instanceof Error) {
+        console.error(`Request failed to ${url}:`, {
+          name: error.name,
+          message: error.message,
+          stack: error.stack
+        })
+        
+        if (error.name === 'AbortError') {
+          throw new Error('Request timeout')
+        }
+        
+        if (error.message.includes('Failed to fetch')) {
+          throw new Error(`Network error: Unable to connect to ${this.baseUrl}. This could be a CORS issue or the server might be down.`)
+        }
       }
+      
       throw error
     }
   }
@@ -370,6 +387,36 @@ class ApiClient {
   // Utility methods
   async healthCheck(): Promise<{ status: string; timestamp: string }> {
     return this.request('/health')
+  }
+
+  // CORS diagnostic method
+  async testCORS(): Promise<boolean> {
+    try {
+      console.log(`Testing CORS connection to: ${this.baseUrl}`)
+      
+      // Try a simple OPTIONS request first
+      const optionsResponse = await fetch(`${this.baseUrl}/api/health`, {
+        method: 'OPTIONS',
+        headers: {
+          'Access-Control-Request-Method': 'GET',
+          'Access-Control-Request-Headers': 'Content-Type'
+        }
+      })
+      
+      console.log('OPTIONS preflight response:', {
+        status: optionsResponse.status,
+        headers: Object.fromEntries(optionsResponse.headers.entries())
+      })
+      
+      // Try the actual health check
+      const healthResponse = await this.healthCheck()
+      console.log('Health check successful:', healthResponse)
+      
+      return true
+    } catch (error) {
+      console.error('CORS test failed:', error)
+      return false
+    }
   }
 }
 

@@ -433,6 +433,36 @@ async def all_data_api_route(request: Request) -> JSONResponse:
         if conn:
             conn.close()
 
+async def context_data_api_route(request: Request) -> JSONResponse:
+    """Get only context data"""
+    if request.method == 'OPTIONS':
+        return await handle_options(request)
+    
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get all context entries
+        cursor.execute("SELECT * FROM project_context ORDER BY last_updated DESC")
+        context_data = [dict(row) for row in cursor.fetchall()]
+        
+        return JSONResponse(
+            context_data,
+            headers={
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type'
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Error fetching context data: {e}", exc_info=True)
+        return JSONResponse({"error": f"Failed to fetch context data: {str(e)}"}, status_code=500)
+    finally:
+        if conn:
+            conn.close()
+
 # --- CORS Preflight Handler ---
 async def handle_options(request: Request) -> Response:
     """Handle OPTIONS requests for CORS preflight"""
@@ -748,6 +778,7 @@ routes.extend([
     Route('/api/memories', endpoint=create_memory_api_route, name="create_memory_api", methods=['POST', 'OPTIONS']),
     Route('/api/memories/{context_key}', endpoint=update_memory_api_route, name="update_memory_api", methods=['PUT', 'OPTIONS']),
     Route('/api/memories/{context_key}', endpoint=delete_memory_api_route, name="delete_memory_api", methods=['DELETE', 'OPTIONS']),
+    Route('/api/context-data', endpoint=context_data_api_route, name="context_data_api", methods=['GET', 'OPTIONS']),
 ])
 
 # Add the sample data route

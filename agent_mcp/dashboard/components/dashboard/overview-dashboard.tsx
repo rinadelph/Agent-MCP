@@ -9,6 +9,7 @@ import { useServerStore } from "@/lib/stores/server-store"
 import { useDataStore } from "@/lib/stores/data-store"
 import { VisGraph } from "./vis-graph-simple"
 import { NodeDetailPanel } from "./node-detail-panel"
+import { CORSDiagnostic } from "../debug/cors-diagnostic"
 
 export function OverviewDashboard() {
   const { servers, activeServerId } = useServerStore()
@@ -44,6 +45,9 @@ export function OverviewDashboard() {
             {activeServer && activeServer.status === 'error' && (
               <div className="text-sm text-destructive mt-4">
                 Failed to connect to {activeServer.name} ({activeServer.host}:{activeServer.port})
+                <div className="mt-4">
+                  <CORSDiagnostic />
+                </div>
               </div>
             )}
           </CardContent>

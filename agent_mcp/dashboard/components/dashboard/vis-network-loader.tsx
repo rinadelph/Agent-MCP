@@ -181,47 +181,73 @@ const hierarchicalOptions = {
   groups: physicsOptions.groups
 }
 
-// Get node styling based on type
+// Get node styling based on type - using our custom teal/cyan theme
 const getNodeStyling = (node: any) => {
   const baseSize = 25
   let size = baseSize
   let color: any = {}
   let shape = 'box'
 
+  // Ignore backend colors and use our own theme
   if (node.group === 'agent') {
     size = baseSize + 10
     shape = 'ellipse'
     if (node.status === 'terminated') {
-      color = { background: '#F44336', border: '#D32F2F' }
-    } else if (node.color) {
-      color = { background: node.color, border: '#2E7D32' }
+      color = { 
+        background: 'rgba(148, 163, 184, 0.8)', // slate-400 for terminated
+        border: 'rgba(100, 116, 139, 1)' // slate-500
+      }
     } else {
-      color = { background: '#4CAF50', border: '#2E7D32' }
+      color = { 
+        background: 'rgba(94, 234, 212, 0.9)', // teal-300
+        border: 'rgba(45, 212, 191, 1)' // teal-400
+      }
     }
   } else if (node.group === 'task') {
     size = baseSize + 5
     shape = 'box'
     if (node.status === 'completed') {
-      color = { background: '#9E9E9E', border: '#757575' }
+      color = { 
+        background: 'rgba(34, 197, 94, 0.8)', // green-500 for completed
+        border: 'rgba(22, 163, 74, 1)' // green-600
+      }
     } else if (node.status === 'cancelled' || node.status === 'failed') {
-      color = { background: '#FF9800', border: '#F57C00' }
+      color = { 
+        background: 'rgba(239, 68, 68, 0.8)', // red-500 for failed
+        border: 'rgba(220, 38, 38, 1)' // red-600
+      }
     } else if (node.status === 'in_progress') {
-      color = { background: '#2196F3', border: '#1976D2' }
+      color = { 
+        background: 'rgba(34, 211, 238, 0.9)', // cyan-400 for in progress
+        border: 'rgba(6, 182, 212, 1)' // cyan-500
+      }
     } else {
-      color = { background: '#FFC107', border: '#FFA000' }
+      color = { 
+        background: 'rgba(14, 165, 233, 0.8)', // sky-500 for pending
+        border: 'rgba(2, 132, 199, 1)' // sky-600
+      }
     }
   } else if (node.group === 'context') {
     size = baseSize
     shape = 'diamond'
-    color = { background: '#9C27B0', border: '#7B1FA2' }
+    color = { 
+      background: 'rgba(147, 51, 234, 0.8)', // purple-600
+      border: 'rgba(124, 58, 237, 1)' // violet-600
+    }
   } else if (node.group === 'file') {
     size = baseSize
     shape = 'triangle'
-    color = { background: '#795548', border: '#5D4037' }
+    color = { 
+      background: 'rgba(45, 212, 191, 0.8)', // teal-400
+      border: 'rgba(20, 184, 166, 1)' // teal-500
+    }
   } else if (node.group === 'admin') {
     size = baseSize + 20
     shape = 'star'
-    color = { background: '#e11d48', border: '#be123c' }
+    color = { 
+      background: 'rgba(168, 85, 247, 0.9)', // purple-500
+      border: 'rgba(147, 51, 234, 1)' // purple-600
+    }
   }
 
   return { size, color, shape }
@@ -380,23 +406,23 @@ export default function VisNetworkLoader({
         arrows: edge.arrows || { to: { enabled: true, scaleFactor: 0.5 } }
       }
 
-      // Apply edge styling based on type
+      // Apply edge styling based on type using our teal/cyan theme
       if (edge.title) {
         if (edge.title.includes('Created by')) {
-          edgeStyle.color = { color: '#555555', opacity: 0.2 }
+          edgeStyle.color = { color: 'rgba(148, 163, 184, 0.3)', opacity: 0.3 } // slate-400 subtle
           edgeStyle.width = 0.5
           edgeStyle.dashes = [2, 4]
         } else if (edge.title.includes('Parent of')) {
-          edgeStyle.color = { color: '#10b981' }
+          edgeStyle.color = { color: 'rgba(20, 184, 166, 0.8)' } // teal-500
           edgeStyle.width = 3
           edgeStyle.smooth = { enabled: true, type: 'curvedCW', roundness: 0.2 }
         } else if (edge.title.includes('Depends on')) {
-          edgeStyle.color = { color: '#f59e0b' }
+          edgeStyle.color = { color: 'rgba(251, 146, 60, 0.8)' } // orange-400
           edgeStyle.width = 2
           edgeStyle.dashes = true
           edgeStyle.smooth = { enabled: true, type: 'curvedCCW', roundness: 0.2 }
         } else if (edge.title.includes('Working on')) {
-          edgeStyle.color = { color: '#3b82f6' }
+          edgeStyle.color = { color: 'rgba(34, 211, 238, 0.9)' } // cyan-400
           edgeStyle.width = 3
           edgeStyle.smooth = { enabled: true, type: 'continuous' }
         }
@@ -404,7 +430,7 @@ export default function VisNetworkLoader({
       
       // Special styling for edges to/from context nodes
       if (edge.from.includes('context') || edge.to.includes('context')) {
-        edgeStyle.color = { color: '#9333ea', opacity: 0.3 }
+        edgeStyle.color = { color: 'rgba(147, 51, 234, 0.4)', opacity: 0.4 } // purple-600 with opacity
         edgeStyle.width = 1
         edgeStyle.dashes = [3, 6]
         edgeStyle.smooth = { enabled: true, type: 'continuous', roundness: 0.8 }

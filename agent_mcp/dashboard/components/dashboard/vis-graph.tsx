@@ -47,7 +47,9 @@ const physicsOptions = {
     font: {
       size: 14,
       face: 'Segoe UI, sans-serif',
-      color: '#ffffff'
+      color: 'rgba(241, 245, 249, 1)', // slate-100
+      strokeWidth: 3,
+      strokeColor: 'rgba(15, 23, 42, 0.8)' // slate-900 outline for better readability
     },
     scaling: {
       label: {
@@ -69,37 +71,78 @@ const physicsOptions = {
     font: {
       size: 12,
       align: 'middle',
-      background: 'rgba(40, 44, 52, 0.8)'
+      background: 'rgba(15, 23, 42, 0.8)', // slate-900 with opacity
+      color: 'rgba(148, 163, 184, 1)' // slate-400
     },
     arrows: {
       to: { enabled: true, scaleFactor: 0.8 }
+    },
+    color: {
+      color: 'rgba(45, 212, 191, 0.5)', // teal-400 with lower opacity
+      highlight: 'rgba(94, 234, 212, 0.9)', // teal-300 with high opacity
+      hover: 'rgba(34, 211, 238, 0.8)' // cyan-400 with opacity
     }
   },
   groups: {
     agent: {
       shape: 'ellipse',
       borderWidth: 3,
-      color: { background: '#4CAF50', border: '#2E7D32' }
+      color: { 
+        background: 'rgba(94, 234, 212, 0.9)', // teal-300 with opacity
+        border: 'rgba(45, 212, 191, 1)', // teal-400
+        highlight: {
+          background: 'rgba(94, 234, 212, 1)',
+          border: 'rgba(20, 184, 166, 1)' // teal-500
+        }
+      }
     },
     task: {
       shape: 'box',
       borderWidth: 2,
-      color: { background: '#FFC107', border: '#FFA000' }
+      color: { 
+        background: 'rgba(34, 211, 238, 0.9)', // cyan-400 with opacity
+        border: 'rgba(6, 182, 212, 1)', // cyan-500
+        highlight: {
+          background: 'rgba(34, 211, 238, 1)',
+          border: 'rgba(8, 145, 178, 1)' // cyan-600
+        }
+      }
     },
     context: {
       shape: 'diamond',
       borderWidth: 2,
-      color: { background: '#9C27B0', border: '#7B1FA2' }
+      color: { 
+        background: 'rgba(147, 51, 234, 0.8)', // purple-600 with opacity
+        border: 'rgba(124, 58, 237, 1)', // violet-600
+        highlight: {
+          background: 'rgba(147, 51, 234, 1)',
+          border: 'rgba(109, 40, 217, 1)' // violet-700
+        }
+      }
     },
     file: {
       shape: 'triangle',
       borderWidth: 2,
-      color: { background: '#795548', border: '#5D4037' }
+      color: { 
+        background: 'rgba(45, 212, 191, 0.8)', // teal-400 with opacity
+        border: 'rgba(20, 184, 166, 1)', // teal-500
+        highlight: {
+          background: 'rgba(45, 212, 191, 1)',
+          border: 'rgba(13, 148, 136, 1)' // teal-600
+        }
+      }
     },
     admin: {
       shape: 'star',
       borderWidth: 3,
-      color: { background: '#607D8B', border: '#455A64' }
+      color: { 
+        background: 'rgba(168, 85, 247, 0.9)', // purple-500 with opacity
+        border: 'rgba(147, 51, 234, 1)', // purple-600
+        highlight: {
+          background: 'rgba(168, 85, 247, 1)',
+          border: 'rgba(126, 34, 206, 1)' // purple-700
+        }
+      }
     }
   }
 }
@@ -124,7 +167,9 @@ const hierarchicalOptions = {
     font: {
       size: 14,
       face: 'Segoe UI, sans-serif',
-      color: '#ffffff'
+      color: 'rgba(241, 245, 249, 1)', // slate-100
+      strokeWidth: 3,
+      strokeColor: 'rgba(15, 23, 42, 0.8)' // slate-900 outline for better readability
     }
   },
   edges: {
@@ -139,37 +184,78 @@ const hierarchicalOptions = {
     font: {
       size: 12,
       align: 'middle',
-      background: 'rgba(40, 44, 52, 0.8)'
+      background: 'rgba(15, 23, 42, 0.8)', // slate-900 with opacity
+      color: 'rgba(148, 163, 184, 1)' // slate-400
     },
     arrows: {
       to: { enabled: true, scaleFactor: 0.8 }
+    },
+    color: {
+      color: 'rgba(45, 212, 191, 0.5)', // teal-400 with lower opacity
+      highlight: 'rgba(94, 234, 212, 0.9)', // teal-300 with high opacity
+      hover: 'rgba(34, 211, 238, 0.8)' // cyan-400 with opacity
     }
   },
   groups: {
     agent: {
       shape: 'ellipse',
       borderWidth: 3,
-      color: { background: '#4CAF50', border: '#2E7D32' }
+      color: { 
+        background: 'rgba(94, 234, 212, 0.9)', // teal-300 with opacity
+        border: 'rgba(45, 212, 191, 1)', // teal-400
+        highlight: {
+          background: 'rgba(94, 234, 212, 1)',
+          border: 'rgba(20, 184, 166, 1)' // teal-500
+        }
+      }
     },
     task: {
       shape: 'box',
       borderWidth: 2,
-      color: { background: '#FFC107', border: '#FFA000' }
+      color: { 
+        background: 'rgba(34, 211, 238, 0.9)', // cyan-400 with opacity
+        border: 'rgba(6, 182, 212, 1)', // cyan-500
+        highlight: {
+          background: 'rgba(34, 211, 238, 1)',
+          border: 'rgba(8, 145, 178, 1)' // cyan-600
+        }
+      }
     },
     context: {
       shape: 'diamond',
       borderWidth: 2,
-      color: { background: '#9C27B0', border: '#7B1FA2' }
+      color: { 
+        background: 'rgba(147, 51, 234, 0.8)', // purple-600 with opacity
+        border: 'rgba(124, 58, 237, 1)', // violet-600
+        highlight: {
+          background: 'rgba(147, 51, 234, 1)',
+          border: 'rgba(109, 40, 217, 1)' // violet-700
+        }
+      }
     },
     file: {
       shape: 'triangle',
       borderWidth: 2,
-      color: { background: '#795548', border: '#5D4037' }
+      color: { 
+        background: 'rgba(45, 212, 191, 0.8)', // teal-400 with opacity
+        border: 'rgba(20, 184, 166, 1)', // teal-500
+        highlight: {
+          background: 'rgba(45, 212, 191, 1)',
+          border: 'rgba(13, 148, 136, 1)' // teal-600
+        }
+      }
     },
     admin: {
       shape: 'star',
       borderWidth: 3,
-      color: { background: '#607D8B', border: '#455A64' }
+      color: { 
+        background: 'rgba(168, 85, 247, 0.9)', // purple-500 with opacity
+        border: 'rgba(147, 51, 234, 1)', // purple-600
+        highlight: {
+          background: 'rgba(168, 85, 247, 1)',
+          border: 'rgba(126, 34, 206, 1)' // purple-700
+        }
+      }
     }
   }
 }
@@ -248,7 +334,7 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
       return
     }
 
-    console.log(`Converting ${graphData.nodes.length} nodes and ${graphData.edges.length} edges`)
+    console.log(`[Graph] Converting ${graphData.nodes.length} nodes and ${graphData.edges.length} edges`)
 
     // Convert nodes
     const visNodes = graphData.nodes.map((node: any) => {
@@ -306,6 +392,7 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
     })
 
     // Update the DataSets
+    console.log('[Graph] Updating node and edge datasets.')
     nodesDataSetRef.current.clear()
     nodesDataSetRef.current.add(visNodes)
     edgesDataSetRef.current.clear()
@@ -323,6 +410,7 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
       return
     }
 
+    console.log('[Graph] Fetching graph data...')
     try {
       setLoading(true)
       setError(null)
@@ -333,7 +421,14 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
         throw new Error('No data received from server')
       }
       
+      console.log('[Graph] Data fetched successfully.')
       convertToVisData(graphData)
+
+      if (networkRef.current && layoutMode === 'physics') {
+        console.log('[Graph] Restarting physics simulation.')
+        networkRef.current.startSimulation()
+      }
+
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch graph data'
       setError(errorMessage)
@@ -341,7 +436,7 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
     } finally {
       setLoading(false)
     }
-  }, [activeServerId, activeServer, convertToVisData])
+  }, [activeServerId, activeServer, convertToVisData, layoutMode])
 
   // Initialize vis.js network
   useEffect(() => {
@@ -392,6 +487,8 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
       return () => clearInterval(interval)
     }
   }, [fetchGraphData, autoRefresh])
+
+  
 
   // Handle layout mode change
   const handleLayoutChange = useCallback((mode: 'physics' | 'hierarchical') => {
@@ -513,7 +610,7 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
                 </div>
               </div>
             ) : (
-              <div ref={containerRef} className="w-full h-full" />
+              <div ref={containerRef} className="w-full h-full bg-slate-950 rounded-lg" />
             )}
           </TabsContent>
           
