@@ -351,7 +351,7 @@ export function VisGraph({ fullscreen = false }: VisGraphProps) {
   }, [])
 
   return (
-    <div className={cn("relative w-full", fullscreen ? "h-full" : "h-[800px]")}>
+    <div className={cn("relative w-full bg-background", fullscreen ? "h-full" : "h-[800px] rounded-lg border")}>
       {/* Controls Bar */}
       <div className="absolute top-4 left-4 right-4 z-10 flex items-center justify-between">
         {/* Left side - Layout controls */}

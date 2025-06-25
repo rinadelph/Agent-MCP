@@ -8,9 +8,9 @@ import { Activity } from 'lucide-react'
 // Main System Dashboard
 export function SystemDashboard() {
   return (
-    <div className="h-full flex flex-col">
+    <div className="flex flex-col -m-6" style={{ height: 'calc(100vh - 4rem)' }}>
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between px-6 py-4 border-b">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">System</h1>
           <p className="text-muted-foreground">
@@ -24,7 +24,7 @@ export function SystemDashboard() {
       </div>
 
       {/* Full Page Graph */}
-      <div className="flex-1">
+      <div className="flex-1" style={{ minHeight: '0' }}>
         <VisGraph fullscreen />
       </div>
     </div>
