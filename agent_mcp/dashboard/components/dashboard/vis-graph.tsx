@@ -112,7 +112,7 @@ const hierarchicalOptions = {
       levelSeparation: 250,
       nodeSpacing: 200,
       treeSpacing: 300,
-      direction: 'LR',
+      direction: 'UD', // Up-Down for vertical layout
       sortMethod: 'directed',
       shakeTowards: 'roots'
     }
@@ -133,7 +133,7 @@ const hierarchicalOptions = {
     smooth: {
       enabled: true,
       type: 'cubicBezier',
-      forceDirection: 'horizontal',
+      forceDirection: 'vertical',
       roundness: 0.5
     },
     font: {
@@ -477,7 +477,7 @@ export function VisGraph() {
             </TabsTrigger>
           </TabsList>
           
-          <TabsContent value="graph" className="h-[600px] m-0">
+          <TabsContent value="graph" className="h-[800px] m-0">
             {loading && nodeCount === 0 ? (
               <div className="flex items-center justify-center h-full">
                 <div className="text-center space-y-4">
