@@ -207,7 +207,10 @@ async def update_task_details_api_route(request: Request) -> JSONResponse:
             new_note_entry = {"timestamp": datetime.datetime.now().isoformat(), "author": requesting_admin_id, "content": data['notes'].strip()}
             current_notes_list.append(new_note_entry); update_fields.append("notes = ?"); params.append(json.dumps(current_notes_list)); log_details["notes_added"] = True
         params.append(task_id_to_update)
-        query = f"UPDATE tasks SET {', '.join(update_fields)} WHERE task_id = ?"; cursor.execute(query, tuple(params))
+        if update_fields:
+            placeholders = ', '.join(update_fields)
+            query = f"UPDATE tasks SET {placeholders} WHERE task_id = ?"
+            cursor.execute(query, tuple(params))
         log_agent_action_to_db(cursor, requesting_admin_id, "updated_task_dashboard", task_id=task_id_to_update, details=log_details); conn.commit()
         if task_id_to_update in g.tasks:
             cursor.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id_to_update,)); updated_task_for_cache = cursor.fetchone()

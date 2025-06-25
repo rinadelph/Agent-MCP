@@ -142,7 +142,20 @@ def update_task_fields_in_db(task_id: str, fields_to_update: Dict[str, Any]) -> 
                 logger.warning(f"Attempted to update invalid task field: {field} for task {task_id}. Skipping.")
                 continue
 
-            update_clauses.append(f"{field} = ?")
+            # Safe field mapping to prevent SQL injection
+            safe_field_mapping = {
+                "title": "title",
+                "description": "description", 
+                "assigned_to": "assigned_to",
+                "status": "status",
+                "priority": "priority",
+                "parent_task": "parent_task",
+                "child_tasks": "child_tasks",
+                "depends_on_tasks": "depends_on_tasks",
+                "notes": "notes"
+            }
+            safe_field = safe_field_mapping[field]  # This will raise KeyError if invalid
+            update_clauses.append(f"{safe_field} = ?")
             if field in ["child_tasks", "depends_on_tasks", "notes"]:
                 update_values.append(json.dumps(value or [])) # Ensure JSON list for these
             else:

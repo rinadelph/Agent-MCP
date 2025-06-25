@@ -86,14 +86,24 @@ async def query_rag_system(query_text: str) -> str:
                     sql_params_tasks.append(kw)
                 
                 if conditions:
-                    task_query_sql = f"""
-                        SELECT task_id, title, status, description, updated_at
-                        FROM tasks
-                        WHERE {' OR '.join(conditions)}
-                        ORDER BY updated_at DESC
-                        LIMIT 5
-                    """
-                    cursor.execute(task_query_sql, sql_params_tasks)
+                    # Validate that all conditions are safe (only LIKE patterns)
+                    safe_conditions = []
+                    for condition in conditions:
+                        if condition not in ["LOWER(title) LIKE ?", "LOWER(description) LIKE ?"]:
+                            logger.warning(f"RAG Query: Skipping unsafe condition: {condition}")
+                            continue
+                        safe_conditions.append(condition)
+                    
+                    if safe_conditions:
+                        where_clause = ' OR '.join(safe_conditions)
+                        task_query_sql = f"""
+                            SELECT task_id, title, status, description, updated_at
+                            FROM tasks
+                            WHERE {where_clause}
+                            ORDER BY updated_at DESC
+                            LIMIT 5
+                        """
+                        cursor.execute(task_query_sql, sql_params_tasks)
                     live_task_results = [dict(row) for row in cursor.fetchall()]
         except sqlite3.Error as e_live_task:
             logger.warning(f"RAG Query: Failed to fetch live tasks based on query keywords: {e_live_task}")
@@ -326,10 +336,16 @@ async def query_rag_system_with_model(
             query_embedding = query_embedding_response.data[0].embedding
             
             # Perform vector search
+            # Validate embedding is a list of numbers with expected dimension
+            if not isinstance(query_embedding, list) or len(query_embedding) != EMBEDDING_DIMENSION:
+                raise ValueError(f"Invalid query embedding: expected list of {EMBEDDING_DIMENSION} numbers")
+            
+            # Create safe placeholder string (just question marks)
             placeholder_str = ", ".join(["?"] * len(query_embedding))
             query_params = query_embedding + [10]  # Top 10 results
             
-            cursor.execute(f"""
+            # Safe to use placeholder_str since it only contains "?" characters
+            vector_search_sql = f"""
                 SELECT c.chunk_id, c.source_type, c.source_ref, c.chunk_text,
                        COALESCE(abs(distance), 0) as distance
                 FROM rag_chunks c
@@ -337,7 +353,8 @@ async def query_rag_system_with_model(
                 WHERE e.embedding MATCH '[{placeholder_str}]'
                   AND k = ?
                 ORDER BY distance ASC
-            """, query_params)
+            """
+            cursor.execute(vector_search_sql, query_params)
             
             vector_search_results = [dict(row) for row in cursor.fetchall()]
         

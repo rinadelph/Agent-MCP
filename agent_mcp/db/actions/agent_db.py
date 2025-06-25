@@ -136,7 +136,17 @@ def update_agent_db_field(agent_id: str, field_name: str, new_value: Any) -> boo
             value_to_set = datetime.datetime.now().isoformat()
         
         # Always update 'updated_at' timestamp
-        sql = f"UPDATE agents SET {field_name} = ?, updated_at = ? WHERE agent_id = ?"
+        # Use safe field mapping to prevent SQL injection
+        allowed_fields = {
+            'status': 'status',
+            'current_task': 'current_task', 
+            'working_directory': 'working_directory',
+            'color': 'color',
+            'capabilities': 'capabilities',
+            'updated_at': 'updated_at'
+        }
+        safe_field_name = allowed_fields[field_name]  # This will raise KeyError if invalid
+        sql = f"UPDATE agents SET {safe_field_name} = ?, updated_at = ? WHERE agent_id = ?"
         current_time = datetime.datetime.now().isoformat()
         
         cursor.execute(sql, (value_to_set, current_time, agent_id))

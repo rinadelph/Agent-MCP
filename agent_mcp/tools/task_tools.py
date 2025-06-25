@@ -103,8 +103,25 @@ async def _update_single_task(cursor, task_id: str, new_status: str, requesting_
     
     update_params.append(task_id)
     
-    # Execute update
-    cursor.execute(f"UPDATE tasks SET {', '.join(update_fields_sql)} WHERE task_id = ?", tuple(update_params))
+    # Execute update with validated field assignments
+    if update_fields_sql:
+        # Validate all field assignments are safe (contain only expected patterns)
+        allowed_field_patterns = [
+            "status = ?", "updated_at = ?", "notes = ?", "title = ?", 
+            "description = ?", "priority = ?", "assigned_to = ?", "depends_on_tasks = ?"
+        ]
+        
+        safe_fields = []
+        for field in update_fields_sql:
+            if field in allowed_field_patterns:
+                safe_fields.append(field)
+            else:
+                logger.warning(f"Task update: Skipping unsafe field assignment: {field}")
+        
+        if safe_fields:
+            set_clause = ', '.join(safe_fields)
+            update_sql = f"UPDATE tasks SET {set_clause} WHERE task_id = ?"
+            cursor.execute(update_sql, tuple(update_params))
     
     # Update in-memory cache
     if task_id in g.tasks:
@@ -1680,7 +1697,15 @@ async def bulk_task_operations_tool_impl(arguments: Dict[str, Any]) -> List[mcp_
                     update_params.append(json.dumps(current_notes))
                     
                     update_params.append(task_id)
-                    cursor.execute(f"UPDATE tasks SET {', '.join(update_fields)} WHERE task_id = ?", tuple(update_params))
+                    
+                    # Validate field assignments for security
+                    allowed_bulk_fields = ["status = ?", "updated_at = ?", "notes = ?"]
+                    safe_fields = [field for field in update_fields if field in allowed_bulk_fields]
+                    
+                    if safe_fields:
+                        set_clause = ', '.join(safe_fields)
+                        bulk_update_sql = f"UPDATE tasks SET {set_clause} WHERE task_id = ?"
+                        cursor.execute(bulk_update_sql, tuple(update_params))
                     
                     # Update in-memory cache
                     if task_id in g.tasks:
