@@ -1,6 +1,6 @@
 "use client"
 
-import React from "react"
+import React, { useState, useEffect } from "react"
 import { Activity, Users, CheckSquare, TrendingUp, Zap } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -14,8 +14,7 @@ const mockData = {
   totalTasks: 45,
   completedTasks: 32,
   pendingTasks: 13,
-  systemUptime: "99.8%",
-  lastUpdate: new Date().toLocaleString()
+  systemUptime: "99.8%"
 }
 
 const StatCard = ({ 
@@ -61,6 +60,14 @@ const StatCard = ({
 }
 
 export function OverviewDashboard() {
+  const [lastUpdate, setLastUpdate] = useState<string>("")
+  const [mounted, setMounted] = useState(false)
+  
+  useEffect(() => {
+    setMounted(true)
+    setLastUpdate(new Date().toLocaleString())
+  }, [])
+  
   const completionRate = Math.round((mockData.completedTasks / mockData.totalTasks) * 100)
   const agentUtilization = Math.round((mockData.activeAgents / mockData.totalAgents) * 100)
 
@@ -237,7 +244,7 @@ export function OverviewDashboard() {
 
       {/* Footer */}
       <div className="text-center text-sm text-muted-foreground">
-        Last updated: {mockData.lastUpdate}
+        {mounted ? `Last updated: ${lastUpdate}` : "Loading..."}
       </div>
     </div>
   )

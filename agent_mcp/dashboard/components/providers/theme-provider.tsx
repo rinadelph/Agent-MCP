@@ -43,7 +43,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
   // Prevent hydration mismatch by not rendering until mounted
   if (!mounted) {
     return (
-      <div suppressHydrationWarning>
+      <div className="min-h-screen bg-background" suppressHydrationWarning>
         {children}
       </div>
     )
