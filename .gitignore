@@ -37,6 +37,7 @@ docs/TERMINAL_UI.md
 
 # Scripts in development
 scripts/
+!agent_mcp/dashboard/scripts/
 
 # Development folder
 mcp_template_terminal_ui/
