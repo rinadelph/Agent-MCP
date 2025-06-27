@@ -106,9 +106,15 @@ export interface AgentDetails {
 
 class ApiClient {
   private baseUrl: string
+  private suppressErrors: boolean = false
 
   constructor(baseUrl: string = '') {
     this.baseUrl = baseUrl
+  }
+  
+  // Set whether to suppress connection errors (useful during server discovery)
+  setSuppressErrors(suppress: boolean) {
+    this.suppressErrors = suppress
   }
 
   // Dynamic server connection
@@ -159,7 +165,10 @@ class ApiClient {
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => 'Unknown error')
-        console.error(`API Error [${response.status}]:`, errorText)
+        // Only log non-404 errors
+        if (response.status !== 404) {
+          console.error(`API Error [${response.status}]:`, errorText)
+        }
         throw new Error(`API Error: ${response.status} ${response.statusText}`)
       }
       
@@ -167,20 +176,27 @@ class ApiClient {
     } catch (error) {
       clearTimeout(timeoutId)
       
-      // Enhanced error logging for CORS debugging
+      // Log errors only in debug mode or for non-connection errors
       if (error instanceof Error) {
-        console.error(`Request failed to ${url}:`, {
-          name: error.name,
-          message: error.message,
-          stack: error.stack
-        })
+        // Only log non-connection errors to console when not suppressing
+        if (!this.suppressErrors && !error.message.includes('Failed to fetch') && !error.message.includes('ERR_CONNECTION_REFUSED')) {
+          console.error(`Request failed to ${url}:`, {
+            name: error.name,
+            message: error.message,
+            stack: error.stack
+          })
+        }
         
         if (error.name === 'AbortError') {
           throw new Error('Request timeout')
         }
         
         if (error.message.includes('Failed to fetch')) {
-          throw new Error(`Network error: Unable to connect to ${this.baseUrl}. This could be a CORS issue or the server might be down.`)
+          // Throw a clean error without triggering additional console logs
+          const err = new Error(`Network error: Unable to connect to ${this.baseUrl}`)
+          // Mark this error as expected to prevent logging
+          ;(err as any).isExpected = true
+          throw err
         }
       }
       

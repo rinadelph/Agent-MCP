@@ -126,8 +126,7 @@ export const useDataStore = create<DataStore>((set, get) => ({
         data = await response.json()
       } catch (err) {
         // Fallback to fetching data from individual endpoints
-        console.log('⚠️ All-data endpoint not available, using fallback...')
-        console.log('🔍 All-data endpoint error:', err)
+        console.debug('All-data endpoint not available, using fallback...')
         
         const [agents, tasks, tokens, contextData] = await Promise.all([
           apiClient.getAgents(),
@@ -155,13 +154,13 @@ export const useDataStore = create<DataStore>((set, get) => ({
         }
       }
       
-      console.log('✅ Fetched all data:', {
+      console.debug('Fetched all data:', {
         agents: data.agents?.length || 0,
         tasks: data.tasks?.length || 0,
         context: data.context?.length || 0,
         actions: data.actions?.length || 0
       })
-      console.log('🔍 Debug - Context data received:', data.context)
+      console.debug('Context data received:', data.context)
       
       // Clear memoization cache when data updates
       clearMemoCache()
@@ -174,7 +173,7 @@ export const useDataStore = create<DataStore>((set, get) => ({
         lastFetch: now
       })
     } catch (error) {
-      console.error('❌ Failed to fetch all data:', error)
+      console.debug('Failed to fetch all data:', error)
       set({ 
         loading: false,
         isRefreshing: false, 

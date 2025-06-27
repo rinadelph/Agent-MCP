@@ -1,1 +1,0 @@
-"""Templates for the MCP dashboard.""" 

@@ -544,7 +544,7 @@ export default function VisNetworkLoader({
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch graph data'
       setError(errorMessage)
-      console.error('Error fetching graph data:', err)
+      console.debug('Error fetching graph data:', err)
     } finally {
       setLoading(false)
     }
