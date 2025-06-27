@@ -8,11 +8,11 @@ export function ApiClientInitializer() {
   const { activeServerId, servers } = useServerStore()
 
   useEffect(() => {
-    console.log('ApiClientInitializer: Hydrating API client...')
+    console.debug('ApiClientInitializer: Hydrating API client...')
     if (activeServerId) {
       const activeServer = servers.find(s => s.id === activeServerId)
       if (activeServer) {
-        console.log(`ApiClientInitializer: Setting API server to ${activeServer.host}:${activeServer.port}`)
+        console.debug(`ApiClientInitializer: Setting API server to ${activeServer.host}:${activeServer.port}`)
         apiClient.setServer(activeServer.host, activeServer.port)
       }
     }

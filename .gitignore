@@ -49,3 +49,6 @@ CLAUDE.md
 cleanup.sh
 cleanup_unix.sh
 resize_images.py
+
+# Next.js static build output
+agent_mcp/static/
