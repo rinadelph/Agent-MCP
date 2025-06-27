@@ -8,7 +8,6 @@ from typing import Callable, List, Dict, Any # Added List, Dict, Any
 
 from starlette.routing import Route, Mount
 from starlette.staticfiles import StaticFiles
-from starlette.templating import Jinja2Templates
 from starlette.responses import JSONResponse, Response, PlainTextResponse
 from starlette.requests import Request
 
@@ -33,19 +32,7 @@ from ..tools.admin_tools import (
 )
 import mcp.types as mcp_types # For handling the result from tool_impl
 
-# --- Template and Static Files Setup ---
-TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
-templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
-STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
-
-
 # --- Dashboard and API Endpoints ---
-
-# ... (dashboard_home_route, simple_status_api_route, graph_data_api_route, task_tree_data_api_route, node_details_api_route, agents_list_api_route, tokens_api_route, all_tasks_api_route, update_task_details_api_route remain unchanged from the previous version) ...
-# Ellipsis for brevity, these functions are the same as in the previous response.
-async def dashboard_home_route(request: Request) -> Response:
-    # // ... (implementation from previous response)
-    return templates.TemplateResponse("index_componentized.html", {"request": request})
 
 async def simple_status_api_route(request: Request) -> JSONResponse:
     # Handle OPTIONS for CORS preflight
