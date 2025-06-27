@@ -56,6 +56,16 @@ Monitor every agent's status, assigned tasks, and recent activity. The system au
 # Clone and setup
 git clone https://github.com/rinadelph/Agent-MCP.git
 cd Agent-MCP
+
+# Check version requirements
+python --version  # Should be >=3.10
+node --version    # Should be >=18.0.0
+npm --version     # Should be >=9.0.0
+
+# If using nvm for Node.js version management
+nvm use  # Uses the version specified in .nvmrc
+
+# Configure environment
 cp .env.example .env  # Add your OpenAI API key
 uv venv && uv pip install -e .
 
@@ -474,11 +484,23 @@ Watch your AI team work in real-time through the dashboard. Every action is logg
 
 ## System Requirements
 
-- Python 3.8+ with pip or uv
-- Node.js 18+ with npm (for dashboard)
-- OpenAI API key (for embeddings)
-- 4GB RAM minimum
-- AI coding assistant (Claude Code or Cursor)
+- **Python**: 3.10+ with pip or uv
+- **Node.js**: 18.0.0+ (recommended: 22.16.0)
+- **npm**: 9.0.0+ (recommended: 10.9.2)
+- **OpenAI API key** (for embeddings and RAG)
+- **RAM**: 4GB minimum
+- **AI coding assistant**: Claude Code or Cursor
+
+For consistent development environment:
+```bash
+# Using nvm (Node Version Manager)
+nvm use  # Automatically uses Node v22.16.0 from .nvmrc
+
+# Or manually check versions
+node --version  # Should be >=18.0.0
+npm --version   # Should be >=9.0.0
+python --version  # Should be >=3.10
+```
 
 ## Troubleshooting
 
