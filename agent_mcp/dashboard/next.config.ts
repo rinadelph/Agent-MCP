@@ -6,8 +6,8 @@ const withBundleAnalyzer = require('@next/bundle-analyzer')({
 })
 
 const nextConfig: NextConfig = {
-  // Enable static export for serving through Python backend
-  output: 'export',
+  // Enable static export for serving through Python backend (only in production)
+  output: process.env.NODE_ENV === 'production' ? 'export' : undefined,
   
   // Configure output directory to be the static folder (only for production builds)
   distDir: process.env.NODE_ENV === 'production' ? '../static' : '.next',
