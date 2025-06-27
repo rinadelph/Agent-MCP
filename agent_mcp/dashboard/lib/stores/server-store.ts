@@ -134,13 +134,18 @@ export const useServerStore = create<ServerStore>()(
           
           return response.server_running === true
         } catch (error) {
-          console.error(`Health check failed for server ${id}:`, error)
+          // Use debug logging for health check failures (common during server discovery)
+          console.debug(`Health check failed for server ${id}`)
           return false
         }
       },
 
       refreshAllServers: async () => {
         const servers = get().servers
+        
+        // Enable error suppression during bulk health checks
+        apiClient.setSuppressErrors(true)
+        
         const healthPromises = servers.map(async (server) => {
           const isHealthy = await get().checkServerHealth(server.id)
           return {
@@ -150,6 +155,9 @@ export const useServerStore = create<ServerStore>()(
         })
 
         const results = await Promise.all(healthPromises)
+        
+        // Disable error suppression after checks
+        apiClient.setSuppressErrors(false)
         
         set((state) => ({
           servers: state.servers.map(server => {
@@ -171,6 +179,9 @@ export const useServerStore = create<ServerStore>()(
 
       autoDetectServers: async () => {
         const possibleServers = getAutoDetectServers()
+        
+        // Enable error suppression during auto-detection
+        apiClient.setSuppressErrors(true)
         
         for (const serverConfig of possibleServers) {
           try {
@@ -218,6 +229,9 @@ export const useServerStore = create<ServerStore>()(
             console.debug(`Server not found on ${serverConfig.host}:${serverConfig.port}`)
           }
         }
+        
+        // Disable error suppression after auto-detection
+        apiClient.setSuppressErrors(false)
         
         // No server found
         return null
