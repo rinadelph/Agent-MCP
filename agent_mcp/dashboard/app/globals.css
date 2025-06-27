@@ -1,5 +1,4 @@
 @import "tailwindcss";
-@import "reactflow/dist/style.css";
 @import "vis-network/styles/vis-network.css";
 
 @custom-variant dark (&:is(.dark *));
