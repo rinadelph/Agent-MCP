@@ -335,6 +335,127 @@ async def view_project_context_tool_impl(arguments: Dict[str, Any]) -> List[mcp_
 
 # --- update_project_context tool ---
 # Original logic from main.py: lines 1468-1500 (update_project_context_tool function)
+async def _handle_single_context_update(requesting_agent_id: str, context_key_to_update: str, 
+                                       context_value_to_set: Any, description_for_context: Optional[str] = None) -> List[mcp_types.TextContent]:
+    """Handle single context update operation"""
+    # Log audit
+    log_audit(requesting_agent_id, "update_project_context", 
+              {"context_key": context_key_to_update, "value_type": str(type(context_value_to_set)), "description": description_for_context})
+
+    conn = None
+    try:
+        # Ensure value is JSON serializable before storing
+        value_json_str = json.dumps(context_value_to_set)
+    except TypeError as e_type:
+        logger.error(f"Value provided for project context key '{context_key_to_update}' is not JSON serializable: {e_type}")
+        return [mcp_types.TextContent(type="text", text=f"Error: Provided context_value is not JSON serializable: {e_type}")]
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        updated_at_iso = datetime.datetime.now().isoformat()
+
+        # Use INSERT OR REPLACE (UPSERT)
+        cursor.execute("""
+            INSERT OR REPLACE INTO project_context (context_key, value, last_updated, updated_by, description)
+            VALUES (?, ?, ?, ?, ?)
+        """, (context_key_to_update, value_json_str, updated_at_iso, requesting_agent_id, description_for_context))
+        
+        # Log to agent_actions table
+        log_agent_action_to_db(cursor, requesting_agent_id, "updated_context", 
+                               details={'context_key': context_key_to_update, 'action': 'set/update'})
+        conn.commit()
+        
+        logger.info(f"Project context for key '{context_key_to_update}' updated by '{requesting_agent_id}'.")
+        return [mcp_types.TextContent(
+            type="text",
+            text=f"Project context updated successfully for key '{context_key_to_update}'."
+        )]
+
+    except sqlite3.Error as e_sql:
+        if conn: conn.rollback()
+        logger.error(f"Database error updating project context for key '{context_key_to_update}': {e_sql}", exc_info=True)
+        return [mcp_types.TextContent(type="text", text=f"Database error updating project context: {e_sql}")]
+    except Exception as e:
+        if conn: conn.rollback()
+        logger.error(f"Unexpected error updating project context for key '{context_key_to_update}': {e}", exc_info=True)
+        return [mcp_types.TextContent(type="text", text=f"Unexpected error updating project context: {e}")]
+    finally:
+        if conn:
+            conn.close()
+
+
+async def _handle_bulk_context_update(requesting_agent_id: str, updates_list: List[Dict[str, Any]]) -> List[mcp_types.TextContent]:
+    """Handle bulk context update operations"""
+    # Log audit
+    log_audit(requesting_agent_id, "bulk_update_project_context", 
+              {"update_count": len(updates_list)})
+
+    conn = None
+    results = []
+    failed_updates = []
+    
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        updated_at_iso = datetime.datetime.now().isoformat()
+
+        # Process each update atomically
+        for i, update in enumerate(updates_list):
+            try:
+                context_key = update["context_key"]
+                context_value = update["context_value"]
+                description = update.get("description", f"Bulk update operation {i+1}")
+                
+                # Validate JSON serialization
+                value_json_str = json.dumps(context_value)
+                
+                # Execute update
+                cursor.execute("""
+                    INSERT OR REPLACE INTO project_context (context_key, value, last_updated, updated_by, description)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (context_key, value_json_str, updated_at_iso, requesting_agent_id, description))
+                
+                results.append(f"✓ Updated '{context_key}'")
+                
+                # Log individual action
+                log_agent_action_to_db(cursor, requesting_agent_id, "bulk_updated_context", 
+                                       details={'context_key': context_key, 'operation': f'bulk_update_{i+1}'})
+                
+            except (TypeError, json.JSONEncodeError) as e_json:
+                failed_updates.append(f"✗ Failed '{update.get('context_key', 'unknown')}': Invalid JSON - {e_json}")
+            except Exception as e_update:
+                failed_updates.append(f"✗ Failed '{update.get('context_key', 'unknown')}': {str(e_update)}")
+
+        conn.commit()
+        
+        # Build response
+        response_parts = [f"Bulk update completed: {len(results)} successful, {len(failed_updates)} failed"]
+        
+        if results:
+            response_parts.append("\nSuccessful updates:")
+            response_parts.extend(results)
+            
+        if failed_updates:
+            response_parts.append("\nFailed updates:")
+            response_parts.extend(failed_updates)
+        
+        logger.info(f"Bulk context update by '{requesting_agent_id}': {len(results)} successful, {len(failed_updates)} failed.")
+        return [mcp_types.TextContent(type="text", text="\n".join(response_parts))]
+
+    except sqlite3.Error as e_sql:
+        if conn: conn.rollback()
+        logger.error(f"Database error in bulk context update: {e_sql}", exc_info=True)
+        return [mcp_types.TextContent(type="text", text=f"Database error in bulk update: {e_sql}")]
+    except Exception as e:
+        if conn: conn.rollback()
+        logger.error(f"Unexpected error in bulk context update: {e}", exc_info=True)
+        return [mcp_types.TextContent(type="text", text=f"Unexpected error in bulk update: {e}")]
+    finally:
+        if conn:
+            conn.close()
+
+
 async def update_project_context_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.TextContent]:
     auth_token = arguments.get("token")
     
@@ -360,52 +481,6 @@ async def update_project_context_tool_impl(arguments: Dict[str, Any]) -> List[mc
         if not context_key_to_update or context_value_to_set is None:
             return [mcp_types.TextContent(type="text", text="Error: context_key and context_value are required for single updates.")]
         return await _handle_single_context_update(requesting_agent_id, context_key_to_update, context_value_to_set, description_for_context)
-
-    # Log audit (main.py:1477)
-    log_audit(requesting_agent_id, "update_project_context", 
-              {"context_key": context_key_to_update, "value_type": str(type(context_value_to_set)), "description": description_for_context})
-
-    conn = None
-    try:
-        # Ensure value is JSON serializable before storing (main.py:1483-1486)
-        value_json_str = json.dumps(context_value_to_set)
-    except TypeError as e_type:
-        logger.error(f"Value provided for project context key '{context_key_to_update}' is not JSON serializable: {e_type}")
-        return [mcp_types.TextContent(type="text", text=f"Error: Provided context_value is not JSON serializable: {e_type}")]
-
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        updated_at_iso = datetime.datetime.now().isoformat()
-
-        # Use INSERT OR REPLACE (UPSERT) (main.py:1489-1494)
-        cursor.execute("""
-            INSERT OR REPLACE INTO project_context (context_key, value, last_updated, updated_by, description)
-            VALUES (?, ?, ?, ?, ?)
-        """, (context_key_to_update, value_json_str, updated_at_iso, requesting_agent_id, description_for_context))
-        
-        # Log to agent_actions table
-        log_agent_action_to_db(cursor, requesting_agent_id, "updated_context", 
-                               details={'context_key': context_key_to_update, 'action': 'set/update'})
-        conn.commit()
-        
-        logger.info(f"Project context for key '{context_key_to_update}' updated by '{requesting_agent_id}'.")
-        return [mcp_types.TextContent(
-            type="text",
-            text=f"Project context updated successfully for key '{context_key_to_update}'."
-        )]
-
-    except sqlite3.Error as e_sql: # main.py:1495
-        if conn: conn.rollback()
-        logger.error(f"Database error updating project context for key '{context_key_to_update}': {e_sql}", exc_info=True)
-        return [mcp_types.TextContent(type="text", text=f"Database error updating project context: {e_sql}")]
-    except Exception as e:
-        if conn: conn.rollback()
-        logger.error(f"Unexpected error updating project context for key '{context_key_to_update}': {e}", exc_info=True)
-        return [mcp_types.TextContent(type="text", text=f"Unexpected error updating project context: {e}")]
-    finally:
-        if conn:
-            conn.close()
 
 
 # --- bulk_update_project_context tool ---
