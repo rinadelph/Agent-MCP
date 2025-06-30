@@ -3,7 +3,7 @@
 import React, { useEffect } from "react"
 import { Header } from "./header"
 import { AppSidebar } from "./app-sidebar"
-import { useSidebar, useTheme } from "@/lib/store"
+import { useTheme } from "@/lib/store"
 import { cn } from "@/lib/utils"
 import { SidebarProvider } from "@/components/ui/sidebar"
 
@@ -45,8 +45,8 @@ export function MainLayout({ children }: MainLayoutProps) {
   }, [theme, setTheme])
 
   return (
-    <SidebarProvider defaultOpen={false}>
-      <div className="relative h-screen bg-background flex overflow-hidden">
+    <SidebarProvider defaultOpen={true}>
+      <div className="relative h-screen bg-background flex overflow-hidden w-full">
         {/* Sidebar */}
         <AppSidebar />
         
