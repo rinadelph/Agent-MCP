@@ -52,3 +52,4 @@ resize_images.py
 
 # Next.js static build output
 agent_mcp/static/
+package-lock.json
