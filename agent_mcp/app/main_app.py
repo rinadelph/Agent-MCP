@@ -30,11 +30,26 @@ mcp_app_instance = MCPLowLevelServer("mcp-server") # Name from original main.py:
 @mcp_app_instance.list_tools()
 async def mcp_list_tools_handler() -> List[mcp_types.Tool]:
     """MCP endpoint to list available tools."""
+    # Check if server is initialized before handling requests
+    if not g.server_initialized:
+        logger.warning("Received list_tools request before server initialization was complete")
+        # Return empty tools list during initialization to prevent errors
+        return []
+    
     return await list_available_tools() # Calls the function from tools.registry
 
 @mcp_app_instance.call_tool()
 async def mcp_call_tool_handler(name: str, arguments: dict) -> List[mcp_types.TextContent]:
     """MCP endpoint to call a specific tool."""
+    # Check if server is initialized before handling requests
+    if not g.server_initialized:
+        logger.warning(f"Received call_tool request for '{name}' before server initialization was complete")
+        # Return error message during initialization
+        return [mcp_types.TextContent(
+            type="text",
+            text="Server is still initializing. Please wait a moment and try again."
+        )]
+    
     # `dispatch_tool_call` from tools.registry handles sanitization and routing
     return await dispatch_tool_call(name, arguments)
 
@@ -42,48 +57,6 @@ async def mcp_call_tool_handler(name: str, arguments: dict) -> List[mcp_types.Te
 # --- SSE Transport Setup (mimicking original main.py:1943-1969 for SSE part) ---
 # The SseServerTransport handles /messages/ (POST for tool calls) and /sse (GET for connections)
 sse_transport = SseServerTransport("/messages/") # Path from original main.py:1943
-
-async def sse_connection_handler(request): # Matches original handle_sse in main.py:1945
-    """Handles new SSE client connections."""
-    try:
-        # Client ID generation (original main.py:1947)
-        # While SseServerTransport might manage its own client IDs, logging this is useful.
-        client_id_log = str(uuid.uuid4())[:8] # For logging this specific connection attempt
-        logger.info(f"SSE connection request from {request.client.host} (Log ID: {client_id_log})")
-        # The original also printed to console, which logger now handles.
-        # print(f"[{datetime.datetime.now().isoformat()}] SSE connection request from {request.client.host} (ID: {client_id_log})")
-
-        # `connect_sse` is a context manager from SseServerTransport
-        async with sse_transport.connect_sse(
-            request.scope, request.receive, request._send # Starlette's low-level ASGI send
-        ) as streams:
-            # streams[0] is input_stream, streams[1] is output_stream
-            actual_client_id = streams[2] if len(streams) > 2 else client_id_log # Get actual client ID if provided by transport
-            logger.info(f"SSE client connected: {actual_client_id}")
-            # print(f"[{datetime.datetime.now().isoformat()}] SSE client connected: {actual_client_id}")
-            
-            # Store connection if g.connections is still used for tracking (original main.py:147)
-            # g.connections[actual_client_id] = {"connected_at": datetime.datetime.now().isoformat()}
-
-            try:
-                # Run the MCP low-level server for this connection
-                # (Original main.py:1957-1961)
-                await mcp_app_instance.run(
-                    streams[0], # input_stream
-                    streams[1], # output_stream
-                    mcp_app_instance.create_initialization_options() # As per original
-                )
-            finally:
-                logger.info(f"SSE client disconnected: {actual_client_id}")
-                # print(f"[{datetime.datetime.now().isoformat()}] SSE client disconnected: {actual_client_id}")
-                # if actual_client_id in g.connections:
-                #     del g.connections[actual_client_id]
-    except Exception as e:
-        # Log errors during SSE connection handling (original main.py:1964-1966)
-        logger.error(f"Error in SSE connection handler: {str(e)}", exc_info=True)
-        # print(f"[{datetime.datetime.now().isoformat()}] Error in SSE connection: {str(e)}")
-        # Starlette will handle sending an error response if one isn't already sent.
-        raise # Re-raise to let Starlette handle it if appropriate
 
 
 # --- Starlette Application Creation ---
@@ -135,9 +108,43 @@ def create_app(project_dir: str, admin_token_cli: Optional[str] = None) -> Starl
     all_routes = list(http_routes) # Start with routes from app/routes.py
 
     # Add SSE routes (Original main.py:2113-2114)
-    all_routes.append(Route('/sse', endpoint=sse_connection_handler, name="sse_connect"))
-    # Mount the SseServerTransport's POST message handler
-    all_routes.append(Mount('/messages', app=sse_transport.handle_post_message, name="mcp_post_message"))
+    # Create an ASGI app that handles both SSE and messages
+    async def mcp_asgi_app(scope, receive, send):
+        """ASGI app that routes MCP requests."""
+        if scope["type"] == "http":
+            if scope["path"] == "/sse" and scope["method"] == "GET":
+                # Handle SSE connections
+                client_id = str(uuid.uuid4())[:8]
+                client_host = scope.get('client', ['unknown', None])[0]
+                logger.info(f"SSE connection request from {client_host} (Log ID: {client_id})")
+                
+                async with sse_transport.connect_sse(scope, receive, send) as streams:
+                    logger.info(f"SSE client connected: {client_id}")
+                    try:
+                        await mcp_app_instance.run(
+                            streams[0],
+                            streams[1],
+                            mcp_app_instance.create_initialization_options()
+                        )
+                    finally:
+                        logger.info(f"SSE client disconnected: {client_id}")
+            elif scope["path"].startswith("/messages") and scope["method"] == "POST":
+                # Handle POST messages
+                await sse_transport.handle_post_message(scope, receive, send)
+            else:
+                # Not found
+                await send({
+                    "type": "http.response.start",
+                    "status": 404,
+                    "headers": [[b"content-type", b"text/plain"]],
+                })
+                await send({
+                    "type": "http.response.body",
+                    "body": b"Not Found",
+                })
+    
+    # Mount the MCP ASGI app
+    all_routes.append(Mount('/', app=mcp_asgi_app, name="mcp_transport"))
 
     # Note: Static file serving removed - dashboard is now served separately via npm run dev
     

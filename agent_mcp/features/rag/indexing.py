@@ -19,13 +19,14 @@ except ImportError:
 # Imports from our own project modules
 from ...core.config import (
     logger, EMBEDDING_MODEL, EMBEDDING_DIMENSION, MAX_EMBEDDING_BATCH_SIZE,
-    get_project_dir, OPENAI_API_KEY_ENV  # Also import the API key env variable
+    get_project_dir, OPENAI_API_KEY_ENV,  # Also import the API key env variable
+    ADVANCED_EMBEDDINGS
 )
 from ...core import globals as g # For server_running flag
 from ...db.connection import get_db_connection, is_vss_loadable
 # We need the actual OpenAI client, not just the service module, for batching logic.
 # The client instance is stored in g.openai_client_instance by openai_service.initialize_openai_client()
-from ...external.openai_service import get_openai_client # To get the initialized client
+# Note: We now use get_openai_async_client which is imported within run_rag_indexing_periodically
 
 # Import chunking functions from this RAG feature package
 from .chunking import simple_chunker, markdown_aware_chunker
@@ -57,22 +58,13 @@ async def _get_embeddings_batch_openai(
     batch_chunks: List[str],
     batch_index_start: int,
     results_list: List[Optional[List[float]]],
-    openai_api_key: str # Pass API key directly for true async client
+    async_client: 'openai.AsyncOpenAI'
 ) -> bool:
     """
-    Processes a single batch of embeddings asynchronously using a new AsyncOpenAI client.
+    Processes a single batch of embeddings asynchronously using the shared async OpenAI client.
     This is a helper for run_rag_indexing_periodically.
     Based on original main.py: lines 656-675.
     """
-    # Need to import openai here if not at module level for type hints,
-    # or ensure it's available. It's imported at module level with try-except.
-    if openai is None: # Check if openai library was imported successfully
-        logger.error("OpenAI library not available for embedding batch.")
-        for i in range(len(batch_chunks)):
-            if batch_index_start + i < len(results_list):
-                results_list[batch_index_start + i] = None # Mark as failed
-        return False
-
     try:
         # Validate batch_chunks before sending to API
         validated_chunks = []
@@ -83,14 +75,11 @@ async def _get_embeddings_batch_openai(
                 logger.warning(f"Invalid chunk in batch: {type(chunk)} - {repr(chunk)[:50]}")
                 validated_chunks.append(" ")  # Use single space as fallback to maintain batch size
         
-        # Create a separate async client for each batch for true concurrency
-        # Using async client directly with HTTPX to ensure truly parallel requests
-        async_client = openai.AsyncOpenAI(api_key=openai_api_key)
+        # Use the provided async client for the embedding request
         response = await async_client.embeddings.create(
             input=validated_chunks,
-            model=EMBEDDING_MODEL
-            # Note: dimensions parameter is not used - model defaults to its natural dimension
-            # text-embedding-3-small: 1536, text-embedding-3-large: 3072
+            model=EMBEDDING_MODEL,
+            dimensions=EMBEDDING_DIMENSION
         )
         # Store results directly in the provided results list
         for j, item_embedding in enumerate(response.data):
@@ -120,13 +109,12 @@ async def run_rag_indexing_periodically(interval_seconds: int = 300, *, task_sta
 
     await anyio.sleep(10) # Initial sleep to allow server startup (main.py:515)
 
-    # Get OpenAI client. The service initializes it and stores in g.openai_client_instance
-    # The API key itself is also needed for the truly async batch embedding function.
-    # This should come from config.OPENAI_API_KEY_ENV
-    from ...core.config import OPENAI_API_KEY_ENV as openai_api_key_for_batches
-
-    if not openai_api_key_for_batches:
-        logger.error("OpenAI API Key not configured. RAG indexer cannot run.")
+    # Get the centralized async OpenAI client
+    from ...external.openai_service import get_openai_async_client
+    async_client = get_openai_async_client()
+    
+    if not async_client:
+        logger.error("OpenAI async client not available. RAG indexer cannot run.")
         return
     
     # Check if the OpenAI library itself was loaded
@@ -328,9 +316,6 @@ async def run_rag_indexing_periodically(interval_seconds: int = 300, *, task_sta
                 # Generate chunks and prepare for embedding (Original main.py:631-647)
                 all_chunks_texts_to_embed: List[str] = []
                 chunk_source_metadata_map: List[Tuple[str, str, str, Dict[str, Any]]] = [] # type, ref, current_hash, metadata for each chunk
-
-                # Import config to check if we're in advanced mode
-                from ...core.config import ADVANCED_EMBEDDINGS
                 
                 for source_type, source_ref, content, current_hash_of_source in sources_to_process_for_embedding:
                     chunks_with_metadata: List[Tuple[str, Dict[str, Any]]] = []
@@ -413,7 +398,7 @@ async def run_rag_indexing_periodically(interval_seconds: int = 300, *, task_sta
                                         current_batch_chunks,
                                         batch_actual_start_index,
                                         all_embeddings_vectors,
-                                        openai_api_key_for_batches # Pass the API key
+                                        async_client # Pass the async client
                                     )
                         except Exception as e_tg: # Catch errors from the task group itself
                             logger.error(f"Error in parallel embedding batch processing task group: {e_tg}")
@@ -581,10 +566,11 @@ async def index_task_data(task_id: str, task_data: Dict[str, Any]) -> None:
             ('task', task_id)
         )
         
-        # Get OpenAI client for embeddings
-        client = await get_openai_client()
+        # Get async OpenAI client for embeddings
+        from ...external.openai_service import get_openai_async_client
+        client = get_openai_async_client()
         if not client:
-            logger.error("OpenAI client not available for task indexing")
+            logger.error("OpenAI async client not available for task indexing")
             return
         
         # Generate embeddings for each chunk
@@ -593,7 +579,8 @@ async def index_task_data(task_id: str, task_data: Dict[str, Any]) -> None:
                 # Generate embedding
                 embedding_response = await client.embeddings.create(
                     model=EMBEDDING_MODEL,
-                    input=chunk_text
+                    input=chunk_text,
+                    dimensions=EMBEDDING_DIMENSION
                 )
                 embedding_vector = embedding_response.data[0].embedding
                 
@@ -605,10 +592,10 @@ async def index_task_data(task_id: str, task_data: Dict[str, Any]) -> None:
                 )
                 chunk_id = cursor.lastrowid
                 
-                # Insert embedding
+                # Insert embedding - convert list to JSON string for SQLite
                 cursor.execute(
                     "INSERT INTO rag_embeddings (rowid, embedding) VALUES (?, ?)",
-                    (chunk_id, embedding_vector)
+                    (chunk_id, json.dumps(embedding_vector))
                 )
                 
             except Exception as e:

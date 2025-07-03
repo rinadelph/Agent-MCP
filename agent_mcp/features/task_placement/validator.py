@@ -4,7 +4,6 @@ from typing import Optional, List, Dict, Any
 from ...tools.rag_tools import ask_project_rag_tool_impl
 import mcp.types as mcp_types
 from ...core.config import logger, TASK_ANALYSIS_MODEL, TASK_ANALYSIS_MAX_TOKENS
-from ...external.openai_service import get_openai_client
 
 async def validate_task_placement(
     title: str,
