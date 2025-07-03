@@ -12,7 +12,7 @@ from ...core.config import (
     MAX_CONTEXT_TOKENS # From main.py:182
 )
 from ...db.connection import get_db_connection, is_vss_loadable
-from ...external.openai_service import get_openai_client
+from ...external.openai_service import get_openai_async_client
 
 # For OpenAI exceptions
 import openai
@@ -31,10 +31,10 @@ async def query_rag_system(query_text: str) -> str:
     Returns:
         A string containing the answer or an error message.
     """
-    # Get OpenAI client (main.py:1438)
-    openai_client = get_openai_client()
+    # Get async OpenAI client for use in async context
+    openai_client = get_openai_async_client()
     if not openai_client:
-        logger.error("RAG Query: OpenAI client is not available. Cannot process query.")
+        logger.error("RAG Query: OpenAI async client is not available. Cannot process query.")
         return "RAG Error: OpenAI client not available. Please check server configuration and OpenAI API key."
 
     conn = None
@@ -119,10 +119,10 @@ async def query_rag_system(query_text: str) -> str:
                 cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='rag_embeddings'")
                 if cursor.fetchone() is not None:
                     # Embed the query (main.py:1487-1492)
-                    response = openai_client.embeddings.create(
+                    response = await openai_client.embeddings.create(
                         input=[query_text],
-                        model=EMBEDDING_MODEL
-                        # Removed dimensions parameter - let the model use its default
+                        model=EMBEDDING_MODEL,
+                        dimensions=EMBEDDING_DIMENSION
                     )
                     query_embedding = response.data[0].embedding
                     query_embedding_json = json.dumps(query_embedding)
@@ -249,7 +249,7 @@ Always err on the side of providing more detailed explanations and comprehensive
             logger.debug(f"RAG Query: Combined context for LLM (approx tokens: {current_token_count}):\n{combined_context_str[:500]}...") # Log excerpt
             logger.debug(f"RAG Query: User message for LLM:\n{user_message_for_llm[:500]}...")
 
-            chat_response = openai_client.chat.completions.create(
+            chat_response = await openai_client.chat.completions.create(
                 model=CHAT_MODEL,
                 messages=[
                     {"role": "system", "content": system_prompt_for_llm},
@@ -293,10 +293,10 @@ async def query_rag_system_with_model(
     Returns:
         A string containing the answer or an error message.
     """
-    # Get OpenAI client
-    openai_client = get_openai_client()
+    # Get async OpenAI client for use in async context
+    openai_client = get_openai_async_client()
     if not openai_client:
-        logger.error("RAG Query: OpenAI client is not available. Cannot process query.")
+        logger.error("RAG Query: OpenAI async client is not available. Cannot process query.")
         return "RAG Error: OpenAI client not available. Please check server configuration and OpenAI API key."
     
     # Use provided max_tokens or default to the configured value
@@ -430,7 +430,7 @@ Answer in the exact JSON format requested, but include thorough explanations in 
             logger.info(f"Task Analysis Query: Using model {model_name} with {context_limit} token limit")
             
             # Use the specified model for this query
-            chat_response = openai_client.chat.completions.create(
+            chat_response = await openai_client.chat.completions.create(
                 model=model_name,
                 messages=[
                     {"role": "system", "content": system_prompt_for_llm},

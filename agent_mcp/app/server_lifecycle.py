@@ -217,7 +217,9 @@ async def application_startup(project_dir_path_str: str, admin_token_param: Opti
     # 8. Register Signal Handlers (Original main.py: 839-840, called before server run)
     register_signal_handlers() # utils.signal_utils.register_signal_handlers
 
-    logger.info("MCP Server application startup sequence finished.")
+    # 9. Mark server as fully initialized
+    g.server_initialized = True
+    logger.info("MCP Server application startup sequence finished. Server is now ready to handle requests.")
 
 
 async def start_background_tasks(task_group: anyio.abc.TaskGroup):
@@ -234,6 +236,7 @@ async def application_shutdown():
     """Handles graceful shutdown of application resources and tasks."""
     logger.info("MCP Server application shutting down...")
     g.server_running = False # Ensure flag is set for all components
+    g.server_initialized = False # Reset initialization flag
 
     # Cancel background tasks
     if g.rag_index_task_scope and not g.rag_index_task_scope.cancel_called:

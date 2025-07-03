@@ -47,6 +47,13 @@ agent_color_index: int = 0 # For cycling through AGENT_COLORS from config.py
 # From main.py:169
 server_running: bool = True # Flag to control main server loop and background tasks, handled by signal_utils.py
 
+# Flag to track if server initialization is complete
+# This prevents handling requests before critical components are ready
+server_initialized: bool = False
+
+# Timestamp when server initialization completed
+server_start_time: Optional[float] = None
+
 # --- External Service Clients (Placeholders) ---
 # From main.py:185
 # The actual OpenAI client instance will be initialized and managed by external/openai_service.py.
@@ -55,6 +62,10 @@ server_running: bool = True # Flag to control main server loop and background ta
 # For now, we'll keep it as a placeholder reflecting the original structure.
 # Type hint can be refined to `openai.OpenAI` once that module is structured.
 openai_client_instance: Optional[Any] = None
+
+# Async OpenAI client instance for use in async contexts
+# This avoids blocking the event loop when making OpenAI API calls
+openai_async_client_instance: Optional[Any] = None
 
 # --- Database/VSS State ---
 # From main.py:200
