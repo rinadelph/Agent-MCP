@@ -1,4 +1,28 @@
 # Agent-MCP/mcp_template/mcp_server_src/features/rag/query.py
+"""
+RAG (Retrieval-Augmented Generation) query functionality.
+
+IMPORTANT: sqlite-vec Query Syntax
+----------------------------------
+sqlite-vec requires specific syntax for K-Nearest Neighbor (KNN) queries:
+
+1. For SQLite 3.41+ with literal limits:
+   WHERE embedding MATCH ?
+   LIMIT 10                 -- Works with literal number
+
+2. For parameterized limits (REQUIRED for this module):
+   WHERE embedding MATCH ? AND k = ?  -- Works with parameter
+   
+3. DOES NOT WORK:
+   WHERE embedding MATCH ?
+   LIMIT ?                  -- FAILS: "A LIMIT or 'k = ?' constraint is required"
+   
+The vec0 virtual table doesn't recognize 'LIMIT ?' (with parameter) as a valid 
+KNN constraint. It needs to see either a literal LIMIT number or use 'k = ?'.
+
+This module uses 'AND k = ?' syntax throughout to support parameterized result counts.
+Always pass vectors as JSON string parameters for security.
+"""
 import json
 import sqlite3 # For type hinting and error handling
 from typing import List, Dict, Any, Optional, Tuple
