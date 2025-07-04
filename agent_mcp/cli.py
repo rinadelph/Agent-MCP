@@ -35,7 +35,7 @@ load_dotenv()
 
 # Project-specific imports
 # Ensure core.config (and thus logging) is initialized early.
-from .core.config import logger, CONSOLE_LOGGING_ENABLED # Logger is initialized in config.py
+from .core.config import logger, CONSOLE_LOGGING_ENABLED, enable_console_logging # Logger is initialized in config.py
 from .core import globals as g # For g.server_running and other globals
 # Import app creation and lifecycle functions
 from .app.main_app import create_app, mcp_app_instance # mcp_app_instance for stdio
@@ -113,20 +113,23 @@ def main_cli(port: int, transport: str, project_dir: str, admin_token_cli: Optio
         logger.info("Using simple embeddings mode (1024 dimensions, text-embedding-3-large, markdown & context only)")
     
     if debug:
+        os.environ["MCP_DEBUG"] = "true" # Ensure env var is set for Starlette debug mode
+        enable_console_logging()  # Enable console logging for debug mode
         logger.info("Debug mode enabled via CLI flag or MCP_DEBUG environment variable.")
+        logger.info("Console logging enabled for debug mode.")
         # Logging level might need to be adjusted here if not already handled by config.py
         # For now, config.py sets the base level. Uvicorn also has its own log level.
-        os.environ["MCP_DEBUG"] = "true" # Ensure env var is set for Starlette debug mode
     else:
         os.environ["MCP_DEBUG"] = "false"
 
     # Determine if the TUI should be active
-    # TUI is active if console logging is generally disabled by config AND --no-tui is NOT passed
-    tui_active = not CONSOLE_LOGGING_ENABLED and not no_tui
+    # TUI is active if console logging is disabled AND --no-tui is NOT passed AND not in debug mode
+    from .core.config import CONSOLE_LOGGING_ENABLED as current_console_logging  # Get updated value
+    tui_active = not current_console_logging and not no_tui and not debug
     
     if tui_active:
         logger.info("TUI display mode is active. Standard console logging is suppressed.")
-    elif CONSOLE_LOGGING_ENABLED:
+    elif current_console_logging or debug:
         logger.info("Standard console logging is enabled (TUI display mode is off).")
         print("MCP Server starting with standard console logging...")
     else:  # Console logging is off, and TUI is also off
