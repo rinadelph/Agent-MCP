@@ -121,8 +121,8 @@ async def query_rag_system(query_text: str) -> str:
                     # Embed the query (main.py:1487-1492)
                     response = openai_client.embeddings.create(
                         input=[query_text],
-                        model=EMBEDDING_MODEL
-                        # Removed dimensions parameter - let the model use its default
+                        model=EMBEDDING_MODEL,
+                        dimensions=EMBEDDING_DIMENSION
                     )
                     query_embedding = response.data[0].embedding
                     query_embedding_json = json.dumps(query_embedding)
@@ -330,8 +330,9 @@ async def query_rag_system_with_model(
         # Get vector search results if VSS is available
         if is_vss_loadable():
             query_embedding_response = openai_client.embeddings.create(
-                model=EMBEDDING_MODEL,
-                input=query_text
+                input=[query_text],
+                model=model_name,
+                dimensions=EMBEDDING_DIMENSION
             )
             query_embedding = query_embedding_response.data[0].embedding
             
