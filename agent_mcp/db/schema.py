@@ -14,62 +14,102 @@ def check_embedding_dimension_compatibility(conn: sqlite3.Connection) -> bool:
     """
     cursor = conn.cursor()
     
-    # Check if rag_embeddings exists
-    cursor.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='rag_embeddings'")
+    # Check if rag_embeddings exists (including virtual tables)
+    cursor.execute("SELECT sql FROM sqlite_master WHERE type IN ('table', 'virtual') AND name='rag_embeddings'")
     result = cursor.fetchone()
     
     if result is None:
         # Table doesn't exist, so it's compatible (will be created with correct dimension)
+        logger.debug(f"rag_embeddings table does not exist - will create with dimension {EMBEDDING_DIMENSION}")
         return True
     
     create_sql = result[0]
+    logger.debug(f"Found existing rag_embeddings table: {create_sql}")
     
-    # Check if the current dimension matches the configured dimension
-    if f"FLOAT[{EMBEDDING_DIMENSION}]" in create_sql:
-        return True
+    # Extract current dimension from CREATE TABLE statement
+    import re
+    dimension_match = re.search(r'FLOAT\[(\d+)\]', create_sql)
     
-    # Check for old dimensions
-    if "FLOAT[1024]" in create_sql or "FLOAT[1536]" in create_sql or "FLOAT[3072]" in create_sql:
-        current_dim = None
-        if "FLOAT[1024]" in create_sql:
-            current_dim = 1024
-        elif "FLOAT[1536]" in create_sql:
-            current_dim = 1536
-        elif "FLOAT[3072]" in create_sql:
-            current_dim = 3072
+    if dimension_match:
+        current_dim = int(dimension_match.group(1))
+        logger.info(f"Current embedding table dimension: {current_dim}, Required dimension: {EMBEDDING_DIMENSION}")
         
         if current_dim != EMBEDDING_DIMENSION:
-            logger.warning(f"Embedding dimension mismatch: table has {current_dim}, config expects {EMBEDDING_DIMENSION}")
-            # If it's 1024 (very old version), always recreate
-            if current_dim == 1024:
-                logger.info("Detected very old embedding dimension (1024), will recreate table")
+            logger.warning(f"Embedding dimension mismatch detected!")
+            logger.warning(f"  Current table: {current_dim} dimensions")
+            logger.warning(f"  Config expects: {EMBEDDING_DIMENSION} dimensions")
+            logger.info(f"Will trigger migration from {current_dim}D to {EMBEDDING_DIMENSION}D")
             return False
-    
-    return True
+        else:
+            logger.debug(f"Embedding dimensions match ({current_dim}D) - no migration needed")
+            return True
+    else:
+        # Couldn't parse dimension from SQL - assume incompatible for safety
+        logger.warning(f"Could not parse dimension from table schema: {create_sql}")
+        logger.warning("Assuming incompatible and will recreate table for safety")
+        return False
 
 
 def handle_embedding_dimension_change(conn: sqlite3.Connection) -> None:
     """
     Handle embedding dimension changes by dropping and recreating the embeddings table.
-    This will cause all embeddings to be regenerated.
+    This will cause all embeddings to be regenerated automatically.
     """
     cursor = conn.cursor()
     
-    logger.warning("Handling embedding dimension change...")
+    logger.info("=" * 60)
+    logger.info("🔄 STARTING EMBEDDING DIMENSION MIGRATION")
+    logger.info("=" * 60)
     
-    # Delete all embeddings
-    cursor.execute("DELETE FROM rag_embeddings")
+    # Get stats before migration
+    try:
+        cursor.execute("SELECT COUNT(*) FROM rag_embeddings")
+        old_embedding_count = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM rag_chunks")
+        chunk_count = cursor.fetchone()[0]
+        logger.info(f"📊 Migration stats:")
+        logger.info(f"   • Existing embeddings: {old_embedding_count}")
+        logger.info(f"   • Text chunks: {chunk_count}")
+    except Exception as e:
+        logger.debug(f"Could not get pre-migration stats: {e}")
+        old_embedding_count = "unknown"
+        chunk_count = "unknown"
     
-    # Drop the old table
-    cursor.execute("DROP TABLE IF EXISTS rag_embeddings")
+    logger.info("🗑️  Removing old embeddings and vector table...")
     
-    # Clear all stored hashes to force re-indexing
-    cursor.execute("DELETE FROM rag_meta WHERE meta_key LIKE 'hash_%'")
-    
-    # Reset last indexed timestamps to force re-indexing
-    cursor.execute("UPDATE rag_meta SET meta_value = '1970-01-01T00:00:00Z' WHERE meta_key LIKE 'last_indexed_%'")
-    
-    logger.info("Cleared embeddings and reset indexing timestamps for dimension change")
+    try:
+        # Delete all embeddings first (safer than DROP)
+        cursor.execute("DELETE FROM rag_embeddings")
+        logger.debug("Deleted all existing embeddings")
+        
+        # Drop the old virtual table
+        cursor.execute("DROP TABLE IF EXISTS rag_embeddings")
+        logger.debug("Dropped old rag_embeddings table")
+        
+        # Clear all stored hashes to force re-indexing of all content
+        cursor.execute("DELETE FROM rag_meta WHERE meta_key LIKE 'hash_%'")
+        hash_count = cursor.rowcount
+        logger.debug(f"Cleared {hash_count} stored file hashes")
+        
+        # Reset last indexed timestamps to force fresh indexing
+        cursor.execute("UPDATE rag_meta SET meta_value = '1970-01-01T00:00:00Z' WHERE meta_key LIKE 'last_indexed_%'")
+        timestamp_count = cursor.rowcount
+        logger.debug(f"Reset {timestamp_count} indexing timestamps")
+        
+        # Commit the changes
+        conn.commit()
+        
+        logger.info("✅ Migration preparation completed successfully")
+        logger.info(f"📝 Next steps:")
+        logger.info(f"   • New vector table will be created with {EMBEDDING_DIMENSION} dimensions")
+        logger.info(f"   • RAG indexer will automatically re-process all {chunk_count} chunks")
+        logger.info(f"   • This may take a few minutes and will use OpenAI API tokens")
+        logger.info("=" * 60)
+        
+    except Exception as e:
+        logger.error(f"❌ Error during migration: {e}")
+        conn.rollback()
+        raise RuntimeError(f"Embedding dimension migration failed: {e}") from e
 
 
 def init_database() -> None:

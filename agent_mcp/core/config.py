@@ -57,7 +57,7 @@ LOG_LEVEL: int = logging.INFO        # From main.py:43
 LOG_FORMAT_FILE: str = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 LOG_FORMAT_CONSOLE: str = f'%(asctime)s - %(name)s - %(levelname)s - {TUIColors.DIM}%(message)s{TUIColors.ENDC}'  # Dim message text
 
-CONSOLE_LOGGING_ENABLED = False  # New flag to control console logging globally
+CONSOLE_LOGGING_ENABLED = os.environ.get("MCP_DEBUG", "false").lower() == "true"  # Enable console logging in debug mode
 
 def setup_logging():
     """Configures global logging for the application."""
@@ -92,6 +92,28 @@ def setup_logging():
     logging.getLogger("uvicorn").setLevel(logging.WARNING)  # General uvicorn logger
     logging.getLogger("mcp.server.lowlevel.server").propagate = False  # Prevent duplication if it logs directly
 
+def enable_console_logging():
+    """Enable console logging dynamically (used when debug mode is enabled)."""
+    global CONSOLE_LOGGING_ENABLED
+    CONSOLE_LOGGING_ENABLED = True
+    
+    root_logger = logging.getLogger()
+    
+    # Check if console handler already exists
+    has_console_handler = any(isinstance(handler, logging.StreamHandler) and handler.stream == sys.stdout 
+                             for handler in root_logger.handlers)
+    
+    if not has_console_handler:
+        console_formatter = ColorfulFormatter(LOG_FORMAT_CONSOLE, datefmt='%H:%M:%S')
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setFormatter(console_formatter)
+        # Set logging level to DEBUG for more verbose output
+        console_handler.setLevel(logging.DEBUG)
+        root_logger.addHandler(console_handler)
+        
+        # Also set root logger to DEBUG level
+        root_logger.setLevel(logging.DEBUG)
+
 # Initialize logging when this module is imported
 setup_logging()
 logger = logging.getLogger("mcp_server")  # Main application logger
@@ -109,7 +131,7 @@ ADVANCED_EMBEDDINGS: bool = False  # Default to simple mode
 
 # Original/Simple mode configuration (default) - restored to original values
 SIMPLE_EMBEDDING_MODEL: str = "text-embedding-3-large" # Original embedding model (unchanged)
-SIMPLE_EMBEDDING_DIMENSION: int = 1024 # Original dimension (From main.py:180)
+SIMPLE_EMBEDDING_DIMENSION: int = 1536 # Increased from 1024 for better performance
 
 # Advanced mode configuration - new enhanced mode
 ADVANCED_EMBEDDING_MODEL: str = "text-embedding-3-large" # From main.py:178
