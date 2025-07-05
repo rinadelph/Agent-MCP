@@ -3,6 +3,7 @@ import json
 import datetime
 import subprocess # For launching Cursor (will be commented out)
 import os
+import sqlite3
 from typing import List, Dict, Any, Optional
 
 import mcp.types as mcp_types # Assuming this is your mcp.types path
@@ -382,6 +383,199 @@ async def view_audit_log_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.
         text=f"Audit Log ({len(limited_log_entries)} entries displayed, filtered by agent: {filter_agent_id or 'Any'}, action: {filter_action or 'Any'}):\n{log_json}"
     )]
 
+# --- get_agent_tokens tool ---
+async def get_agent_tokens_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.TextContent]:
+    """
+    Retrieve agent tokens with advanced filtering capabilities.
+    Supports filtering by status, agent_id pattern, creation date range, and more.
+    """
+    token = arguments.get("token")
+    
+    # Authentication
+    if not verify_token(token, "admin"):
+        return [mcp_types.TextContent(type="text", text="Unauthorized: Admin token required")]
+    
+    # Extract and validate filter parameters
+    filter_status = arguments.get("filter_status")  # e.g., "active", "terminated", "created"
+    filter_agent_id_pattern = arguments.get("filter_agent_id_pattern")  # SQL LIKE pattern
+    filter_created_after = arguments.get("filter_created_after")  # ISO format date
+    filter_created_before = arguments.get("filter_created_before")  # ISO format date
+    include_terminated = arguments.get("include_terminated", False)  # Boolean
+    include_sensitive_data = arguments.get("include_sensitive_data", True)  # Boolean
+    limit = arguments.get("limit", 50)  # Default limit
+    offset = arguments.get("offset", 0)  # Pagination offset
+    sort_by = arguments.get("sort_by", "created_at")  # Sort field
+    sort_order = arguments.get("sort_order", "DESC")  # ASC or DESC
+    
+    # Validate parameters
+    try:
+        limit = int(limit)
+        if not (1 <= limit <= 500):  # Max 500 for safety
+            limit = 50
+    except (ValueError, TypeError):
+        limit = 50
+    
+    try:
+        offset = int(offset)
+        if offset < 0:
+            offset = 0
+    except (ValueError, TypeError):
+        offset = 0
+    
+    # Validate sort parameters
+    allowed_sort_fields = ["created_at", "updated_at", "agent_id", "status"]
+    if sort_by not in allowed_sort_fields:
+        sort_by = "created_at"
+    
+    if sort_order.upper() not in ["ASC", "DESC"]:
+        sort_order = "DESC"
+    
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Build dynamic query
+        base_query = """
+            SELECT token, agent_id, status, created_at
+            FROM agents
+            WHERE 1=1
+        """
+        
+        query_params = []
+        
+        # Apply filters
+        if filter_status:
+            base_query += " AND status = ?"
+            query_params.append(filter_status)
+        
+        if filter_agent_id_pattern:
+            base_query += " AND agent_id LIKE ?"
+            query_params.append(filter_agent_id_pattern)
+        
+        if not include_terminated:
+            base_query += " AND status != ?"
+            query_params.append("terminated")
+        
+        if filter_created_after:
+            base_query += " AND created_at >= ?"
+            query_params.append(filter_created_after)
+        
+        if filter_created_before:
+            base_query += " AND created_at <= ?"
+            query_params.append(filter_created_before)
+        
+        # Add sorting and pagination
+        base_query += f" ORDER BY {sort_by} {sort_order}"
+        base_query += " LIMIT ? OFFSET ?"
+        query_params.extend([limit, offset])
+        
+        # Execute query
+        cursor.execute(base_query, query_params)
+        rows = cursor.fetchall()
+        
+        # Process results
+        agents_data = []
+        for row in rows:
+            agent_data = dict(row)
+            
+            # Handle sensitive data
+            if not include_sensitive_data:
+                # Mask the token for security
+                if 'token' in agent_data:
+                    token_value = agent_data['token']
+                    if token_value and len(token_value) > 8:
+                        agent_data['token'] = token_value[:4] + "..." + token_value[-4:]
+                    else:
+                        agent_data['token'] = "***"
+            
+            agents_data.append(agent_data)
+        
+        # Get total count for pagination info
+        count_query = """
+            SELECT COUNT(*) as total
+            FROM agents
+            WHERE 1=1
+        """
+        
+        count_params = []
+        if filter_status:
+            count_query += " AND status = ?"
+            count_params.append(filter_status)
+        
+        if filter_agent_id_pattern:
+            count_query += " AND agent_id LIKE ?"
+            count_params.append(filter_agent_id_pattern)
+        
+        if not include_terminated:
+            count_query += " AND status != ?"
+            count_params.append("terminated")
+        
+        if filter_created_after:
+            count_query += " AND created_at >= ?"
+            count_params.append(filter_created_after)
+        
+        if filter_created_before:
+            count_query += " AND created_at <= ?"
+            count_params.append(filter_created_before)
+        
+        cursor.execute(count_query, count_params)
+        total_count = cursor.fetchone()[0]
+        
+        # Log this access
+        log_audit("admin", "get_agent_tokens", {
+            "filter_status": filter_status,
+            "filter_agent_id_pattern": filter_agent_id_pattern,
+            "agents_returned": len(agents_data),
+            "total_matching": total_count,
+            "include_sensitive_data": include_sensitive_data
+        })
+        
+        # Build response
+        response_data = {
+            "agents": agents_data,
+            "pagination": {
+                "offset": offset,
+                "limit": limit,
+                "total_count": total_count,
+                "returned_count": len(agents_data),
+                "has_more": offset + len(agents_data) < total_count
+            },
+            "filters_applied": {
+                "filter_status": filter_status,
+                "filter_agent_id_pattern": filter_agent_id_pattern,
+                "filter_created_after": filter_created_after,
+                "filter_created_before": filter_created_before,
+                "include_terminated": include_terminated,
+                "include_sensitive_data": include_sensitive_data
+            },
+            "sort": {
+                "sort_by": sort_by,
+                "sort_order": sort_order
+            }
+        }
+        
+        try:
+            response_json = json.dumps(response_data, indent=2)
+        except TypeError as e:
+            logger.error(f"Error serializing agent tokens response to JSON: {e}")
+            response_json = f"Error creating response JSON: {e}"
+        
+        return [mcp_types.TextContent(
+            type="text",
+            text=f"Agent Tokens ({len(agents_data)} of {total_count} total):\n{response_json}"
+        )]
+    
+    except sqlite3.Error as e_sql:
+        logger.error(f"Database error retrieving agent tokens: {e_sql}", exc_info=True)
+        return [mcp_types.TextContent(type="text", text=f"Database error retrieving agent tokens: {e_sql}")]
+    except Exception as e:
+        logger.error(f"Unexpected error retrieving agent tokens: {e}", exc_info=True)
+        return [mcp_types.TextContent(type="text", text=f"Unexpected error retrieving agent tokens: {e}")]
+    finally:
+        if conn:
+            conn.close()
+
 
 # --- Register all admin tools ---
 def register_admin_tools():
@@ -460,6 +654,74 @@ def register_admin_tools():
             "additionalProperties": False
         },
         implementation=view_audit_log_tool_impl
+    )
+
+    register_tool(
+        name="get_agent_tokens",
+        description="Retrieve agent tokens with advanced filtering capabilities. Supports filtering by status, agent_id pattern, creation date range, and more.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "token": {
+                    "type": "string", 
+                    "description": "Admin authentication token"
+                },
+                "filter_status": {
+                    "type": "string",
+                    "description": "Filter by agent status (e.g., 'active', 'terminated', 'created')"
+                },
+                "filter_agent_id_pattern": {
+                    "type": "string",
+                    "description": "Filter by agent ID using SQL LIKE pattern (e.g., 'test_%', '%prod%')"
+                },
+                "filter_created_after": {
+                    "type": "string",
+                    "description": "Filter agents created after this date (ISO format: YYYY-MM-DDTHH:MM:SS)"
+                },
+                "filter_created_before": {
+                    "type": "string",
+                    "description": "Filter agents created before this date (ISO format: YYYY-MM-DDTHH:MM:SS)"
+                },
+                "include_terminated": {
+                    "type": "boolean",
+                    "description": "Include terminated agents in results (default: false)",
+                    "default": False
+                },
+                "include_sensitive_data": {
+                    "type": "boolean",
+                    "description": "Include full tokens in response (default: true). If false, tokens will be masked for security.",
+                    "default": True
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum number of agents to return (default: 50, max: 500)",
+                    "default": 50,
+                    "minimum": 1,
+                    "maximum": 500
+                },
+                "offset": {
+                    "type": "integer",
+                    "description": "Number of agents to skip for pagination (default: 0)",
+                    "default": 0,
+                    "minimum": 0
+                },
+                "sort_by": {
+                    "type": "string",
+                    "description": "Field to sort by (default: 'created_at')",
+                    "enum": ["created_at", "updated_at", "agent_id", "status"],
+                    "default": "created_at"
+                },
+                "sort_order": {
+                    "type": "string",
+                    "description": "Sort order (default: 'DESC')",
+                    "enum": ["ASC", "DESC"],
+                    "default": "DESC"
+                }
+            },
+            "required": ["token"],
+            "additionalProperties": False
+        },
+        implementation=get_agent_tokens_tool_impl
     )
 
 # Call registration when this module is imported
