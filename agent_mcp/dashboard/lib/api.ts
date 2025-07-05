@@ -165,8 +165,8 @@ class ApiClient {
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => 'Unknown error')
-        // Only log non-404 errors
-        if (response.status !== 404) {
+        // Only log non-404 and non-405 errors (405 = Method Not Allowed, expected for some endpoints)
+        if (response.status !== 404 && response.status !== 405) {
           console.error(`API Error [${response.status}]:`, errorText)
         }
         throw new Error(`API Error: ${response.status} ${response.statusText}`)
