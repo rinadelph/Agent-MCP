@@ -19,7 +19,7 @@ from ..utils.tmux_utils import (
     session_exists, sanitize_session_name, list_tmux_sessions,
     send_prompt_async
 )
-from ..utils.prompt_templates import build_agent_prompt, get_available_templates
+from ..utils.prompt_templates import build_agent_prompt
 from ..db.connection import get_db_connection
 from ..db.actions.agent_actions_db import log_agent_action_to_db # For DB logging
 
@@ -32,10 +32,10 @@ async def create_agent_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Te
     working_directory_arg = arguments.get("working_directory") # This was str
     
     # New prompt-related parameters
-    prompt_template = arguments.get("prompt_template", "basic_worker")  # Default template
+    prompt_template = arguments.get("prompt_template", "worker_with_rag")  # Default to RAG worker
     custom_prompt = arguments.get("custom_prompt")  # Custom prompt text
-    send_prompt = arguments.get("send_prompt", False)  # Whether to send prompt automatically
-    prompt_delay = arguments.get("prompt_delay", 3)  # Delay before sending prompt
+    send_prompt = arguments.get("send_prompt", True)  # Default to auto-send prompt
+    prompt_delay = arguments.get("prompt_delay", 5)  # Default 5 second delay
 
     if not verify_token(token, "admin"): # main.py:1066
         return [mcp_types.TextContent(type="text", text="Unauthorized: Admin token required")]
@@ -692,7 +692,7 @@ def register_admin_tools():
                     "type": "string",
                     "description": "Prompt template to use ('worker_with_rag', 'basic_worker', 'frontend_worker', 'admin_agent', 'custom')",
                     "enum": ["worker_with_rag", "basic_worker", "frontend_worker", "admin_agent", "custom"],
-                    "default": "basic_worker"
+                    "default": "worker_with_rag"
                 },
                 "custom_prompt": {
                     "type": "string",
@@ -701,12 +701,12 @@ def register_admin_tools():
                 "send_prompt": {
                     "type": "boolean",
                     "description": "Whether to automatically send the prompt to the tmux session after launch",
-                    "default": False
+                    "default": True
                 },
                 "prompt_delay": {
                     "type": "integer",
                     "description": "Seconds to wait before sending prompt (allows Claude to start up)",
-                    "default": 3,
+                    "default": 5,
                     "minimum": 1,
                     "maximum": 30
                 }
