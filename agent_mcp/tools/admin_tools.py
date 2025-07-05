@@ -23,6 +23,38 @@ from ..utils.prompt_templates import build_agent_prompt
 from ..db.connection import get_db_connection
 from ..db.actions.agent_actions_db import log_agent_action_to_db # For DB logging
 
+def get_admin_token_suffix(admin_token: str) -> str:
+    """
+    Extract the last 4 characters from admin token for session naming.
+    
+    Args:
+        admin_token: The admin authentication token
+        
+    Returns:
+        Last 4 characters of the token in lowercase
+    """
+    if not admin_token or len(admin_token) < 4:
+        return "0000"  # Fallback for invalid tokens
+    return admin_token[-4:].lower()
+
+
+def create_agent_session_name(agent_id: str, admin_token: str) -> str:
+    """
+    Create agent session name in format: agent_id-suffix
+    where suffix is the last 4 characters of the admin token.
+    
+    Args:
+        agent_id: The agent identifier
+        admin_token: The admin authentication token
+        
+    Returns:
+        Session name in format "agent_id-def2" where def2 is from admin token
+    """
+    suffix = get_admin_token_suffix(admin_token)
+    clean_agent_id = sanitize_session_name(agent_id)
+    return f"{clean_agent_id}-{suffix}"
+
+
 # --- create_agent tool ---
 # Original logic from main.py: lines 1060-1203 (create_agent_tool function)
 async def create_agent_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.TextContent]:
@@ -143,7 +175,7 @@ async def create_agent_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Te
         if is_tmux_available():
             try:
                 # Create sanitized session name
-                tmux_session_name = sanitize_session_name(agent_id)
+                tmux_session_name = create_agent_session_name(agent_id, token)
                 
                 # Set up environment variables for the agent
                 env_vars = {
@@ -668,6 +700,163 @@ async def get_agent_tokens_tool_impl(arguments: Dict[str, Any]) -> List[mcp_type
             conn.close()
 
 
+# --- relaunch_agent tool ---
+async def relaunch_agent_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.TextContent]:
+    """
+    Relaunch an existing agent by reusing its tmux session.
+    Only works for agents with status: terminated, completed, failed, cancelled.
+    Sends /clear to reset the session and sends a new prompt.
+    """
+    admin_token = arguments.get("token")
+    agent_id = arguments.get("agent_id")
+    generate_new_token = arguments.get("generate_new_token", False)
+    custom_prompt = arguments.get("custom_prompt")
+    prompt_template = arguments.get("prompt_template", "worker_with_rag")
+    
+    # Admin authentication
+    if not verify_token(admin_token, "admin"):
+        return [mcp_types.TextContent(type="text", text="Unauthorized: Admin token required")]
+    
+    if not agent_id:
+        return [mcp_types.TextContent(type="text", text="Error: agent_id is required")]
+    
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Check if agent exists and get current status
+        cursor.execute("SELECT * FROM agents WHERE agent_id = ?", (agent_id,))
+        agent_row = cursor.fetchone()
+        if not agent_row:
+            return [mcp_types.TextContent(type="text", text=f"Agent '{agent_id}' not found")]
+        
+        agent_data = dict(agent_row)
+        current_status = agent_data.get("status")
+        
+        # Only allow relaunch for certain statuses
+        allowed_statuses = ["terminated", "completed", "failed", "cancelled"]
+        if current_status not in allowed_statuses:
+            return [mcp_types.TextContent(
+                type="text", 
+                text=f"Cannot relaunch agent with status '{current_status}'. Allowed statuses: {', '.join(allowed_statuses)}"
+            )]
+        
+        # Check if tmux session still exists
+        if agent_id not in g.agent_tmux_sessions:
+            return [mcp_types.TextContent(
+                type="text", 
+                text=f"Agent '{agent_id}' has no active tmux session to relaunch. Use create_agent instead."
+            )]
+        
+        session_name = g.agent_tmux_sessions[agent_id]
+        if not session_exists(session_name):
+            # Clean up the dead session reference
+            del g.agent_tmux_sessions[agent_id]
+            return [mcp_types.TextContent(
+                type="text", 
+                text=f"Tmux session '{session_name}' for agent '{agent_id}' no longer exists. Use create_agent instead."
+            )]
+        
+        # Send /clear command to reset the session
+        clear_success = send_command_to_session(session_name, "/clear")
+        if not clear_success:
+            return [mcp_types.TextContent(
+                type="text", 
+                text=f"Failed to send /clear command to session '{session_name}'"
+            )]
+        
+        # Generate new token if requested
+        agent_token = agent_data.get("token")
+        if generate_new_token:
+            agent_token = generate_token()
+            cursor.execute("UPDATE agents SET token = ? WHERE agent_id = ?", (agent_token, agent_id))
+        
+        # Update agent status to active
+        updated_at_iso = datetime.datetime.now().isoformat()
+        cursor.execute("UPDATE agents SET status = ?, updated_at = ? WHERE agent_id = ?", 
+                      ("active", updated_at_iso, agent_id))
+        
+        # Build and send new prompt
+        try:
+            if custom_prompt:
+                prompt_to_send = custom_prompt
+            else:
+                prompt_to_send = build_agent_prompt(prompt_template, admin_token)
+            
+            # Send the new prompt to restart the agent
+            send_prompt_async(session_name, prompt_to_send, delay_seconds=2)
+            
+        except Exception as e_prompt:
+            logger.error(f"Failed to build or send prompt for relaunch: {e_prompt}")
+            # Revert status change
+            cursor.execute("UPDATE agents SET status = ? WHERE agent_id = ?", (current_status, agent_id))
+            conn.commit()
+            return [mcp_types.TextContent(
+                type="text", 
+                text=f"Failed to send restart prompt: {e_prompt}"
+            )]
+        
+        # Update in-memory state
+        if agent_token in g.active_agents:
+            g.active_agents[agent_token]["status"] = "active"
+            g.active_agents[agent_token]["updated_at"] = updated_at_iso
+        else:
+            # Add to active agents if not already there
+            g.active_agents[agent_token] = {
+                "agent_id": agent_id,
+                "status": "active", 
+                "token": agent_token,
+                "working_directory": agent_data.get("working_directory"),
+                "capabilities": json.loads(agent_data.get("capabilities", "[]")),
+                "updated_at": updated_at_iso
+            }
+        
+        # Log the action
+        log_agent_action_to_db(cursor, "admin", "relaunch_agent", 
+                               details={
+                                   "agent_id": agent_id,
+                                   "session_name": session_name,
+                                   "previous_status": current_status,
+                                   "new_token_generated": generate_new_token,
+                                   "prompt_template": prompt_template
+                               })
+        
+        conn.commit()
+        
+        log_audit("admin", "relaunch_agent", {
+            "agent_id": agent_id,
+            "previous_status": current_status,
+            "session_name": session_name,
+            "new_token": generate_new_token
+        })
+        
+        response_parts = [
+            f"Agent '{agent_id}' successfully relaunched in session '{session_name}'",
+            f"Previous status: {current_status} → active",
+            f"Session cleared and new prompt sent"
+        ]
+        
+        if generate_new_token:
+            response_parts.append(f"New token generated: {agent_token}")
+        else:
+            response_parts.append(f"Using existing token: {agent_token}")
+        
+        return [mcp_types.TextContent(type="text", text="\n".join(response_parts))]
+        
+    except sqlite3.Error as e_sql:
+        if conn: conn.rollback()
+        logger.error(f"Database error relaunching agent {agent_id}: {e_sql}", exc_info=True)
+        return [mcp_types.TextContent(type="text", text=f"Database error relaunching agent: {e_sql}")]
+    except Exception as e:
+        if conn: conn.rollback()
+        logger.error(f"Unexpected error relaunching agent {agent_id}: {e}", exc_info=True)
+        return [mcp_types.TextContent(type="text", text=f"Unexpected error relaunching agent: {e}")]
+    finally:
+        if conn:
+            conn.close()
+
+
 # --- Register all admin tools ---
 def register_admin_tools():
     register_tool(
@@ -835,6 +1024,41 @@ def register_admin_tools():
             "additionalProperties": False
         },
         implementation=get_agent_tokens_tool_impl
+    )
+    
+    register_tool(
+        name="relaunch_agent",
+        description="Relaunch an existing terminated/completed/failed/cancelled agent by reusing its tmux session.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "token": {
+                    "type": "string",
+                    "description": "Admin authentication token"
+                },
+                "agent_id": {
+                    "type": "string",
+                    "description": "ID of the agent to relaunch"
+                },
+                "generate_new_token": {
+                    "type": "boolean",
+                    "description": "Generate a new token for the relaunched agent (default: false)",
+                    "default": False
+                },
+                "custom_prompt": {
+                    "type": "string",
+                    "description": "Custom prompt to send instead of template prompt"
+                },
+                "prompt_template": {
+                    "type": "string",
+                    "description": "Prompt template to use (default: 'worker_with_rag')",
+                    "default": "worker_with_rag"
+                }
+            },
+            "required": ["token", "agent_id"],
+            "additionalProperties": False
+        },
+        implementation=relaunch_agent_tool_impl
     )
 
 # Call registration when this module is imported
