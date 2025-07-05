@@ -68,6 +68,12 @@ async def create_agent_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Te
     custom_prompt = arguments.get("custom_prompt")  # Custom prompt text
     send_prompt = arguments.get("send_prompt", True)  # Default to auto-send prompt
     prompt_delay = arguments.get("prompt_delay", 5)  # Default 5 second delay
+    
+    # Worktree-related parameters (experimental)
+    use_worktree = arguments.get("use_worktree", False)  # Enable worktree isolation
+    branch_name = arguments.get("branch_name")  # Custom branch name
+    base_branch = arguments.get("base_branch", "main")  # Base branch for new branch
+    auto_setup = arguments.get("auto_setup", True)  # Run setup commands automatically
 
     if not verify_token(token, "admin"): # main.py:1066
         return [mcp_types.TextContent(type="text", text="Unauthorized: Admin token required")]
@@ -99,7 +105,7 @@ async def create_agent_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Te
         agent_color = AGENT_COLORS[g.agent_color_index % len(AGENT_COLORS)]
         g.agent_color_index += 1
 
-        # Determine working directory (main.py:1100-1104)
+        # Determine working directory (main.py:1100-1104) with worktree support
         # MCP_PROJECT_DIR is set by cli.py or server startup.
         project_dir_env = os.environ.get("MCP_PROJECT_DIR")
         if not project_dir_env:
@@ -107,23 +113,78 @@ async def create_agent_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Te
             return [mcp_types.TextContent(type="text", text="Server configuration error: MCP_PROJECT_DIR not set.")]
         
         base_project_dir = os.path.abspath(project_dir_env)
-        if working_directory_arg and isinstance(working_directory_arg, str):
-            # Ensure working_directory_arg is treated as relative to project_dir if not absolute
-            if not os.path.isabs(working_directory_arg):
-                agent_working_dir_abs = os.path.abspath(os.path.join(base_project_dir, working_directory_arg))
-            else:
-                agent_working_dir_abs = os.path.abspath(working_directory_arg)
-            # Security check: ensure the working directory is within the project_dir or a configured allowed path
-            # For now, we assume any absolute path provided is acceptable if admin provides it.
-        else:
-            agent_working_dir_abs = base_project_dir
+        worktree_info = None
         
-        # Ensure the working directory exists
-        try:
-            os.makedirs(agent_working_dir_abs, exist_ok=True)
-        except OSError as e:
-            logger.error(f"Failed to create working directory {agent_working_dir_abs} for agent {agent_id}: {e}")
-            return [mcp_types.TextContent(type="text", text=f"Error creating working directory: {e}")]
+        # Handle worktree creation if requested
+        if use_worktree:
+            try:
+                from ..features.worktree_integration import (
+                    is_worktree_enabled, create_agent_worktree, WorktreeConfig
+                )
+                
+                if not is_worktree_enabled():
+                    return [mcp_types.TextContent(
+                        type="text", 
+                        text="Error: Worktree support is not enabled. Start server with --git flag to enable."
+                    )]
+                
+                # Create worktree configuration
+                worktree_config = WorktreeConfig(
+                    enabled=True,
+                    branch_name=branch_name,
+                    base_branch=base_branch,
+                    auto_setup=auto_setup,
+                    cleanup_strategy="on_terminate"
+                )
+                
+                # Get admin token suffix for worktree naming
+                admin_token_suffix = get_admin_token_suffix(token)
+                
+                # Create the worktree
+                logger.info(f"Creating worktree for agent {agent_id} with branch {branch_name or f'agent/{agent_id}'}")
+                worktree_result = create_agent_worktree(agent_id, admin_token_suffix, worktree_config)
+                
+                if not worktree_result["success"]:
+                    return [mcp_types.TextContent(
+                        type="text", 
+                        text=f"Error creating worktree: {worktree_result.get('error', 'Unknown error')}"
+                    )]
+                
+                # Use worktree path as working directory
+                agent_working_dir_abs = worktree_result["worktree_path"]
+                worktree_info = worktree_result["worktree_info"]
+                logger.info(f"✅ Agent {agent_id} worktree created at: {agent_working_dir_abs}")
+                
+            except ImportError:
+                return [mcp_types.TextContent(
+                    type="text", 
+                    text="Error: Worktree features not available. Check server configuration."
+                )]
+            except Exception as e:
+                logger.error(f"Failed to create worktree for agent {agent_id}: {e}")
+                return [mcp_types.TextContent(
+                    type="text", 
+                    text=f"Error creating worktree: {str(e)}"
+                )]
+        else:
+            # Standard working directory determination
+            if working_directory_arg and isinstance(working_directory_arg, str):
+                # Ensure working_directory_arg is treated as relative to project_dir if not absolute
+                if not os.path.isabs(working_directory_arg):
+                    agent_working_dir_abs = os.path.abspath(os.path.join(base_project_dir, working_directory_arg))
+                else:
+                    agent_working_dir_abs = os.path.abspath(working_directory_arg)
+                # Security check: ensure the working directory is within the project_dir or a configured allowed path
+                # For now, we assume any absolute path provided is acceptable if admin provides it.
+            else:
+                agent_working_dir_abs = base_project_dir
+            
+            # Ensure the working directory exists
+            try:
+                os.makedirs(agent_working_dir_abs, exist_ok=True)
+            except OSError as e:
+                logger.error(f"Failed to create working directory {agent_working_dir_abs} for agent {agent_id}: {e}")
+                return [mcp_types.TextContent(type="text", text=f"Error creating working directory: {e}")]
 
 
         # Insert into Database (main.py:1107-1117)
@@ -240,12 +301,25 @@ async def create_agent_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Te
             logger.warning("tmux is not available - agent session cannot be launched automatically")
             launch_status = "⚠️ tmux not available - manual agent setup required."
 
+        # Build worktree status for output
+        worktree_status = ""
+        if use_worktree and worktree_info:
+            worktree_status = (
+                f"🌿 Worktree Mode: ENABLED\n"
+                f"Branch: {worktree_info.get('branch', 'unknown')}\n"
+                f"Base Branch: {worktree_info.get('base_branch', 'unknown')}\n"
+                f"Setup Commands: {', '.join(worktree_info.get('setup_commands', []) or ['none'])}\n"
+            )
+        elif use_worktree:
+            worktree_status = "🌿 Worktree Mode: REQUESTED (but failed)\n"
+        
         # Log to console (main.py:1169-1174)
         console_output = (
             f"\n=== Agent '{agent_id}' Created ===\n"
             f"Token: {new_agent_token}\n"
             f"Assigned Color: {agent_color}\n"
             f"Working Directory: {agent_working_dir_abs}\n"
+            f"{worktree_status}"
             f"{launch_status}\n"
             f"=========================\n"
             f"=== System Prompt for {agent_id} ===\n{system_prompt_str}\n"
@@ -260,6 +334,7 @@ async def create_agent_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Te
                  f"Token: {new_agent_token}\n"
                  f"Assigned Color: {agent_color}\n"
                  f"Working Directory: {agent_working_dir_abs}\n"
+                 f"{worktree_status}"
                  f"{launch_status}\n\n"
                  f"System Prompt:\n{system_prompt_str}"
         )]
@@ -436,9 +511,34 @@ async def terminate_agent_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types
                     tmux_kill_status = f" Killed orphaned tmux session '{sanitized_name}'."
                     logger.info(f"Killed orphaned tmux session '{sanitized_name}' for agent '{agent_id_to_terminate}'")
 
+        # Clean up worktree if it exists
+        worktree_cleanup_status = ""
+        try:
+            from ..features.worktree_integration import is_worktree_enabled, cleanup_agent_worktree
+            
+            if is_worktree_enabled():
+                logger.info(f"Attempting worktree cleanup for agent {agent_id_to_terminate}")
+                cleanup_result = cleanup_agent_worktree(agent_id_to_terminate, force=False)
+                
+                if cleanup_result["success"]:
+                    if "No worktree found" in cleanup_result.get("message", ""):
+                        worktree_cleanup_status = " (no worktree to clean)"
+                    else:
+                        worktree_cleanup_status = " Cleaned up worktree."
+                        logger.info(f"Successfully cleaned up worktree for agent {agent_id_to_terminate}")
+                else:
+                    worktree_cleanup_status = f" Worktree cleanup failed: {cleanup_result.get('error', 'unknown error')}"
+                    logger.warning(f"Failed to clean up worktree for agent {agent_id_to_terminate}: {cleanup_result.get('error')}")
+        except ImportError:
+            # Worktree features not available - that's okay
+            pass
+        except Exception as e:
+            logger.warning(f"Error during worktree cleanup for agent {agent_id_to_terminate}: {e}")
+            worktree_cleanup_status = f" Worktree cleanup error: {str(e)}"
+
         log_audit("admin", "terminate_agent", {"agent_id": agent_id_to_terminate}) # main.py:1313
         logger.info(f"Agent '{agent_id_to_terminate}' terminated successfully.")
-        return [mcp_types.TextContent(type="text", text=f"Agent '{agent_id_to_terminate}' terminated.{tmux_kill_status}")]
+        return [mcp_types.TextContent(type="text", text=f"Agent '{agent_id_to_terminate}' terminated.{tmux_kill_status}{worktree_cleanup_status}")]
 
     except sqlite3.Error as e_sql:
         if conn: conn.rollback()
@@ -898,6 +998,25 @@ def register_admin_tools():
                     "default": 5,
                     "minimum": 1,
                     "maximum": 30
+                },
+                "use_worktree": {
+                    "type": "boolean",
+                    "description": "Enable Git worktree isolation for this agent (requires --git server flag)",
+                    "default": False
+                },
+                "branch_name": {
+                    "type": "string",
+                    "description": "Custom branch name for worktree (auto-generated if not provided)"
+                },
+                "base_branch": {
+                    "type": "string",
+                    "description": "Base branch to create new branch from (default: main)",
+                    "default": "main"
+                },
+                "auto_setup": {
+                    "type": "boolean",
+                    "description": "Automatically run project setup commands in worktree (npm install, etc.)",
+                    "default": True
                 }
             },
             "required": ["token", "agent_id"],
