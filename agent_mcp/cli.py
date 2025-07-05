@@ -4,6 +4,8 @@ import uvicorn # For running the Starlette app in SSE mode
 import anyio # For running async functions and task groups
 import os
 import sys
+import json
+import sqlite3
 from typing import Optional
 from pathlib import Path
 from dotenv import load_dotenv, dotenv_values
@@ -41,6 +43,37 @@ from .core import globals as g # For g.server_running and other globals
 from .app.main_app import create_app, mcp_app_instance # mcp_app_instance for stdio
 from .app.server_lifecycle import start_background_tasks, application_startup, application_shutdown # application_startup is called by create_app's on_startup
 from .tui.display import TUIDisplay # Import TUI display
+
+def get_admin_token_from_db(project_dir: str) -> Optional[str]:
+    """Get the admin token from the SQLite database."""
+    try:
+        # Construct the path to the database
+        db_path = Path(project_dir).resolve() / ".agent" / "mcp_state.db"
+        
+        if not db_path.exists():
+            return None
+            
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # Get the admin token from project_context table
+        cursor.execute("SELECT value FROM project_context WHERE context_key = ?", ("config_admin_token",))
+        row = cursor.fetchone()
+        
+        if row and row["value"]:
+            try:
+                admin_token = json.loads(row["value"])
+                if isinstance(admin_token, str) and admin_token:
+                    return admin_token
+            except json.JSONDecodeError:
+                pass
+        
+        conn.close()
+        return None
+    except Exception as e:
+        logger.error(f"Error reading admin token from database: {e}")
+        return None
 
 # --- Click Command Definition ---
 # This replicates the @click.command and options from the original main.py (lines 1936-1950)
@@ -219,7 +252,17 @@ def main_cli(port: int, transport: str, project_dir: str, admin_token_cli: Optio
                 tui.move_cursor(current_row, 1)
                 tui.clear_line()
                 print(f"MCP Port: {TUITheme.info(str(cli_port))}")
-                current_row += 3
+                current_row += 1
+                
+                # Display admin token
+                admin_token = get_admin_token_from_db(cli_project_dir)
+                if admin_token:
+                    tui.move_cursor(current_row, 1)
+                    tui.clear_line()
+                    print(f"Admin Token: {TUITheme.info(admin_token)}")
+                    current_row += 1
+                
+                current_row += 2
                 
                 # Display dashboard instructions
                 tui.move_cursor(current_row, 1)
@@ -329,6 +372,12 @@ def main_cli(port: int, transport: str, project_dir: str, admin_token_cli: Optio
                         print()
                         print(f"🚀 MCP Server running on port {port}")
                         print(f"📁 Project: {project_dir}")
+                        
+                        # Display admin token from database
+                        admin_token = get_admin_token_from_db(project_dir)
+                        if admin_token:
+                            print(f"🔑 Admin Token: {admin_token}")
+                        
                         print()
                         print("Next steps:")
                         dashboard_path = f"{project_dir}/agent_mcp/dashboard" if project_dir != "." else "agent_mcp/dashboard"
@@ -392,6 +441,12 @@ def main_cli(port: int, transport: str, project_dir: str, admin_token_cli: Optio
                         print()
                         print("🚀 MCP Server running (stdio transport)")
                         print("Server is ready for AI assistant connections.")
+                        
+                        # Display admin token from database
+                        admin_token = get_admin_token_from_db(project_dir)
+                        if admin_token:
+                            print(f"🔑 Admin Token: {admin_token}")
+                        
                         print("Use Ctrl+C to quit.")
                     
                     # Import stdio_server from mcp library
