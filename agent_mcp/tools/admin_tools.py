@@ -16,8 +16,10 @@ from ..utils.audit_utils import log_audit
 from ..utils.project_utils import generate_system_prompt # For create_agent
 from ..utils.tmux_utils import (
     is_tmux_available, create_tmux_session, kill_tmux_session, 
-    session_exists, sanitize_session_name, list_tmux_sessions
+    session_exists, sanitize_session_name, list_tmux_sessions,
+    send_prompt_async
 )
+from ..utils.prompt_templates import build_agent_prompt, get_available_templates
 from ..db.connection import get_db_connection
 from ..db.actions.agent_actions_db import log_agent_action_to_db # For DB logging
 
@@ -28,6 +30,12 @@ async def create_agent_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Te
     agent_id = arguments.get("agent_id")
     capabilities = arguments.get("capabilities") # This was List[str]
     working_directory_arg = arguments.get("working_directory") # This was str
+    
+    # New prompt-related parameters
+    prompt_template = arguments.get("prompt_template", "basic_worker")  # Default template
+    custom_prompt = arguments.get("custom_prompt")  # Custom prompt text
+    send_prompt = arguments.get("send_prompt", False)  # Whether to send prompt automatically
+    prompt_delay = arguments.get("prompt_delay", 3)  # Delay before sending prompt
 
     if not verify_token(token, "admin"): # main.py:1066
         return [mcp_types.TextContent(type="text", text="Unauthorized: Admin token required")]
@@ -160,7 +168,34 @@ async def create_agent_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Te
                 ):
                     # Track the tmux session in globals
                     g.agent_tmux_sessions[agent_id] = tmux_session_name
-                    launch_status = f"✅ tmux session '{tmux_session_name}' created for agent '{agent_id}' with Claude."
+                    base_status = f"✅ tmux session '{tmux_session_name}' created for agent '{agent_id}' with Claude."
+                    
+                    # Send prompt if requested
+                    prompt_status = ""
+                    if send_prompt:
+                        try:
+                            # Build the prompt using the template system
+                            agent_prompt = build_agent_prompt(
+                                agent_id=agent_id,
+                                agent_token=new_agent_token,
+                                admin_token=g.admin_token,
+                                template_name=prompt_template,
+                                custom_prompt=custom_prompt
+                            )
+                            
+                            if agent_prompt:
+                                # Send prompt asynchronously
+                                send_prompt_async(tmux_session_name, agent_prompt, prompt_delay)
+                                prompt_status = f" Prompt will be sent in {prompt_delay} seconds using '{prompt_template}' template."
+                                logger.info(f"Scheduled prompt delivery for agent '{agent_id}' using template '{prompt_template}'")
+                            else:
+                                prompt_status = f" ❌ Failed to build prompt using template '{prompt_template}'."
+                                logger.error(f"Failed to build prompt for agent '{agent_id}' using template '{prompt_template}'")
+                        except Exception as e_prompt:
+                            prompt_status = f" ❌ Error setting up prompt: {str(e_prompt)}"
+                            logger.error(f"Error setting up prompt for agent '{agent_id}': {e_prompt}")
+                    
+                    launch_status = base_status + prompt_status
                     logger.info(f"tmux session '{tmux_session_name}' launched for agent '{agent_id}'")
                 else:
                     launch_status = f"❌ Failed to create tmux session for agent '{agent_id}'."
@@ -637,8 +672,8 @@ async def get_agent_tokens_tool_impl(arguments: Dict[str, Any]) -> List[mcp_type
 def register_admin_tools():
     register_tool(
         name="create_agent",
-        description="Create a new agent with the specified ID, capabilities, and optional working directory.",
-        input_schema={ # From main.py:1641-1661, added working_directory
+        description="Create a new agent with the specified ID, capabilities, working directory, and prompt configuration for tmux-based launching.",
+        input_schema={ # Enhanced with prompt template support
             "type": "object",
             "properties": {
                 "token": {"type": "string", "description": "Admin authentication token"},
@@ -652,10 +687,32 @@ def register_admin_tools():
                 "working_directory": {
                     "type": "string",
                     "description": "Optional working directory for the agent. If relative, it's based on the project root. Defaults to project root."
+                },
+                "prompt_template": {
+                    "type": "string",
+                    "description": "Prompt template to use ('worker_with_rag', 'basic_worker', 'frontend_worker', 'admin_agent', 'custom')",
+                    "enum": ["worker_with_rag", "basic_worker", "frontend_worker", "admin_agent", "custom"],
+                    "default": "basic_worker"
+                },
+                "custom_prompt": {
+                    "type": "string",
+                    "description": "Custom prompt text (required if prompt_template is 'custom')"
+                },
+                "send_prompt": {
+                    "type": "boolean",
+                    "description": "Whether to automatically send the prompt to the tmux session after launch",
+                    "default": False
+                },
+                "prompt_delay": {
+                    "type": "integer",
+                    "description": "Seconds to wait before sending prompt (allows Claude to start up)",
+                    "default": 3,
+                    "minimum": 1,
+                    "maximum": 30
                 }
             },
             "required": ["token", "agent_id"],
-            "additionalProperties": False # As per original
+            "additionalProperties": False
         },
         implementation=create_agent_tool_impl
     )

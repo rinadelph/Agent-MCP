@@ -297,6 +297,89 @@ def send_command_to_session(session_name: str, command: str) -> bool:
         return False
 
 
+def send_prompt_to_session(session_name: str, prompt: str, delay_seconds: int = 3) -> bool:
+    """
+    Send a prompt to a tmux session after a delay to allow Claude to start up.
+    Uses proper tmux command separation: first type the text, then send Enter.
+    
+    Args:
+        session_name: Name of the target session
+        prompt: Prompt text to send
+        delay_seconds: Seconds to wait before sending prompt
+    
+    Returns:
+        True if prompt was sent successfully, False otherwise
+    """
+    import time
+    
+    if not is_tmux_available():
+        return False
+    
+    clean_session_name = sanitize_session_name(session_name)
+    
+    if not session_exists(clean_session_name):
+        logger.warning(f"tmux session '{clean_session_name}' does not exist")
+        return False
+    
+    try:
+        # Wait for Claude to start up
+        logger.info(f"Waiting {delay_seconds} seconds for Claude to start up in session '{clean_session_name}'")
+        time.sleep(delay_seconds)
+        
+        # First command: Type the prompt text (without Enter)
+        logger.debug(f"Typing prompt to session '{clean_session_name}'")
+        result = subprocess.run(['tmux', 'send-keys', '-t', clean_session_name, prompt], 
+                              capture_output=True, 
+                              text=True, 
+                              timeout=10)
+        
+        if result.returncode != 0:
+            logger.error(f"Failed to type prompt to session: {result.stderr}")
+            return False
+        
+        # Small delay between typing and pressing Enter
+        time.sleep(0.5)
+        
+        # Second command: Send Enter to execute
+        logger.debug(f"Sending Enter to session '{clean_session_name}'")
+        result = subprocess.run(['tmux', 'send-keys', '-t', clean_session_name, 'Enter'], 
+                              capture_output=True, 
+                              text=True, 
+                              timeout=5)
+        
+        if result.returncode == 0:
+            logger.info(f"Successfully sent prompt to tmux session '{clean_session_name}'")
+            return True
+        else:
+            logger.error(f"Failed to send Enter to session: {result.stderr}")
+            return False
+        
+    except subprocess.TimeoutExpired:
+        logger.error(f"Timeout sending prompt to tmux session '{clean_session_name}'")
+        return False
+    except Exception as e:
+        logger.error(f"Error sending prompt to tmux session '{clean_session_name}': {e}")
+        return False
+
+
+def send_prompt_async(session_name: str, prompt: str, delay_seconds: int = 3) -> None:
+    """
+    Send a prompt to a tmux session asynchronously in a background thread.
+    
+    Args:
+        session_name: Name of the target session
+        prompt: Prompt text to send
+        delay_seconds: Seconds to wait before sending prompt
+    """
+    import threading
+    
+    def _send_prompt():
+        send_prompt_to_session(session_name, prompt, delay_seconds)
+    
+    thread = threading.Thread(target=_send_prompt, daemon=True)
+    thread.start()
+
+
 def cleanup_agent_sessions(active_agent_ids: List[str]) -> int:
     """
     Clean up tmux sessions that don't correspond to active agents.
