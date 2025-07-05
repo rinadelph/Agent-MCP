@@ -14,6 +14,10 @@ from ..core import globals as g
 from ..core.auth import verify_token, generate_token # For create_agent, terminate_agent
 from ..utils.audit_utils import log_audit
 from ..utils.project_utils import generate_system_prompt # For create_agent
+from ..utils.tmux_utils import (
+    is_tmux_available, create_tmux_session, kill_tmux_session, 
+    session_exists, sanitize_session_name, list_tmux_sessions
+)
 from ..db.connection import get_db_connection
 from ..db.actions.agent_actions_db import log_agent_action_to_db # For DB logging
 
@@ -124,42 +128,50 @@ async def create_agent_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Te
         # `generate_system_prompt` now takes `admin_token_runtime`.
         system_prompt_str = generate_system_prompt(agent_id, new_agent_token, g.admin_token)
 
-        # Launch Cursor window (main.py:1150-1166) - COMMENTED OUT AS REQUESTED
-        launch_status = "Cursor window launch functionality is currently disabled in the refactored code."
-        # try:
-        #     profile_num = g.agent_profile_counter
-        #     g.agent_profile_counter -= 1
-        #     if g.agent_profile_counter < 1: g.agent_profile_counter = 20
-        #
-        #     cursor_exe_path = os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "Cursor", "Cursor.exe")
-        #     if not os.path.exists(cursor_exe_path):
-        #         # Try common alternative paths or log error
-        #         # For now, assume it might not be found and report that.
-        #         logger.warning(f"Cursor.exe not found at default path: {cursor_exe_path}")
-        #         raise FileNotFoundError(f"Cursor.exe not found at {cursor_exe_path}")
-        #
-        #     env_vars = os.environ.copy()
-        #     env_vars["CURSOR_AGENT_ID"] = agent_id
-        #     env_vars["CURSOR_MCP_URL"] = f"http://localhost:{os.environ.get('PORT', '8080')}" # Should use configured URL
-        #     env_vars["CURSOR_WORKING_DIR"] = agent_working_dir_abs
-        #     if agent_id.lower().startswith("admin") and new_agent_token == g.admin_token: # Check if this agent IS the admin
-        #         env_vars["CURSOR_ADMIN_TOKEN"] = g.admin_token
-        #     else:
-        #         env_vars["CURSOR_AGENT_TOKEN"] = new_agent_token
-        #
-        #     # Using subprocess.Popen for non-blocking start
-        #     subprocess.Popen([
-        #         "cmd", "/c", "start", f"Cursor Agent - {agent_id}", cursor_exe_path,
-        #         f"--user-data-dir={profile_num}", "--max-memory=16384" # Consider making memory configurable
-        #     ], env=env_vars, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=subprocess.CREATE_NO_WINDOW) # CREATE_NO_WINDOW for Windows
-        #     launch_status = f"✅ Cursor window for agent '{agent_id}' launched with profile {profile_num}."
-        #     logger.info(launch_status)
-        # except FileNotFoundError as e_fnf:
-        #     launch_status = f"❌ Failed to launch Cursor: {str(e_fnf)}. Ensure Cursor is installed at the expected location."
-        #     logger.error(launch_status)
-        # except Exception as e_launch:
-        #     launch_status = f"❌ Failed to launch Cursor window: {str(e_launch)}"
-        #     logger.error(launch_status, exc_info=True)
+        # Launch tmux session with Claude
+        launch_status = "tmux session launching disabled - tmux not available."
+        tmux_session_name = None
+        
+        if is_tmux_available():
+            try:
+                # Create sanitized session name
+                tmux_session_name = sanitize_session_name(agent_id)
+                
+                # Set up environment variables for the agent
+                env_vars = {
+                    "MCP_AGENT_ID": agent_id,
+                    "MCP_AGENT_TOKEN": new_agent_token,
+                    "MCP_SERVER_URL": f"http://localhost:{os.environ.get('PORT', '8080')}",
+                    "MCP_WORKING_DIR": agent_working_dir_abs,
+                }
+                
+                # Add admin token if this is an admin agent
+                if agent_id.lower().startswith("admin") and new_agent_token == g.admin_token:
+                    env_vars["MCP_ADMIN_TOKEN"] = g.admin_token
+                
+                # Create the tmux session with Claude
+                claude_command = "claude --dangerously-skip-permissions"
+                
+                if create_tmux_session(
+                    session_name=tmux_session_name,
+                    working_dir=agent_working_dir_abs,
+                    command=claude_command,
+                    env_vars=env_vars
+                ):
+                    # Track the tmux session in globals
+                    g.agent_tmux_sessions[agent_id] = tmux_session_name
+                    launch_status = f"✅ tmux session '{tmux_session_name}' created for agent '{agent_id}' with Claude."
+                    logger.info(f"tmux session '{tmux_session_name}' launched for agent '{agent_id}'")
+                else:
+                    launch_status = f"❌ Failed to create tmux session for agent '{agent_id}'."
+                    logger.error(launch_status)
+                    
+            except Exception as e_launch:
+                launch_status = f"❌ Failed to launch tmux session: {str(e_launch)}"
+                logger.error(launch_status, exc_info=True)
+        else:
+            logger.warning("tmux is not available - agent session cannot be launched automatically")
+            launch_status = "⚠️ tmux not available - manual agent setup required."
 
         # Log to console (main.py:1169-1174)
         console_output = (
@@ -230,13 +242,37 @@ async def view_status_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Tex
         uptime_str = str(uptime_delta)
 
 
+    # Get tmux session information
+    tmux_info = {
+        "tmux_available": is_tmux_available(),
+        "tracked_sessions": len(g.agent_tmux_sessions),
+        "active_sessions": [],
+        "session_details": {}
+    }
+    
+    if is_tmux_available():
+        tmux_sessions = list_tmux_sessions()
+        tmux_info["active_sessions"] = [s["name"] for s in tmux_sessions]
+        tmux_info["session_details"] = {s["name"]: s for s in tmux_sessions}
+        
+        # Add tmux session info to agent details
+        for agent_id, agent_data in agent_status_dict.items():
+            if agent_id in g.agent_tmux_sessions:
+                session_name = g.agent_tmux_sessions[agent_id]
+                agent_data["tmux_session"] = session_name
+                agent_data["session_active"] = session_name in tmux_info["active_sessions"]
+            else:
+                agent_data["tmux_session"] = None
+                agent_data["session_active"] = False
+
     status_payload = { # main.py:1260-1266
         "active_connections": len(g.connections), # g.connections might be managed by SSE transport layer
         "active_agents_count": len(g.active_agents),
         "agents_details": agent_status_dict,
         "server_uptime": uptime_str,
         "file_map_size": len(g.file_map),
-        "file_map_preview": {k: v for i, (k, v) in enumerate(g.file_map.items()) if i < 5} # Preview first 5
+        "file_map_preview": {k: v for i, (k, v) in enumerate(g.file_map.items()) if i < 5}, # Preview first 5
+        "tmux_info": tmux_info
         # Consider adding task counts, DB status, RAG index status etc.
     }
 
@@ -312,10 +348,30 @@ async def terminate_agent_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types
         if files_released_count > 0:
             logger.info(f"Released {files_released_count} files held by terminated agent {agent_id_to_terminate}.")
 
+        # Kill tmux session if it exists
+        tmux_kill_status = ""
+        if agent_id_to_terminate in g.agent_tmux_sessions:
+            session_name = g.agent_tmux_sessions[agent_id_to_terminate]
+            if kill_tmux_session(session_name):
+                tmux_kill_status = f" Killed tmux session '{session_name}'."
+                logger.info(f"Killed tmux session '{session_name}' for agent '{agent_id_to_terminate}'")
+            else:
+                tmux_kill_status = f" Failed to kill tmux session '{session_name}'."
+                logger.warning(f"Failed to kill tmux session '{session_name}' for agent '{agent_id_to_terminate}'")
+            
+            # Remove from tracking regardless of kill success
+            del g.agent_tmux_sessions[agent_id_to_terminate]
+        else:
+            # Try to kill session by agent_id in case tracking is out of sync
+            sanitized_name = sanitize_session_name(agent_id_to_terminate)
+            if session_exists(sanitized_name):
+                if kill_tmux_session(sanitized_name):
+                    tmux_kill_status = f" Killed orphaned tmux session '{sanitized_name}'."
+                    logger.info(f"Killed orphaned tmux session '{sanitized_name}' for agent '{agent_id_to_terminate}'")
 
         log_audit("admin", "terminate_agent", {"agent_id": agent_id_to_terminate}) # main.py:1313
         logger.info(f"Agent '{agent_id_to_terminate}' terminated successfully.")
-        return [mcp_types.TextContent(type="text", text=f"Agent '{agent_id_to_terminate}' terminated.")]
+        return [mcp_types.TextContent(type="text", text=f"Agent '{agent_id_to_terminate}' terminated.{tmux_kill_status}")]
 
     except sqlite3.Error as e_sql:
         if conn: conn.rollback()

@@ -1,0 +1,331 @@
+# Agent-MCP/agent_mcp/utils/tmux_utils.py
+import subprocess
+import re
+import shlex
+from typing import List, Dict, Optional, Any
+from pathlib import Path
+
+from ..core.config import logger
+
+
+def is_tmux_available() -> bool:
+    """Check if tmux is installed and available."""
+    try:
+        result = subprocess.run(['tmux', '-V'], 
+                              capture_output=True, 
+                              text=True, 
+                              timeout=5)
+        return result.returncode == 0
+    except (subprocess.TimeoutExpired, FileNotFoundError, subprocess.SubprocessError):
+        return False
+
+
+def sanitize_session_name(name: str) -> str:
+    """
+    Sanitize session name to be safe for tmux.
+    Tmux session names cannot contain: . : [ ] space $ and other special chars
+    """
+    # Replace invalid characters with underscores
+    sanitized = re.sub(r'[.:\[\]\s$\'"`\\]', '_', name)
+    # Remove any consecutive underscores
+    sanitized = re.sub(r'_+', '_', sanitized)
+    # Remove leading/trailing underscores
+    sanitized = sanitized.strip('_')
+    # Ensure it starts with alphanumeric
+    if sanitized and not sanitized[0].isalnum():
+        sanitized = 'agent_' + sanitized
+    return sanitized or 'agent_session'
+
+
+def create_tmux_session(session_name: str, 
+                       working_dir: str, 
+                       command: str = None,
+                       env_vars: Dict[str, str] = None) -> bool:
+    """
+    Create a new tmux session with the given name and working directory.
+    
+    Args:
+        session_name: Name for the tmux session (will be sanitized)
+        working_dir: Working directory for the session
+        command: Optional command to run in the session
+        env_vars: Optional environment variables to set
+    
+    Returns:
+        True if session was created successfully, False otherwise
+    """
+    if not is_tmux_available():
+        logger.error("tmux is not available on this system")
+        return False
+    
+    # Sanitize session name
+    clean_session_name = sanitize_session_name(session_name)
+    
+    # Check if session already exists
+    if session_exists(clean_session_name):
+        logger.warning(f"tmux session '{clean_session_name}' already exists")
+        return False
+    
+    # Ensure working directory exists
+    try:
+        Path(working_dir).mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        logger.error(f"Failed to create working directory {working_dir}: {e}")
+        return False
+    
+    try:
+        # Build tmux command
+        tmux_cmd = ['tmux', 'new-session', '-d', '-s', clean_session_name, '-c', working_dir]
+        
+        # Add environment variables if provided
+        env = None
+        if env_vars:
+            import os
+            env = os.environ.copy()
+            env.update(env_vars)
+        
+        # Add the command to run if provided
+        if command:
+            tmux_cmd.append(command)
+        
+        # Execute tmux command
+        result = subprocess.run(tmux_cmd, 
+                              capture_output=True, 
+                              text=True, 
+                              timeout=10,
+                              env=env)
+        
+        if result.returncode == 0:
+            logger.info(f"Created tmux session '{clean_session_name}' in {working_dir}")
+            return True
+        else:
+            logger.error(f"Failed to create tmux session: {result.stderr}")
+            return False
+            
+    except subprocess.TimeoutExpired:
+        logger.error(f"Timeout creating tmux session '{clean_session_name}'")
+        return False
+    except Exception as e:
+        logger.error(f"Error creating tmux session '{clean_session_name}': {e}")
+        return False
+
+
+def session_exists(session_name: str) -> bool:
+    """Check if a tmux session with the given name exists."""
+    if not is_tmux_available():
+        return False
+    
+    clean_session_name = sanitize_session_name(session_name)
+    
+    try:
+        result = subprocess.run(['tmux', 'has-session', '-t', clean_session_name], 
+                              capture_output=True, 
+                              timeout=5)
+        return result.returncode == 0
+    except (subprocess.TimeoutExpired, subprocess.SubprocessError):
+        return False
+
+
+def list_tmux_sessions() -> List[Dict[str, Any]]:
+    """
+    List all tmux sessions with detailed information.
+    
+    Returns:
+        List of dictionaries containing session information
+    """
+    if not is_tmux_available():
+        return []
+    
+    try:
+        # Use tmux list-sessions with a specific format
+        result = subprocess.run(['tmux', 'list-sessions', '-F', 
+                               '#{session_name}|#{session_created}|#{session_attached}|#{session_windows}'], 
+                              capture_output=True, 
+                              text=True, 
+                              timeout=10)
+        
+        if result.returncode != 0:
+            if "no server running" in result.stderr:
+                return []  # No tmux server running, no sessions
+            logger.warning(f"Failed to list tmux sessions: {result.stderr}")
+            return []
+        
+        sessions = []
+        for line in result.stdout.strip().split('\n'):
+            if line:
+                parts = line.split('|')
+                if len(parts) >= 4:
+                    sessions.append({
+                        'name': parts[0],
+                        'created': parts[1],
+                        'attached': parts[2] == '1',
+                        'windows': int(parts[3])
+                    })
+        
+        return sessions
+        
+    except subprocess.TimeoutExpired:
+        logger.error("Timeout listing tmux sessions")
+        return []
+    except Exception as e:
+        logger.error(f"Error listing tmux sessions: {e}")
+        return []
+
+
+def kill_tmux_session(session_name: str) -> bool:
+    """
+    Kill a tmux session by name.
+    
+    Args:
+        session_name: Name of the session to kill
+    
+    Returns:
+        True if session was killed successfully, False otherwise
+    """
+    if not is_tmux_available():
+        logger.error("tmux is not available on this system")
+        return False
+    
+    clean_session_name = sanitize_session_name(session_name)
+    
+    if not session_exists(clean_session_name):
+        logger.warning(f"tmux session '{clean_session_name}' does not exist")
+        return True  # Consider it "successful" if it doesn't exist
+    
+    try:
+        result = subprocess.run(['tmux', 'kill-session', '-t', clean_session_name], 
+                              capture_output=True, 
+                              text=True, 
+                              timeout=10)
+        
+        if result.returncode == 0:
+            logger.info(f"Killed tmux session '{clean_session_name}'")
+            return True
+        else:
+            logger.error(f"Failed to kill tmux session '{clean_session_name}': {result.stderr}")
+            return False
+            
+    except subprocess.TimeoutExpired:
+        logger.error(f"Timeout killing tmux session '{clean_session_name}'")
+        return False
+    except Exception as e:
+        logger.error(f"Error killing tmux session '{clean_session_name}': {e}")
+        return False
+
+
+def get_session_status(session_name: str) -> Optional[Dict[str, Any]]:
+    """
+    Get detailed status information for a specific tmux session.
+    
+    Args:
+        session_name: Name of the session to check
+    
+    Returns:
+        Dictionary with session status or None if session doesn't exist
+    """
+    if not is_tmux_available():
+        return None
+    
+    clean_session_name = sanitize_session_name(session_name)
+    
+    if not session_exists(clean_session_name):
+        return None
+    
+    try:
+        # Get detailed session information
+        result = subprocess.run(['tmux', 'display-message', '-t', clean_session_name, '-p',
+                               '#{session_name}|#{session_created}|#{session_attached}|#{session_windows}|#{session_id}'], 
+                              capture_output=True, 
+                              text=True, 
+                              timeout=5)
+        
+        if result.returncode == 0:
+            parts = result.stdout.strip().split('|')
+            if len(parts) >= 5:
+                return {
+                    'name': parts[0],
+                    'created': parts[1],
+                    'attached': parts[2] == '1',
+                    'windows': int(parts[3]),
+                    'session_id': parts[4],
+                    'exists': True
+                }
+        
+        return None
+        
+    except subprocess.TimeoutExpired:
+        logger.error(f"Timeout getting status for tmux session '{clean_session_name}'")
+        return None
+    except Exception as e:
+        logger.error(f"Error getting status for tmux session '{clean_session_name}': {e}")
+        return None
+
+
+def send_command_to_session(session_name: str, command: str) -> bool:
+    """
+    Send a command to a tmux session.
+    
+    Args:
+        session_name: Name of the target session
+        command: Command to send
+    
+    Returns:
+        True if command was sent successfully, False otherwise
+    """
+    if not is_tmux_available():
+        return False
+    
+    clean_session_name = sanitize_session_name(session_name)
+    
+    if not session_exists(clean_session_name):
+        logger.warning(f"tmux session '{clean_session_name}' does not exist")
+        return False
+    
+    try:
+        # Send the command followed by Enter
+        result = subprocess.run(['tmux', 'send-keys', '-t', clean_session_name, command, 'Enter'], 
+                              capture_output=True, 
+                              text=True, 
+                              timeout=5)
+        
+        return result.returncode == 0
+        
+    except subprocess.TimeoutExpired:
+        logger.error(f"Timeout sending command to tmux session '{clean_session_name}'")
+        return False
+    except Exception as e:
+        logger.error(f"Error sending command to tmux session '{clean_session_name}': {e}")
+        return False
+
+
+def cleanup_agent_sessions(active_agent_ids: List[str]) -> int:
+    """
+    Clean up tmux sessions that don't correspond to active agents.
+    
+    Args:
+        active_agent_ids: List of currently active agent IDs
+    
+    Returns:
+        Number of sessions cleaned up
+    """
+    if not is_tmux_available():
+        return 0
+    
+    sessions = list_tmux_sessions()
+    cleaned_count = 0
+    
+    # Clean up sessions that start with 'agent_' but aren't in active_agent_ids
+    for session in sessions:
+        session_name = session['name']
+        
+        # Check if this looks like an agent session
+        if session_name.startswith('agent_') or any(session_name == sanitize_session_name(agent_id) for agent_id in active_agent_ids):
+            # Extract potential agent ID
+            potential_agent_id = session_name.replace('agent_', '')
+            clean_agent_ids = [sanitize_session_name(aid) for aid in active_agent_ids]
+            
+            if session_name not in clean_agent_ids and potential_agent_id not in active_agent_ids:
+                logger.info(f"Cleaning up orphaned agent session: {session_name}")
+                if kill_tmux_session(session_name):
+                    cleaned_count += 1
+    
+    return cleaned_count
