@@ -16,7 +16,7 @@ from ..core.auth import verify_token, get_agent_id
 from ..utils.audit_utils import log_audit
 from ..db.connection import get_db_connection
 from ..db.actions.agent_actions_db import log_agent_action_to_db
-from ..utils.tmux_utils import send_prompt_async, session_exists, sanitize_session_name
+from ..utils.tmux_utils import send_prompt_async, session_exists, sanitize_session_name, send_command_to_session
 
 
 def _generate_message_id() -> str:
@@ -84,8 +84,12 @@ async def send_agent_message_tool_impl(arguments: Dict[str, Any]) -> List[mcp_ty
     if len(message_content) > 4000:  # Reasonable message size limit
         return [mcp_types.TextContent(type="text", text="Error: Message too long (max 4000 characters)")]
     
-    # Permission check
+    # Admin-only check for stop commands
     is_admin = verify_token(sender_token, "admin")
+    if message_type == "stop_command" and not is_admin:
+        return [mcp_types.TextContent(type="text", text="Error: Only admin can send stop commands")]
+    
+    # Permission check
     can_communicate, reason = _can_agents_communicate(sender_id, recipient_id, is_admin)
     
     if not can_communicate:
@@ -128,21 +132,56 @@ async def send_agent_message_tool_impl(arguments: Dict[str, Any]) -> List[mcp_ty
             if recipient_id in g.agent_tmux_sessions:
                 session_name = g.agent_tmux_sessions[recipient_id]
                 if session_exists(session_name):
-                    # Format message for delivery
-                    formatted_message = f"\n💬 Message from {sender_id} ({priority}): {message_content}\n"
-                    
-                    # Send message to tmux session
-                    try:
-                        send_prompt_async(session_name, formatted_message, delay_seconds=1)
-                        delivery_status = "delivered_tmux"
+                    # Handle stop commands differently
+                    if message_type == "stop_command":
+                        # Send control sequence to interrupt the agent
+                        try:
+                            import subprocess
+                            clean_session_name = sanitize_session_name(session_name)
+                            
+                            # Send Escape 4 times with 1 second intervals to stop current operation
+                            import time
+                            success = True
+                            for i in range(4):
+                                result = subprocess.run(['tmux', 'send-keys', '-t', clean_session_name, 'Escape'], 
+                                                      capture_output=True, text=True, timeout=5)
+                                if result.returncode != 0:
+                                    success = False
+                                    break
+                                logger.debug(f"Sent Escape {i+1}/4 to agent {recipient_id}")
+                                if i < 3:  # Don't sleep after the last one
+                                    time.sleep(1)
+                            
+                            if success:
+                                delivery_status = "delivered_stop_command"
+                                logger.info(f"Stop command (4x Escape) sent to agent {recipient_id} in session {session_name}")
+                            else:
+                                delivery_status = "stop_command_failed"
+                                logger.error(f"Failed to send stop command: {result.stderr}")
+                            
+                            # Mark as delivered in database
+                            cursor.execute("UPDATE agent_messages SET delivered = ? WHERE message_id = ?", 
+                                         (success, message_id))
+                                         
+                        except Exception as e:
+                            logger.error(f"Failed to send stop command to tmux session '{session_name}': {e}")
+                            delivery_status = "stop_command_failed"
+                    else:
+                        # Format regular message for delivery
+                        formatted_message = f"\n💬 Message from {sender_id} ({priority}): {message_content}\n"
                         
-                        # Mark as delivered in database
-                        cursor.execute("UPDATE agent_messages SET delivered = ? WHERE message_id = ?", 
-                                     (True, message_id))
-                        
-                    except Exception as e:
-                        logger.error(f"Failed to deliver message to tmux session '{session_name}': {e}")
-                        delivery_status = "delivery_failed"
+                        # Send message to tmux session
+                        try:
+                            send_prompt_async(session_name, formatted_message, delay_seconds=1)
+                            delivery_status = "delivered_tmux"
+                            
+                            # Mark as delivered in database
+                            cursor.execute("UPDATE agent_messages SET delivered = ? WHERE message_id = ?", 
+                                         (True, message_id))
+                            
+                        except Exception as e:
+                            logger.error(f"Failed to deliver message to tmux session '{session_name}': {e}")
+                            delivery_status = "delivery_failed"
                 else:
                     delivery_status = "session_not_found"
             else:
@@ -174,12 +213,14 @@ async def send_agent_message_tool_impl(arguments: Dict[str, Any]) -> List[mcp_ty
             "delivered_tmux": "Message delivered to recipient's session",
             "delivery_failed": "Message stored but delivery failed",
             "session_not_found": "Message stored; recipient session not active",
-            "no_session": "Message stored; recipient has no active session"
+            "no_session": "Message stored; recipient has no active session",
+            "delivered_stop_command": "Stop command sent to recipient's session",
+            "stop_command_failed": "Stop command failed to send"
         }
         
         response_text = f"Message sent to {recipient_id}. {status_messages.get(delivery_status, 'Unknown status')}"
         
-        if delivery_status != "delivered_tmux":
+        if delivery_status not in ["delivered_tmux", "delivered_stop_command"]:
             response_text += f" (Message ID: {message_id})"
         
         return [mcp_types.TextContent(type="text", text=response_text)]
@@ -395,7 +436,7 @@ def register_agent_communication_tools():
                 "message_type": {
                     "type": "string",
                     "description": "Type of message",
-                    "enum": ["text", "assistance_request", "task_update", "notification"],
+                    "enum": ["text", "assistance_request", "task_update", "notification", "stop_command"],
                     "default": "text"
                 },
                 "priority": {
@@ -452,7 +493,7 @@ def register_agent_communication_tools():
                 "message_type": {
                     "type": "string",
                     "description": "Filter by message type",
-                    "enum": ["text", "assistance_request", "task_update", "notification"]
+                    "enum": ["text", "assistance_request", "task_update", "notification", "stop_command"]
                 },
                 "unread_only": {
                     "type": "boolean",

@@ -412,3 +412,154 @@ def cleanup_agent_sessions(active_agent_ids: List[str]) -> int:
                     cleaned_count += 1
     
     return cleaned_count
+
+
+def get_admin_token_suffix(admin_token: str) -> str:
+    """
+    Get the last 4 characters of the admin token for session naming.
+    
+    Args:
+        admin_token: The admin authentication token
+        
+    Returns:
+        Last 4 characters of the token in lowercase
+    """
+    if not admin_token or len(admin_token) < 4:
+        return "0000"  # Fallback for invalid tokens
+    return admin_token[-4:].lower()
+
+
+def generate_agent_session_name(agent_id: str, admin_token: str) -> str:
+    """
+    Generate a smart tmux session name in the format: agent-{suffix}
+    where suffix is the last 4 characters of the admin token.
+    
+    Args:
+        agent_id: The agent identifier
+        admin_token: The admin authentication token
+        
+    Returns:
+        Session name in format "agent-1234" where 1234 is from admin token
+    """
+    suffix = get_admin_token_suffix(admin_token)
+    # Use agent_id prefix + suffix to make it unique per agent but identifiable
+    clean_agent_id = sanitize_session_name(agent_id)
+    return f"{clean_agent_id}-{suffix}"
+
+
+def parse_agent_session_name(session_name: str, admin_token: str) -> Optional[str]:
+    """
+    Parse an agent session name to extract the agent ID.
+    
+    Args:
+        session_name: The tmux session name to parse
+        admin_token: The admin token to verify suffix
+        
+    Returns:
+        Agent ID if the session matches the pattern, None otherwise
+    """
+    suffix = get_admin_token_suffix(admin_token)
+    
+    # Check if session name ends with the admin token suffix
+    if not session_name.endswith(f"-{suffix}"):
+        return None
+    
+    # Extract agent ID by removing the suffix
+    agent_id = session_name[:-len(f"-{suffix}")]
+    
+    # Basic validation - agent ID should not be empty
+    if not agent_id:
+        return None
+        
+    return agent_id
+
+
+def discover_active_agents_from_tmux(admin_token: str) -> List[Dict[str, Any]]:
+    """
+    Discover active agents by scanning tmux sessions for our naming pattern.
+    
+    Args:
+        admin_token: The admin token to identify our sessions
+        
+    Returns:
+        List of discovered agent info with agent_id, session_name, etc.
+    """
+    discovered_agents = []
+    
+    try:
+        sessions = list_tmux_sessions()
+        suffix = get_admin_token_suffix(admin_token)
+        
+        for session in sessions:
+            session_name = session['name']
+            
+            # Check if this session matches our agent pattern
+            agent_id = parse_agent_session_name(session_name, admin_token)
+            
+            if agent_id:
+                discovered_agents.append({
+                    'agent_id': agent_id,
+                    'session_name': session_name,
+                    'session_created': session.get('created'),
+                    'session_attached': session.get('attached', False),
+                    'session_windows': session.get('windows', 1),
+                    'discovered_from_tmux': True
+                })
+                logger.info(f"Discovered agent '{agent_id}' in tmux session '{session_name}'")
+        
+        logger.info(f"Discovered {len(discovered_agents)} agents from tmux sessions with suffix '{suffix}'")
+        
+    except Exception as e:
+        logger.error(f"Error discovering agents from tmux: {e}")
+    
+    return discovered_agents
+
+
+def sync_agents_from_tmux(admin_token: str) -> Dict[str, Any]:
+    """
+    Synchronize agent tracking by discovering active agents from tmux sessions.
+    
+    Args:
+        admin_token: The admin token to identify our sessions
+        
+    Returns:
+        Summary of sync operation with discovered agents and stats
+    """
+    discovered_agents = discover_active_agents_from_tmux(admin_token)
+    
+    # Import here to avoid circular imports
+    from ..core import globals as g
+    
+    sync_summary = {
+        'discovered_count': len(discovered_agents),
+        'discovered_agents': [],
+        'already_tracked': [],
+        'newly_tracked': []
+    }
+    
+    for agent_info in discovered_agents:
+        agent_id = agent_info['agent_id']
+        session_name = agent_info['session_name']
+        
+        sync_summary['discovered_agents'].append({
+            'agent_id': agent_id,
+            'session_name': session_name,
+            'session_attached': agent_info['session_attached']
+        })
+        
+        # Check if we're already tracking this session
+        if agent_id in g.agent_tmux_sessions:
+            if g.agent_tmux_sessions[agent_id] == session_name:
+                sync_summary['already_tracked'].append(agent_id)
+            else:
+                # Update session name if it changed
+                g.agent_tmux_sessions[agent_id] = session_name
+                sync_summary['newly_tracked'].append(agent_id)
+                logger.info(f"Updated session tracking for agent '{agent_id}': {session_name}")
+        else:
+            # Start tracking this agent session
+            g.agent_tmux_sessions[agent_id] = session_name
+            sync_summary['newly_tracked'].append(agent_id)
+            logger.info(f"Started tracking agent '{agent_id}' in session '{session_name}'")
+    
+    return sync_summary
