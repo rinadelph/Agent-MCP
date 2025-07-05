@@ -32,6 +32,10 @@ file_map: Dict[str, Dict[str, Any]] = {}  # filepath -> {"agent_id": ..., "times
 # From main.py:154
 agent_working_dirs: Dict[str, str] = {}  # agent_id -> absolute_working_directory_path
 
+# --- Tmux Session Management ---
+# Maps agent_id -> tmux session name for tracking active agent sessions
+agent_tmux_sessions: Dict[str, str] = {}  # agent_id -> tmux_session_name
+
 # --- Auditing and Agent Management ---
 # From main.py:155
 # In-memory audit log for the current session. Persistent log is 'agent_audit.log'.
