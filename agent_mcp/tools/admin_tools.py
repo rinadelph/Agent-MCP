@@ -14,8 +14,46 @@ from ..core import globals as g
 from ..core.auth import verify_token, generate_token # For create_agent, terminate_agent
 from ..utils.audit_utils import log_audit
 from ..utils.project_utils import generate_system_prompt # For create_agent
+from ..utils.tmux_utils import (
+    is_tmux_available, create_tmux_session, kill_tmux_session, 
+    session_exists, sanitize_session_name, list_tmux_sessions,
+    send_prompt_async
+)
+from ..utils.prompt_templates import build_agent_prompt
 from ..db.connection import get_db_connection
 from ..db.actions.agent_actions_db import log_agent_action_to_db # For DB logging
+
+def get_admin_token_suffix(admin_token: str) -> str:
+    """
+    Extract the last 4 characters from admin token for session naming.
+    
+    Args:
+        admin_token: The admin authentication token
+        
+    Returns:
+        Last 4 characters of the token in lowercase
+    """
+    if not admin_token or len(admin_token) < 4:
+        return "0000"  # Fallback for invalid tokens
+    return admin_token[-4:].lower()
+
+
+def create_agent_session_name(agent_id: str, admin_token: str) -> str:
+    """
+    Create agent session name in format: agent_id-suffix
+    where suffix is the last 4 characters of the admin token.
+    
+    Args:
+        agent_id: The agent identifier
+        admin_token: The admin authentication token
+        
+    Returns:
+        Session name in format "agent_id-def2" where def2 is from admin token
+    """
+    suffix = get_admin_token_suffix(admin_token)
+    clean_agent_id = sanitize_session_name(agent_id)
+    return f"{clean_agent_id}-{suffix}"
+
 
 # --- create_agent tool ---
 # Original logic from main.py: lines 1060-1203 (create_agent_tool function)
@@ -24,6 +62,18 @@ async def create_agent_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Te
     agent_id = arguments.get("agent_id")
     capabilities = arguments.get("capabilities") # This was List[str]
     working_directory_arg = arguments.get("working_directory") # This was str
+    
+    # New prompt-related parameters
+    prompt_template = arguments.get("prompt_template", "worker_with_rag")  # Default to RAG worker
+    custom_prompt = arguments.get("custom_prompt")  # Custom prompt text
+    send_prompt = arguments.get("send_prompt", True)  # Default to auto-send prompt
+    prompt_delay = arguments.get("prompt_delay", 5)  # Default 5 second delay
+    
+    # Worktree-related parameters (experimental)
+    use_worktree = arguments.get("use_worktree", False)  # Enable worktree isolation
+    branch_name = arguments.get("branch_name")  # Custom branch name
+    base_branch = arguments.get("base_branch", "main")  # Base branch for new branch
+    auto_setup = arguments.get("auto_setup", True)  # Run setup commands automatically
 
     if not verify_token(token, "admin"): # main.py:1066
         return [mcp_types.TextContent(type="text", text="Unauthorized: Admin token required")]
@@ -55,7 +105,7 @@ async def create_agent_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Te
         agent_color = AGENT_COLORS[g.agent_color_index % len(AGENT_COLORS)]
         g.agent_color_index += 1
 
-        # Determine working directory (main.py:1100-1104)
+        # Determine working directory (main.py:1100-1104) with worktree support
         # MCP_PROJECT_DIR is set by cli.py or server startup.
         project_dir_env = os.environ.get("MCP_PROJECT_DIR")
         if not project_dir_env:
@@ -63,23 +113,78 @@ async def create_agent_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Te
             return [mcp_types.TextContent(type="text", text="Server configuration error: MCP_PROJECT_DIR not set.")]
         
         base_project_dir = os.path.abspath(project_dir_env)
-        if working_directory_arg and isinstance(working_directory_arg, str):
-            # Ensure working_directory_arg is treated as relative to project_dir if not absolute
-            if not os.path.isabs(working_directory_arg):
-                agent_working_dir_abs = os.path.abspath(os.path.join(base_project_dir, working_directory_arg))
-            else:
-                agent_working_dir_abs = os.path.abspath(working_directory_arg)
-            # Security check: ensure the working directory is within the project_dir or a configured allowed path
-            # For now, we assume any absolute path provided is acceptable if admin provides it.
-        else:
-            agent_working_dir_abs = base_project_dir
+        worktree_info = None
         
-        # Ensure the working directory exists
-        try:
-            os.makedirs(agent_working_dir_abs, exist_ok=True)
-        except OSError as e:
-            logger.error(f"Failed to create working directory {agent_working_dir_abs} for agent {agent_id}: {e}")
-            return [mcp_types.TextContent(type="text", text=f"Error creating working directory: {e}")]
+        # Handle worktree creation if requested
+        if use_worktree:
+            try:
+                from ..features.worktree_integration import (
+                    is_worktree_enabled, create_agent_worktree, WorktreeConfig
+                )
+                
+                if not is_worktree_enabled():
+                    return [mcp_types.TextContent(
+                        type="text", 
+                        text="Error: Worktree support is not enabled. Start server with --git flag to enable."
+                    )]
+                
+                # Create worktree configuration
+                worktree_config = WorktreeConfig(
+                    enabled=True,
+                    branch_name=branch_name,
+                    base_branch=base_branch,
+                    auto_setup=auto_setup,
+                    cleanup_strategy="on_terminate"
+                )
+                
+                # Get admin token suffix for worktree naming
+                admin_token_suffix = get_admin_token_suffix(token)
+                
+                # Create the worktree
+                logger.info(f"Creating worktree for agent {agent_id} with branch {branch_name or f'agent/{agent_id}'}")
+                worktree_result = create_agent_worktree(agent_id, admin_token_suffix, worktree_config)
+                
+                if not worktree_result["success"]:
+                    return [mcp_types.TextContent(
+                        type="text", 
+                        text=f"Error creating worktree: {worktree_result.get('error', 'Unknown error')}"
+                    )]
+                
+                # Use worktree path as working directory
+                agent_working_dir_abs = worktree_result["worktree_path"]
+                worktree_info = worktree_result["worktree_info"]
+                logger.info(f"✅ Agent {agent_id} worktree created at: {agent_working_dir_abs}")
+                
+            except ImportError:
+                return [mcp_types.TextContent(
+                    type="text", 
+                    text="Error: Worktree features not available. Check server configuration."
+                )]
+            except Exception as e:
+                logger.error(f"Failed to create worktree for agent {agent_id}: {e}")
+                return [mcp_types.TextContent(
+                    type="text", 
+                    text=f"Error creating worktree: {str(e)}"
+                )]
+        else:
+            # Standard working directory determination
+            if working_directory_arg and isinstance(working_directory_arg, str):
+                # Ensure working_directory_arg is treated as relative to project_dir if not absolute
+                if not os.path.isabs(working_directory_arg):
+                    agent_working_dir_abs = os.path.abspath(os.path.join(base_project_dir, working_directory_arg))
+                else:
+                    agent_working_dir_abs = os.path.abspath(working_directory_arg)
+                # Security check: ensure the working directory is within the project_dir or a configured allowed path
+                # For now, we assume any absolute path provided is acceptable if admin provides it.
+            else:
+                agent_working_dir_abs = base_project_dir
+            
+            # Ensure the working directory exists
+            try:
+                os.makedirs(agent_working_dir_abs, exist_ok=True)
+            except OSError as e:
+                logger.error(f"Failed to create working directory {agent_working_dir_abs} for agent {agent_id}: {e}")
+                return [mcp_types.TextContent(type="text", text=f"Error creating working directory: {e}")]
 
 
         # Insert into Database (main.py:1107-1117)
@@ -124,49 +229,97 @@ async def create_agent_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Te
         # `generate_system_prompt` now takes `admin_token_runtime`.
         system_prompt_str = generate_system_prompt(agent_id, new_agent_token, g.admin_token)
 
-        # Launch Cursor window (main.py:1150-1166) - COMMENTED OUT AS REQUESTED
-        launch_status = "Cursor window launch functionality is currently disabled in the refactored code."
-        # try:
-        #     profile_num = g.agent_profile_counter
-        #     g.agent_profile_counter -= 1
-        #     if g.agent_profile_counter < 1: g.agent_profile_counter = 20
-        #
-        #     cursor_exe_path = os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "Cursor", "Cursor.exe")
-        #     if not os.path.exists(cursor_exe_path):
-        #         # Try common alternative paths or log error
-        #         # For now, assume it might not be found and report that.
-        #         logger.warning(f"Cursor.exe not found at default path: {cursor_exe_path}")
-        #         raise FileNotFoundError(f"Cursor.exe not found at {cursor_exe_path}")
-        #
-        #     env_vars = os.environ.copy()
-        #     env_vars["CURSOR_AGENT_ID"] = agent_id
-        #     env_vars["CURSOR_MCP_URL"] = f"http://localhost:{os.environ.get('PORT', '8080')}" # Should use configured URL
-        #     env_vars["CURSOR_WORKING_DIR"] = agent_working_dir_abs
-        #     if agent_id.lower().startswith("admin") and new_agent_token == g.admin_token: # Check if this agent IS the admin
-        #         env_vars["CURSOR_ADMIN_TOKEN"] = g.admin_token
-        #     else:
-        #         env_vars["CURSOR_AGENT_TOKEN"] = new_agent_token
-        #
-        #     # Using subprocess.Popen for non-blocking start
-        #     subprocess.Popen([
-        #         "cmd", "/c", "start", f"Cursor Agent - {agent_id}", cursor_exe_path,
-        #         f"--user-data-dir={profile_num}", "--max-memory=16384" # Consider making memory configurable
-        #     ], env=env_vars, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=subprocess.CREATE_NO_WINDOW) # CREATE_NO_WINDOW for Windows
-        #     launch_status = f"✅ Cursor window for agent '{agent_id}' launched with profile {profile_num}."
-        #     logger.info(launch_status)
-        # except FileNotFoundError as e_fnf:
-        #     launch_status = f"❌ Failed to launch Cursor: {str(e_fnf)}. Ensure Cursor is installed at the expected location."
-        #     logger.error(launch_status)
-        # except Exception as e_launch:
-        #     launch_status = f"❌ Failed to launch Cursor window: {str(e_launch)}"
-        #     logger.error(launch_status, exc_info=True)
+        # Launch tmux session with Claude
+        launch_status = "tmux session launching disabled - tmux not available."
+        tmux_session_name = None
+        
+        if is_tmux_available():
+            try:
+                # Create sanitized session name
+                tmux_session_name = create_agent_session_name(agent_id, token)
+                
+                # Set up environment variables for the agent
+                env_vars = {
+                    "MCP_AGENT_ID": agent_id,
+                    "MCP_AGENT_TOKEN": new_agent_token,
+                    "MCP_SERVER_URL": f"http://localhost:{os.environ.get('PORT', '8080')}",
+                    "MCP_WORKING_DIR": agent_working_dir_abs,
+                }
+                
+                # Add admin token if this is an admin agent
+                if agent_id.lower().startswith("admin") and new_agent_token == g.admin_token:
+                    env_vars["MCP_ADMIN_TOKEN"] = g.admin_token
+                
+                # Create the tmux session with Claude
+                claude_command = "claude --dangerously-skip-permissions"
+                
+                if create_tmux_session(
+                    session_name=tmux_session_name,
+                    working_dir=agent_working_dir_abs,
+                    command=claude_command,
+                    env_vars=env_vars
+                ):
+                    # Track the tmux session in globals
+                    g.agent_tmux_sessions[agent_id] = tmux_session_name
+                    base_status = f"✅ tmux session '{tmux_session_name}' created for agent '{agent_id}' with Claude."
+                    
+                    # Send prompt if requested
+                    prompt_status = ""
+                    if send_prompt:
+                        try:
+                            # Build the prompt using the template system
+                            agent_prompt = build_agent_prompt(
+                                agent_id=agent_id,
+                                agent_token=new_agent_token,
+                                admin_token=g.admin_token,
+                                template_name=prompt_template,
+                                custom_prompt=custom_prompt
+                            )
+                            
+                            if agent_prompt:
+                                # Send prompt asynchronously
+                                send_prompt_async(tmux_session_name, agent_prompt, prompt_delay)
+                                prompt_status = f" Prompt will be sent in {prompt_delay} seconds using '{prompt_template}' template."
+                                logger.info(f"Scheduled prompt delivery for agent '{agent_id}' using template '{prompt_template}'")
+                            else:
+                                prompt_status = f" ❌ Failed to build prompt using template '{prompt_template}'."
+                                logger.error(f"Failed to build prompt for agent '{agent_id}' using template '{prompt_template}'")
+                        except Exception as e_prompt:
+                            prompt_status = f" ❌ Error setting up prompt: {str(e_prompt)}"
+                            logger.error(f"Error setting up prompt for agent '{agent_id}': {e_prompt}")
+                    
+                    launch_status = base_status + prompt_status
+                    logger.info(f"tmux session '{tmux_session_name}' launched for agent '{agent_id}'")
+                else:
+                    launch_status = f"❌ Failed to create tmux session for agent '{agent_id}'."
+                    logger.error(launch_status)
+                    
+            except Exception as e_launch:
+                launch_status = f"❌ Failed to launch tmux session: {str(e_launch)}"
+                logger.error(launch_status, exc_info=True)
+        else:
+            logger.warning("tmux is not available - agent session cannot be launched automatically")
+            launch_status = "⚠️ tmux not available - manual agent setup required."
 
+        # Build worktree status for output
+        worktree_status = ""
+        if use_worktree and worktree_info:
+            worktree_status = (
+                f"🌿 Worktree Mode: ENABLED\n"
+                f"Branch: {worktree_info.get('branch', 'unknown')}\n"
+                f"Base Branch: {worktree_info.get('base_branch', 'unknown')}\n"
+                f"Setup Commands: {', '.join(worktree_info.get('setup_commands', []) or ['none'])}\n"
+            )
+        elif use_worktree:
+            worktree_status = "🌿 Worktree Mode: REQUESTED (but failed)\n"
+        
         # Log to console (main.py:1169-1174)
         console_output = (
             f"\n=== Agent '{agent_id}' Created ===\n"
             f"Token: {new_agent_token}\n"
             f"Assigned Color: {agent_color}\n"
             f"Working Directory: {agent_working_dir_abs}\n"
+            f"{worktree_status}"
             f"{launch_status}\n"
             f"=========================\n"
             f"=== System Prompt for {agent_id} ===\n{system_prompt_str}\n"
@@ -181,6 +334,7 @@ async def create_agent_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Te
                  f"Token: {new_agent_token}\n"
                  f"Assigned Color: {agent_color}\n"
                  f"Working Directory: {agent_working_dir_abs}\n"
+                 f"{worktree_status}"
                  f"{launch_status}\n\n"
                  f"System Prompt:\n{system_prompt_str}"
         )]
@@ -230,13 +384,37 @@ async def view_status_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Tex
         uptime_str = str(uptime_delta)
 
 
+    # Get tmux session information
+    tmux_info = {
+        "tmux_available": is_tmux_available(),
+        "tracked_sessions": len(g.agent_tmux_sessions),
+        "active_sessions": [],
+        "session_details": {}
+    }
+    
+    if is_tmux_available():
+        tmux_sessions = list_tmux_sessions()
+        tmux_info["active_sessions"] = [s["name"] for s in tmux_sessions]
+        tmux_info["session_details"] = {s["name"]: s for s in tmux_sessions}
+        
+        # Add tmux session info to agent details
+        for agent_id, agent_data in agent_status_dict.items():
+            if agent_id in g.agent_tmux_sessions:
+                session_name = g.agent_tmux_sessions[agent_id]
+                agent_data["tmux_session"] = session_name
+                agent_data["session_active"] = session_name in tmux_info["active_sessions"]
+            else:
+                agent_data["tmux_session"] = None
+                agent_data["session_active"] = False
+
     status_payload = { # main.py:1260-1266
         "active_connections": len(g.connections), # g.connections might be managed by SSE transport layer
         "active_agents_count": len(g.active_agents),
         "agents_details": agent_status_dict,
         "server_uptime": uptime_str,
         "file_map_size": len(g.file_map),
-        "file_map_preview": {k: v for i, (k, v) in enumerate(g.file_map.items()) if i < 5} # Preview first 5
+        "file_map_preview": {k: v for i, (k, v) in enumerate(g.file_map.items()) if i < 5}, # Preview first 5
+        "tmux_info": tmux_info
         # Consider adding task counts, DB status, RAG index status etc.
     }
 
@@ -312,10 +490,55 @@ async def terminate_agent_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types
         if files_released_count > 0:
             logger.info(f"Released {files_released_count} files held by terminated agent {agent_id_to_terminate}.")
 
+        # Kill tmux session if it exists
+        tmux_kill_status = ""
+        if agent_id_to_terminate in g.agent_tmux_sessions:
+            session_name = g.agent_tmux_sessions[agent_id_to_terminate]
+            if kill_tmux_session(session_name):
+                tmux_kill_status = f" Killed tmux session '{session_name}'."
+                logger.info(f"Killed tmux session '{session_name}' for agent '{agent_id_to_terminate}'")
+            else:
+                tmux_kill_status = f" Failed to kill tmux session '{session_name}'."
+                logger.warning(f"Failed to kill tmux session '{session_name}' for agent '{agent_id_to_terminate}'")
+            
+            # Remove from tracking regardless of kill success
+            del g.agent_tmux_sessions[agent_id_to_terminate]
+        else:
+            # Try to kill session by agent_id in case tracking is out of sync
+            sanitized_name = sanitize_session_name(agent_id_to_terminate)
+            if session_exists(sanitized_name):
+                if kill_tmux_session(sanitized_name):
+                    tmux_kill_status = f" Killed orphaned tmux session '{sanitized_name}'."
+                    logger.info(f"Killed orphaned tmux session '{sanitized_name}' for agent '{agent_id_to_terminate}'")
+
+        # Clean up worktree if it exists
+        worktree_cleanup_status = ""
+        try:
+            from ..features.worktree_integration import is_worktree_enabled, cleanup_agent_worktree
+            
+            if is_worktree_enabled():
+                logger.info(f"Attempting worktree cleanup for agent {agent_id_to_terminate}")
+                cleanup_result = cleanup_agent_worktree(agent_id_to_terminate, force=False)
+                
+                if cleanup_result["success"]:
+                    if "No worktree found" in cleanup_result.get("message", ""):
+                        worktree_cleanup_status = " (no worktree to clean)"
+                    else:
+                        worktree_cleanup_status = " Cleaned up worktree."
+                        logger.info(f"Successfully cleaned up worktree for agent {agent_id_to_terminate}")
+                else:
+                    worktree_cleanup_status = f" Worktree cleanup failed: {cleanup_result.get('error', 'unknown error')}"
+                    logger.warning(f"Failed to clean up worktree for agent {agent_id_to_terminate}: {cleanup_result.get('error')}")
+        except ImportError:
+            # Worktree features not available - that's okay
+            pass
+        except Exception as e:
+            logger.warning(f"Error during worktree cleanup for agent {agent_id_to_terminate}: {e}")
+            worktree_cleanup_status = f" Worktree cleanup error: {str(e)}"
 
         log_audit("admin", "terminate_agent", {"agent_id": agent_id_to_terminate}) # main.py:1313
         logger.info(f"Agent '{agent_id_to_terminate}' terminated successfully.")
-        return [mcp_types.TextContent(type="text", text=f"Agent '{agent_id_to_terminate}' terminated.")]
+        return [mcp_types.TextContent(type="text", text=f"Agent '{agent_id_to_terminate}' terminated.{tmux_kill_status}{worktree_cleanup_status}")]
 
     except sqlite3.Error as e_sql:
         if conn: conn.rollback()
@@ -577,12 +800,169 @@ async def get_agent_tokens_tool_impl(arguments: Dict[str, Any]) -> List[mcp_type
             conn.close()
 
 
+# --- relaunch_agent tool ---
+async def relaunch_agent_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.TextContent]:
+    """
+    Relaunch an existing agent by reusing its tmux session.
+    Only works for agents with status: terminated, completed, failed, cancelled.
+    Sends /clear to reset the session and sends a new prompt.
+    """
+    admin_token = arguments.get("token")
+    agent_id = arguments.get("agent_id")
+    generate_new_token = arguments.get("generate_new_token", False)
+    custom_prompt = arguments.get("custom_prompt")
+    prompt_template = arguments.get("prompt_template", "worker_with_rag")
+    
+    # Admin authentication
+    if not verify_token(admin_token, "admin"):
+        return [mcp_types.TextContent(type="text", text="Unauthorized: Admin token required")]
+    
+    if not agent_id:
+        return [mcp_types.TextContent(type="text", text="Error: agent_id is required")]
+    
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Check if agent exists and get current status
+        cursor.execute("SELECT * FROM agents WHERE agent_id = ?", (agent_id,))
+        agent_row = cursor.fetchone()
+        if not agent_row:
+            return [mcp_types.TextContent(type="text", text=f"Agent '{agent_id}' not found")]
+        
+        agent_data = dict(agent_row)
+        current_status = agent_data.get("status")
+        
+        # Only allow relaunch for certain statuses
+        allowed_statuses = ["terminated", "completed", "failed", "cancelled"]
+        if current_status not in allowed_statuses:
+            return [mcp_types.TextContent(
+                type="text", 
+                text=f"Cannot relaunch agent with status '{current_status}'. Allowed statuses: {', '.join(allowed_statuses)}"
+            )]
+        
+        # Check if tmux session still exists
+        if agent_id not in g.agent_tmux_sessions:
+            return [mcp_types.TextContent(
+                type="text", 
+                text=f"Agent '{agent_id}' has no active tmux session to relaunch. Use create_agent instead."
+            )]
+        
+        session_name = g.agent_tmux_sessions[agent_id]
+        if not session_exists(session_name):
+            # Clean up the dead session reference
+            del g.agent_tmux_sessions[agent_id]
+            return [mcp_types.TextContent(
+                type="text", 
+                text=f"Tmux session '{session_name}' for agent '{agent_id}' no longer exists. Use create_agent instead."
+            )]
+        
+        # Send /clear command to reset the session
+        clear_success = send_command_to_session(session_name, "/clear")
+        if not clear_success:
+            return [mcp_types.TextContent(
+                type="text", 
+                text=f"Failed to send /clear command to session '{session_name}'"
+            )]
+        
+        # Generate new token if requested
+        agent_token = agent_data.get("token")
+        if generate_new_token:
+            agent_token = generate_token()
+            cursor.execute("UPDATE agents SET token = ? WHERE agent_id = ?", (agent_token, agent_id))
+        
+        # Update agent status to active
+        updated_at_iso = datetime.datetime.now().isoformat()
+        cursor.execute("UPDATE agents SET status = ?, updated_at = ? WHERE agent_id = ?", 
+                      ("active", updated_at_iso, agent_id))
+        
+        # Build and send new prompt
+        try:
+            if custom_prompt:
+                prompt_to_send = custom_prompt
+            else:
+                prompt_to_send = build_agent_prompt(prompt_template, admin_token)
+            
+            # Send the new prompt to restart the agent
+            send_prompt_async(session_name, prompt_to_send, delay_seconds=2)
+            
+        except Exception as e_prompt:
+            logger.error(f"Failed to build or send prompt for relaunch: {e_prompt}")
+            # Revert status change
+            cursor.execute("UPDATE agents SET status = ? WHERE agent_id = ?", (current_status, agent_id))
+            conn.commit()
+            return [mcp_types.TextContent(
+                type="text", 
+                text=f"Failed to send restart prompt: {e_prompt}"
+            )]
+        
+        # Update in-memory state
+        if agent_token in g.active_agents:
+            g.active_agents[agent_token]["status"] = "active"
+            g.active_agents[agent_token]["updated_at"] = updated_at_iso
+        else:
+            # Add to active agents if not already there
+            g.active_agents[agent_token] = {
+                "agent_id": agent_id,
+                "status": "active", 
+                "token": agent_token,
+                "working_directory": agent_data.get("working_directory"),
+                "capabilities": json.loads(agent_data.get("capabilities", "[]")),
+                "updated_at": updated_at_iso
+            }
+        
+        # Log the action
+        log_agent_action_to_db(cursor, "admin", "relaunch_agent", 
+                               details={
+                                   "agent_id": agent_id,
+                                   "session_name": session_name,
+                                   "previous_status": current_status,
+                                   "new_token_generated": generate_new_token,
+                                   "prompt_template": prompt_template
+                               })
+        
+        conn.commit()
+        
+        log_audit("admin", "relaunch_agent", {
+            "agent_id": agent_id,
+            "previous_status": current_status,
+            "session_name": session_name,
+            "new_token": generate_new_token
+        })
+        
+        response_parts = [
+            f"Agent '{agent_id}' successfully relaunched in session '{session_name}'",
+            f"Previous status: {current_status} → active",
+            f"Session cleared and new prompt sent"
+        ]
+        
+        if generate_new_token:
+            response_parts.append(f"New token generated: {agent_token}")
+        else:
+            response_parts.append(f"Using existing token: {agent_token}")
+        
+        return [mcp_types.TextContent(type="text", text="\n".join(response_parts))]
+        
+    except sqlite3.Error as e_sql:
+        if conn: conn.rollback()
+        logger.error(f"Database error relaunching agent {agent_id}: {e_sql}", exc_info=True)
+        return [mcp_types.TextContent(type="text", text=f"Database error relaunching agent: {e_sql}")]
+    except Exception as e:
+        if conn: conn.rollback()
+        logger.error(f"Unexpected error relaunching agent {agent_id}: {e}", exc_info=True)
+        return [mcp_types.TextContent(type="text", text=f"Unexpected error relaunching agent: {e}")]
+    finally:
+        if conn:
+            conn.close()
+
+
 # --- Register all admin tools ---
 def register_admin_tools():
     register_tool(
         name="create_agent",
-        description="Create a new agent with the specified ID, capabilities, and optional working directory.",
-        input_schema={ # From main.py:1641-1661, added working_directory
+        description="Create a new agent with the specified ID, capabilities, working directory, and prompt configuration for tmux-based launching.",
+        input_schema={ # Enhanced with prompt template support
             "type": "object",
             "properties": {
                 "token": {"type": "string", "description": "Admin authentication token"},
@@ -596,10 +976,51 @@ def register_admin_tools():
                 "working_directory": {
                     "type": "string",
                     "description": "Optional working directory for the agent. If relative, it's based on the project root. Defaults to project root."
+                },
+                "prompt_template": {
+                    "type": "string",
+                    "description": "Prompt template to use ('worker_with_rag', 'basic_worker', 'frontend_worker', 'admin_agent', 'custom')",
+                    "enum": ["worker_with_rag", "basic_worker", "frontend_worker", "admin_agent", "custom"],
+                    "default": "worker_with_rag"
+                },
+                "custom_prompt": {
+                    "type": "string",
+                    "description": "Custom prompt text (required if prompt_template is 'custom')"
+                },
+                "send_prompt": {
+                    "type": "boolean",
+                    "description": "Whether to automatically send the prompt to the tmux session after launch",
+                    "default": True
+                },
+                "prompt_delay": {
+                    "type": "integer",
+                    "description": "Seconds to wait before sending prompt (allows Claude to start up)",
+                    "default": 5,
+                    "minimum": 1,
+                    "maximum": 30
+                },
+                "use_worktree": {
+                    "type": "boolean",
+                    "description": "Enable Git worktree isolation for this agent (requires --git server flag)",
+                    "default": False
+                },
+                "branch_name": {
+                    "type": "string",
+                    "description": "Custom branch name for worktree (auto-generated if not provided)"
+                },
+                "base_branch": {
+                    "type": "string",
+                    "description": "Base branch to create new branch from (default: main)",
+                    "default": "main"
+                },
+                "auto_setup": {
+                    "type": "boolean",
+                    "description": "Automatically run project setup commands in worktree (npm install, etc.)",
+                    "default": True
                 }
             },
             "required": ["token", "agent_id"],
-            "additionalProperties": False # As per original
+            "additionalProperties": False
         },
         implementation=create_agent_tool_impl
     )
@@ -722,6 +1143,41 @@ def register_admin_tools():
             "additionalProperties": False
         },
         implementation=get_agent_tokens_tool_impl
+    )
+    
+    register_tool(
+        name="relaunch_agent",
+        description="Relaunch an existing terminated/completed/failed/cancelled agent by reusing its tmux session.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "token": {
+                    "type": "string",
+                    "description": "Admin authentication token"
+                },
+                "agent_id": {
+                    "type": "string",
+                    "description": "ID of the agent to relaunch"
+                },
+                "generate_new_token": {
+                    "type": "boolean",
+                    "description": "Generate a new token for the relaunched agent (default: false)",
+                    "default": False
+                },
+                "custom_prompt": {
+                    "type": "string",
+                    "description": "Custom prompt to send instead of template prompt"
+                },
+                "prompt_template": {
+                    "type": "string",
+                    "description": "Prompt template to use (default: 'worker_with_rag')",
+                    "default": "worker_with_rag"
+                }
+            },
+            "required": ["token", "agent_id"],
+            "additionalProperties": False
+        },
+        implementation=relaunch_agent_tool_impl
     )
 
 # Call registration when this module is imported
