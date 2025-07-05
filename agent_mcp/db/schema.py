@@ -245,6 +245,26 @@ def init_database() -> None:
         cursor.executemany("INSERT OR IGNORE INTO rag_meta (meta_key, meta_value) VALUES (?, ?)", default_meta_entries)
         logger.debug("Rag_meta table and default entries ensured.")
 
+        # Agent Messages Table (for inter-agent communication)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS agent_messages (
+                message_id TEXT PRIMARY KEY,
+                sender_id TEXT NOT NULL,
+                recipient_id TEXT NOT NULL,
+                message_content TEXT NOT NULL,
+                message_type TEXT NOT NULL DEFAULT 'text',
+                priority TEXT NOT NULL DEFAULT 'normal',
+                timestamp TEXT NOT NULL,
+                delivered BOOLEAN NOT NULL DEFAULT 0,
+                read BOOLEAN NOT NULL DEFAULT 0
+            )
+        ''')
+        # Indexes for agent_messages
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_agent_messages_recipient_timestamp ON agent_messages (recipient_id, timestamp DESC)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_agent_messages_sender_timestamp ON agent_messages (sender_id, timestamp DESC)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_agent_messages_unread ON agent_messages (recipient_id, read, timestamp DESC)")
+        logger.debug("Agent_messages table and indexes ensured.")
+
         # RAG Embeddings Table (Virtual Table using sqlite-vec)
         # (Original main.py lines 365-379)
         if vss_is_actually_loadable:
