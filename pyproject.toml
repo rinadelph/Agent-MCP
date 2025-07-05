@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-mcp"
-version = "2.2.0"
-description = "AgentMCP Dashboard v2.2 - Improved multi-agent system with enhanced dashboard"
+version = "2.5.0"
+description = "AgentMCP v2.5 - Enhanced multi-agent system with tmux integration and worktree support"
 authors = [
-    {name = "AIမ့်CURSOR", email = "accounts@cursor.com"},
+    {name = "Luis Alejandro Rincon", email = "alejandro@rinconnect.com"},
 ]
 readme = "README.md"
 requires-python = ">=3.10"
