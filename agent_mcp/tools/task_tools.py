@@ -25,6 +25,7 @@ from ..features.task_placement.suggestions import (
 from ..features.rag.indexing import index_task_data
 # For request_assistance, generate_id was used. Let's use secrets.token_hex for consistency.
 # from main.py:1191 (generate_id - not present, assuming secrets.token_hex was intended)
+from .agent_communication_tools import send_agent_message_tool_impl
 
 def estimate_tokens(text: str) -> int:
     """Accurate token estimation using tiktoken for GPT-4"""
@@ -1589,6 +1590,28 @@ async def request_assistance_tool_impl(arguments: Dict[str, Any]) -> List[mcp_ty
         child_task_mem_data["child_tasks"] = []
         child_task_mem_data["notes"] = []
         g.tasks[child_task_id] = child_task_mem_data
+
+        # Send direct message to admin via new communication system
+        try:
+            admin_message = f"🚨 Assistance Request from {requesting_agent_id}\n\n" \
+                          f"Task: {parent_task_id} - {parent_task_current_data.get('title', 'Untitled Task')}\n" \
+                          f"Description: {assistance_description}\n\n" \
+                          f"Child assistance task created: {child_task_id}\n" \
+                          f"Notification ID: {notification_id}"
+            
+            # Send message to admin using the new communication system
+            message_result = await send_agent_message_tool_impl({
+                "token": agent_auth_token,
+                "recipient_id": "admin",
+                "message": admin_message,
+                "message_type": "assistance_request",
+                "priority": "high",
+                "deliver_method": "both"
+            })
+            logger.info(f"Assistance request message sent to admin: {message_result}")
+        except Exception as e_msg:
+            logger.error(f"Failed to send assistance request message to admin: {e_msg}", exc_info=True)
+            # Don't fail the entire operation if messaging fails
         
         # Original code also wrote parent and child task JSON files (main.py:1766-1771)
         # This was part of an older file-based task system. We are now DB-centric.
@@ -1602,7 +1625,7 @@ async def request_assistance_tool_impl(arguments: Dict[str, Any]) -> List[mcp_ty
         logger.info(f"Agent '{requesting_agent_id}' requested assistance for task '{parent_task_id}'. Child task '{child_task_id}' created.")
         return [mcp_types.TextContent(
             type="text",
-            text=f"Assistance requested for task {parent_task_id}. Child assistance task {child_task_id} created and admin notified."
+            text=f"Assistance requested for task {parent_task_id}. Child assistance task {child_task_id} created. Admin notified via file notification and direct message."
         )]
 
     except sqlite3.Error as e_sql:

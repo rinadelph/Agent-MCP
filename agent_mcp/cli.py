@@ -124,7 +124,13 @@ def get_admin_token_from_db(project_dir: str) -> Optional[str]:
     default=False,
     help="Enable advanced embeddings mode with larger dimension (3072) and more sophisticated code analysis."
 )
-def main_cli(port: int, transport: str, project_dir: str, admin_token_cli: Optional[str], debug: bool, no_tui: bool, advanced: bool):
+@click.option(
+    "--git",
+    is_flag=True,
+    default=False,
+    help="Enable experimental Git worktree support for parallel agent development (advanced users only)."
+)
+def main_cli(port: int, transport: str, project_dir: str, admin_token_cli: Optional[str], debug: bool, no_tui: bool, advanced: bool, git: bool):
     """
     Main Command-Line Interface for starting the MCP Server.
     
@@ -144,6 +150,25 @@ def main_cli(port: int, transport: str, project_dir: str, admin_token_cli: Optio
         logger.info("Advanced embeddings mode enabled (3072 dimensions, text-embedding-3-large, code & task indexing)")
     else:
         logger.info("Using simple embeddings mode (1024 dimensions, text-embedding-3-large, markdown & context only)")
+    
+    # Initialize Git worktree support if enabled
+    if git:
+        try:
+            from .features.worktree_integration import enable_worktree_support
+            worktree_enabled = enable_worktree_support()
+            if worktree_enabled:
+                logger.info("🌿 Git worktree support enabled for parallel agent development")
+            else:
+                logger.warning("❌ Git worktree support could not be enabled - check requirements")
+                logger.warning("   Continuing without worktree support...")
+        except ImportError:
+            logger.error("❌ Git worktree features not available - missing dependencies")
+            logger.warning("   Continuing without worktree support...")
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize Git worktree support: {e}")
+            logger.warning("   Continuing without worktree support...")
+    else:
+        logger.info("Git worktree support disabled (use --git to enable)")
     
     if debug:
         os.environ["MCP_DEBUG"] = "true" # Ensure env var is set for Starlette debug mode
