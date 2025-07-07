@@ -3010,7 +3010,7 @@ def register_task_tools():
                 },
                 "agent_id": {
                     "type": "string",
-                    "description": "Agent ID to assign the task(s) to",
+                    "description": "Agent ID to assign the task(s) to (optional - if not provided, creates unassigned tasks)",
                 },
                 # Mode 1: Single task creation (existing behavior)
                 "task_title": {
