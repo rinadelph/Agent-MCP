@@ -322,7 +322,7 @@ async def application_shutdown():
     if g.rag_index_task_scope and not g.rag_index_task_scope.cancel_called:
         logger.info("Attempting to cancel RAG indexing task...")
         g.rag_index_task_scope.cancel()
-        
+
     if g.claude_session_task_scope and not g.claude_session_task_scope.cancel_called:
         logger.info("Attempting to cancel Claude session monitoring task...")
         g.claude_session_task_scope.cancel()
