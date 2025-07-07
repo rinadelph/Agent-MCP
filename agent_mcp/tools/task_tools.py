@@ -367,17 +367,17 @@ async def assign_task_tool_impl(
 ) -> List[mcp_types.TextContent]:
     admin_auth_token = arguments.get("token")
     target_agent_id = arguments.get("agent_id")
-    
+
     # Mode 1: Single task creation (existing behavior)
     task_title = arguments.get("task_title")
     task_description = arguments.get("task_description")
     priority = arguments.get("priority", "medium")  # Default from schema
     depends_on_tasks_list = arguments.get("depends_on_tasks")  # List[str] or None
     parent_task_id_arg = arguments.get("parent_task_id")  # Optional str
-    
+
     # Mode 2: Multiple task creation (new)
     tasks = arguments.get("tasks")  # List[Dict] with task details
-    
+
     # Mode 3: Existing task assignment (new)
     task_ids = arguments.get("task_ids")  # List[str] of existing task IDs
 
@@ -411,7 +411,7 @@ async def assign_task_tool_impl(
                 text="Error: agent_id is required.",
             )
         ]
-    
+
     # Determine operation mode and validate parameters
     if task_ids:
         # Mode 3: Assign to existing tasks
@@ -435,7 +435,9 @@ async def assign_task_tool_impl(
             ]
         # Validate each task object
         for i, task in enumerate(tasks):
-            if not isinstance(task, dict) or not all([task.get("title"), task.get("description")]):
+            if not isinstance(task, dict) or not all(
+                [task.get("title"), task.get("description")]
+            ):
                 return [
                     mcp_types.TextContent(
                         type="text",
@@ -453,7 +455,20 @@ async def assign_task_tool_impl(
                 )
             ]
 
-    # Enforce single root task rule BEFORE any processing
+    # Route to appropriate handler based on operation mode
+    if operation_mode == "existing":
+        return await _assign_to_existing_tasks(
+            arguments, target_agent_id, task_ids, validate_agent_workload, coordination_notes
+        )
+    elif operation_mode == "multiple":
+        return await _create_and_assign_multiple_tasks(
+            arguments, target_agent_id, tasks, auto_suggest_parent, validate_agent_workload, coordination_notes
+        )
+    else:
+        # operation_mode == "single" - continue with existing logic
+        pass
+
+    # Enforce single root task rule BEFORE any processing (Mode 1: Single task)
     if parent_task_id_arg is None:
         conn = get_db_connection()
         cursor = conn.cursor()
