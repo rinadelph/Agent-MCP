@@ -5,7 +5,7 @@ from ..core.config import logger
 
 # Predefined prompt templates for different agent types
 PROMPT_TEMPLATES = {
-    "worker_with_rag": """This is your admin token: {admin_token} Ask the project RAG agent at least 5-7 questions to understand what you need to do. I want you to critically think when asking a question, then criticize yourself before asking that question. How you criticize yourself is by proposing an idea, criticizing it, and based on that criticism you pull through with that idea. It's better to add too much context versus too little. Add all these context entries to the agent mcp. ACT AUTO --worker --memory""",
+    "worker_with_rag": """This is your agent token: {agent_token} Ask the project RAG agent at least 5-7 questions to understand what you need to do. I want you to critically think when asking a question, then criticize yourself before asking that question. How you criticize yourself is by proposing an idea, criticizing it, and based on that criticism you pull through with that idea. It's better to add too much context versus too little. Add all these context entries to the agent mcp. ACT AUTO --worker --memory""",
     
     "basic_worker": """You are {agent_id} worker agent.
 Your Admin Token: {agent_token}
