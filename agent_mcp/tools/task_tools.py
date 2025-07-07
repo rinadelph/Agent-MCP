@@ -800,8 +800,8 @@ async def assign_task_tool_impl(
             )
         ]
 
-    # Handle unassigned task creation (agent_id is optional)
-    if not target_agent_id:
+    # Handle unassigned task creation (agent_token is optional)
+    if not target_agent_token:
         # Mode 0: Create unassigned tasks
         return await _create_unassigned_tasks(arguments)
 
