@@ -367,11 +367,19 @@ async def assign_task_tool_impl(
 ) -> List[mcp_types.TextContent]:
     admin_auth_token = arguments.get("token")
     target_agent_id = arguments.get("agent_id")
+    
+    # Mode 1: Single task creation (existing behavior)
     task_title = arguments.get("task_title")
     task_description = arguments.get("task_description")
     priority = arguments.get("priority", "medium")  # Default from schema
     depends_on_tasks_list = arguments.get("depends_on_tasks")  # List[str] or None
     parent_task_id_arg = arguments.get("parent_task_id")  # Optional str
+    
+    # Mode 2: Multiple task creation (new)
+    tasks = arguments.get("tasks")  # List[Dict] with task details
+    
+    # Mode 3: Existing task assignment (new)
+    task_ids = arguments.get("task_ids")  # List[str] of existing task IDs
 
     # Smart coordination features
     auto_suggest_parent = arguments.get(
@@ -395,13 +403,55 @@ async def assign_task_tool_impl(
             )
         ]
 
-    if not all([target_agent_id, task_title, task_description]):
+    # Validate that agent_id is always required
+    if not target_agent_id:
         return [
             mcp_types.TextContent(
                 type="text",
-                text="Error: agent_id, task_title, and task_description are required.",
+                text="Error: agent_id is required.",
             )
         ]
+    
+    # Determine operation mode and validate parameters
+    if task_ids:
+        # Mode 3: Assign to existing tasks
+        operation_mode = "existing"
+        if not isinstance(task_ids, list) or not task_ids:
+            return [
+                mcp_types.TextContent(
+                    type="text",
+                    text="Error: task_ids must be a non-empty list of task IDs.",
+                )
+            ]
+    elif tasks:
+        # Mode 2: Create multiple tasks + assign
+        operation_mode = "multiple"
+        if not isinstance(tasks, list) or not tasks:
+            return [
+                mcp_types.TextContent(
+                    type="text",
+                    text="Error: tasks must be a non-empty list of task objects.",
+                )
+            ]
+        # Validate each task object
+        for i, task in enumerate(tasks):
+            if not isinstance(task, dict) or not all([task.get("title"), task.get("description")]):
+                return [
+                    mcp_types.TextContent(
+                        type="text",
+                        text=f"Error: Task {i+1} must have 'title' and 'description' fields.",
+                    )
+                ]
+    else:
+        # Mode 1: Single task creation (existing behavior)
+        operation_mode = "single"
+        if not all([task_title, task_description]):
+            return [
+                mcp_types.TextContent(
+                    type="text",
+                    text="Error: task_title and task_description are required for single task creation, or provide 'tasks' array for multiple tasks, or 'task_ids' for existing task assignment.",
+                )
+            ]
 
     # Enforce single root task rule BEFORE any processing
     if parent_task_id_arg is None:
