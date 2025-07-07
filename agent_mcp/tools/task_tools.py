@@ -763,7 +763,7 @@ async def assign_task_tool_impl(
     arguments: Dict[str, Any],
 ) -> List[mcp_types.TextContent]:
     admin_auth_token = arguments.get("token")
-    target_agent_id = arguments.get("agent_id")
+    target_agent_token = arguments.get("agent_token")
 
     # Mode 1: Single task creation (existing behavior)
     task_title = arguments.get("task_title")
