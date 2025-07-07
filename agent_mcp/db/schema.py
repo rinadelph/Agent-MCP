@@ -265,6 +265,27 @@ def init_database() -> None:
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_agent_messages_unread ON agent_messages (recipient_id, read, timestamp DESC)")
         logger.debug("Agent_messages table and indexes ensured.")
 
+        # Claude Code Sessions Table (for git-agentmcp hook integration)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS claude_code_sessions (
+                session_id TEXT PRIMARY KEY,
+                pid INTEGER NOT NULL,
+                parent_pid INTEGER NOT NULL,
+                first_detected TEXT NOT NULL,
+                last_activity TEXT NOT NULL,
+                working_directory TEXT,
+                agent_id TEXT,              -- Links to agents.agent_id if registered
+                status TEXT DEFAULT 'detected',  -- detected, registered, active, inactive
+                git_commits TEXT,           -- JSON array of commit hashes
+                metadata TEXT               -- Additional session metadata
+            )
+        ''')
+        # Indexes for claude_code_sessions
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_claude_sessions_pid ON claude_code_sessions (pid, parent_pid)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_claude_sessions_activity ON claude_code_sessions (last_activity DESC)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_claude_sessions_agent ON claude_code_sessions (agent_id)")
+        logger.debug("Claude_code_sessions table and indexes ensured.")
+
         # RAG Embeddings Table (Virtual Table using sqlite-vec)
         # (Original main.py lines 365-379)
         if vss_is_actually_loadable:
