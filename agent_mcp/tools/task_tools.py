@@ -362,113 +362,120 @@ def _calculate_task_health_metrics(tasks: List[Dict[str, Any]]) -> Dict[str, Any
 
 # --- Helper functions for assign_task modes ---
 
+
 async def _assign_to_existing_tasks(
-    arguments: Dict[str, Any], 
-    target_agent_id: str, 
-    task_ids: List[str], 
-    validate_agent_workload: bool, 
-    coordination_notes: str
+    arguments: Dict[str, Any],
+    target_agent_id: str,
+    task_ids: List[str],
+    validate_agent_workload: bool,
+    coordination_notes: str,
 ) -> List[mcp_types.TextContent]:
     """Mode 3: Assign agent to existing unassigned tasks"""
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        
+
         # Validate that all tasks exist and are unassigned
         placeholders = ",".join(["?" for _ in task_ids])
         cursor.execute(
             f"SELECT task_id, title, assigned_to FROM tasks WHERE task_id IN ({placeholders})",
-            task_ids
+            task_ids,
         )
         found_tasks = cursor.fetchall()
-        
+
         if len(found_tasks) != len(task_ids):
             found_ids = [task["task_id"] for task in found_tasks]
             missing_ids = [tid for tid in task_ids if tid not in found_ids]
             return [
                 mcp_types.TextContent(
                     type="text",
-                    text=f"Error: Tasks not found: {', '.join(missing_ids)}"
+                    text=f"Error: Tasks not found: {', '.join(missing_ids)}",
                 )
             ]
-        
+
         # Check for already assigned tasks
-        assigned_tasks = [task for task in found_tasks if task["assigned_to"] is not None]
+        assigned_tasks = [
+            task for task in found_tasks if task["assigned_to"] is not None
+        ]
         if assigned_tasks:
-            assigned_list = [f"{task['task_id']} (assigned to {task['assigned_to']})" for task in assigned_tasks]
+            assigned_list = [
+                f"{task['task_id']} (assigned to {task['assigned_to']})"
+                for task in assigned_tasks
+            ]
             return [
                 mcp_types.TextContent(
                     type="text",
-                    text=f"Error: Some tasks are already assigned: {', '.join(assigned_list)}"
+                    text=f"Error: Some tasks are already assigned: {', '.join(assigned_list)}",
                 )
             ]
-        
+
         # Validate agent exists
-        cursor.execute("SELECT agent_id FROM agents WHERE agent_id = ?", (target_agent_id,))
+        cursor.execute(
+            "SELECT agent_id FROM agents WHERE agent_id = ?", (target_agent_id,)
+        )
         if not cursor.fetchone():
             return [
                 mcp_types.TextContent(
-                    type="text",
-                    text=f"Error: Agent '{target_agent_id}' not found."
+                    type="text", text=f"Error: Agent '{target_agent_id}' not found."
                 )
             ]
-        
+
         # Assign all tasks to the agent
         updated_at = datetime.datetime.now().isoformat()
         for task_id in task_ids:
             cursor.execute(
                 "UPDATE tasks SET assigned_to = ?, updated_at = ? WHERE task_id = ?",
-                (target_agent_id, updated_at, task_id)
+                (target_agent_id, updated_at, task_id),
             )
-            
+
             # Log the assignment
             log_agent_action_to_db(
                 cursor,
-                "admin", 
+                "admin",
                 "assigned_task",
                 task_id=task_id,
-                details={"agent_id": target_agent_id, "mode": "existing_task_assignment"}
+                details={
+                    "agent_id": target_agent_id,
+                    "mode": "existing_task_assignment",
+                },
             )
-        
+
         # Update agent's current task if they don't have one (use first task)
-        cursor.execute("SELECT current_task FROM agents WHERE agent_id = ?", (target_agent_id,))
+        cursor.execute(
+            "SELECT current_task FROM agents WHERE agent_id = ?", (target_agent_id,)
+        )
         agent_row = cursor.fetchone()
         if agent_row and agent_row["current_task"] is None:
             cursor.execute(
                 "UPDATE agents SET current_task = ?, updated_at = ? WHERE agent_id = ?",
-                (task_ids[0], updated_at, target_agent_id)
+                (task_ids[0], updated_at, target_agent_id),
             )
-        
+
         conn.commit()
-        
+
         # Build response
         task_titles = [task["title"] for task in found_tasks]
         response_parts = [
             f"✅ **Tasks Assigned Successfully**",
             f"   Agent: {target_agent_id}",
             f"   Tasks Assigned: {len(task_ids)}",
-            ""
+            "",
         ]
-        
+
         for i, (task_id, title) in enumerate(zip(task_ids, task_titles), 1):
             response_parts.append(f"   {i}. {task_id}: {title}")
-        
+
         if coordination_notes:
             response_parts.append(f"\n📋 **Coordination Notes:** {coordination_notes}")
-        
+
         return [mcp_types.TextContent(type="text", text="\n".join(response_parts))]
-        
+
     except Exception as e:
         if conn:
             conn.rollback()
         logger.error(f"Error assigning existing tasks: {e}", exc_info=True)
-        return [
-            mcp_types.TextContent(
-                type="text",
-                text=f"Error assigning tasks: {e}"
-            )
-        ]
+        return [mcp_types.TextContent(type="text", text=f"Error assigning tasks: {e}")]
     finally:
         if conn:
             conn.close()
@@ -480,27 +487,28 @@ async def _create_and_assign_multiple_tasks(
     tasks: List[Dict[str, Any]],
     auto_suggest_parent: bool,
     validate_agent_workload: bool,
-    coordination_notes: str
+    coordination_notes: str,
 ) -> List[mcp_types.TextContent]:
     """Mode 2: Create multiple tasks and assign to agent"""
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        
+
         # Validate agent exists
-        cursor.execute("SELECT agent_id FROM agents WHERE agent_id = ?", (target_agent_id,))
+        cursor.execute(
+            "SELECT agent_id FROM agents WHERE agent_id = ?", (target_agent_id,)
+        )
         if not cursor.fetchone():
             return [
                 mcp_types.TextContent(
-                    type="text",
-                    text=f"Error: Agent '{target_agent_id}' not found."
+                    type="text", text=f"Error: Agent '{target_agent_id}' not found."
                 )
             ]
-        
+
         created_tasks = []
         created_at = datetime.datetime.now().isoformat()
-        
+
         # Create each task
         for i, task in enumerate(tasks):
             task_id = f"task_{int(datetime.datetime.now().timestamp() * 1000)}_{i}"
@@ -508,7 +516,7 @@ async def _create_and_assign_multiple_tasks(
             description = task["description"]
             priority = task.get("priority", "medium")
             parent_task = task.get("parent_task_id")
-            
+
             # Create task data
             task_data = {
                 "task_id": task_id,
@@ -523,9 +531,9 @@ async def _create_and_assign_multiple_tasks(
                 "parent_task": parent_task,
                 "child_tasks": json.dumps([]),
                 "depends_on_tasks": json.dumps([]),
-                "notes": json.dumps([])
+                "notes": json.dumps([]),
             }
-            
+
             # Insert task
             cursor.execute(
                 """
@@ -534,55 +542,64 @@ async def _create_and_assign_multiple_tasks(
                 VALUES (:task_id, :title, :description, :assigned_to, :created_by, :status, :priority, 
                         :created_at, :updated_at, :parent_task, :child_tasks, :depends_on_tasks, :notes)
             """,
-                task_data
+                task_data,
             )
-            
+
             # Log the creation
             log_agent_action_to_db(
                 cursor,
                 "admin",
-                "assigned_task", 
+                "assigned_task",
                 task_id=task_id,
-                details={"agent_id": target_agent_id, "title": title, "mode": "multiple_task_creation"}
+                details={
+                    "agent_id": target_agent_id,
+                    "title": title,
+                    "mode": "multiple_task_creation",
+                },
             )
-            
-            created_tasks.append({"task_id": task_id, "title": title, "priority": priority})
-        
+
+            created_tasks.append(
+                {"task_id": task_id, "title": title, "priority": priority}
+            )
+
         # Update agent's current task if they don't have one (use first task)
-        cursor.execute("SELECT current_task FROM agents WHERE agent_id = ?", (target_agent_id,))
+        cursor.execute(
+            "SELECT current_task FROM agents WHERE agent_id = ?", (target_agent_id,)
+        )
         agent_row = cursor.fetchone()
         if agent_row and agent_row["current_task"] is None and created_tasks:
             cursor.execute(
                 "UPDATE agents SET current_task = ?, updated_at = ? WHERE agent_id = ?",
-                (created_tasks[0]["task_id"], created_at, target_agent_id)
+                (created_tasks[0]["task_id"], created_at, target_agent_id),
             )
-        
+
         conn.commit()
-        
+
         # Build response
         response_parts = [
             f"✅ **Multiple Tasks Created and Assigned**",
             f"   Agent: {target_agent_id}",
             f"   Tasks Created: {len(created_tasks)}",
-            ""
+            "",
         ]
-        
+
         for i, task in enumerate(created_tasks, 1):
-            response_parts.append(f"   {i}. {task['task_id']}: {task['title']} (Priority: {task['priority']})")
-        
+            response_parts.append(
+                f"   {i}. {task['task_id']}: {task['title']} (Priority: {task['priority']})"
+            )
+
         if coordination_notes:
             response_parts.append(f"\n📋 **Coordination Notes:** {coordination_notes}")
-        
+
         return [mcp_types.TextContent(type="text", text="\n".join(response_parts))]
-        
+
     except Exception as e:
         if conn:
             conn.rollback()
         logger.error(f"Error creating multiple tasks: {e}", exc_info=True)
         return [
             mcp_types.TextContent(
-                type="text",
-                text=f"Error creating multiple tasks: {e}"
+                type="text", text=f"Error creating multiple tasks: {e}"
             )
         ]
     finally:
@@ -2983,7 +3000,7 @@ async def search_tasks_tool_impl(
 def register_task_tools():
     register_tool(
         name="assign_task",
-        description="Smart task assignment tool with workload analysis, intelligent parent suggestions, and coordination features. Optimizes task distribution across agents.",
+        description="Multi-mode task assignment tool. Mode 1: Create single task + assign agent. Mode 2: Create multiple tasks + assign agent. Mode 3: Assign agent to existing unassigned tasks. Includes workload analysis, intelligent parent suggestions, and coordination features.",
         input_schema={
             "type": "object",
             "properties": {
@@ -2993,29 +3010,69 @@ def register_task_tools():
                 },
                 "agent_id": {
                     "type": "string",
-                    "description": "Agent ID to assign the task to",
+                    "description": "Agent ID to assign the task(s) to",
                 },
-                "task_title": {"type": "string", "description": "Title of the task"},
+                # Mode 1: Single task creation (existing behavior)
+                "task_title": {
+                    "type": "string", 
+                    "description": "Title of the task (Mode 1: single task creation)"
+                },
                 "task_description": {
                     "type": "string",
-                    "description": "Detailed description of the task",
+                    "description": "Detailed description of the task (Mode 1: single task creation)",
                 },
                 "priority": {
                     "type": "string",
-                    "description": "Task priority (low, medium, high)",
+                    "description": "Task priority (low, medium, high) - for single task mode",
                     "enum": ["low", "medium", "high"],
                     "default": "medium",
                 },
                 "depends_on_tasks": {
                     "type": "array",
-                    "description": "List of task IDs this task depends on (optional)",
+                    "description": "List of task IDs this task depends on (Mode 1 only)",
                     "items": {"type": "string"},
                 },
                 "parent_task_id": {
                     "type": "string",
-                    "description": "ID of the parent task (REQUIRED if any tasks exist - only one root task allowed)",
+                    "description": "ID of the parent task (Mode 1 only)",
                 },
-                # Smart coordination features
+                # Mode 2: Multiple task creation
+                "tasks": {
+                    "type": "array",
+                    "description": "Array of tasks to create and assign (Mode 2: multiple task creation)",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "title": {
+                                "type": "string",
+                                "description": "Task title"
+                            },
+                            "description": {
+                                "type": "string", 
+                                "description": "Task description"
+                            },
+                            "priority": {
+                                "type": "string",
+                                "description": "Task priority",
+                                "enum": ["low", "medium", "high"],
+                                "default": "medium"
+                            },
+                            "parent_task_id": {
+                                "type": "string",
+                                "description": "Parent task ID for this task"
+                            }
+                        },
+                        "required": ["title", "description"],
+                        "additionalProperties": False
+                    }
+                },
+                # Mode 3: Existing task assignment
+                "task_ids": {
+                    "type": "array",
+                    "description": "Array of existing task IDs to assign to agent (Mode 3: existing task assignment)",
+                    "items": {"type": "string"}
+                },
+                # Smart coordination features (apply to all modes)
                 "auto_suggest_parent": {
                     "type": "boolean",
                     "description": "Use AI to suggest optimal parent task based on content similarity (default: true)",
@@ -3050,7 +3107,7 @@ def register_task_tools():
                     "description": "Reason for overriding RAG validation (required if override_rag is true)",
                 },
             },
-            "required": ["token", "agent_id", "task_title", "task_description"],
+            "required": ["token", "agent_id"],
             "additionalProperties": False,
         },
         implementation=assign_task_tool_impl,
