@@ -20,7 +20,7 @@ Begin implementation following the established patterns.
 
 AUTO --worker --memory""",
     "frontend_worker": """You are {agent_id} frontend worker agent.
-Your Admin Token: {agent_token}
+Your Agent Token: {agent_token}
 
 Query the project knowledge graph to understand:
 1. UI/UX requirements and design system
