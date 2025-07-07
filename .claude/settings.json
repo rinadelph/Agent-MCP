@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/home/alejandro/Code/MCP/Agent-MCP/rins_hooks/hooks/git-agentmcp/index.js\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
