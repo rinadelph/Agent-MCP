@@ -46,14 +46,17 @@ def log_audit(agent_id: str, action: str, details: Dict[str, Any]) -> None:
         details_for_logging = str(details)
     logger.info(f"AUDIT: {agent_id} - {action} - {details_for_logging}")
 
-    # Write to the persistent audit log file (agent_audit.log)
+    # Write to the persistent audit log file (agent_audit.log) - only in debug mode
     # (Original main.py lines 847-849: with open("agent_audit.log", "a") as f: ...)
-    try:
-        with open(AUDIT_LOG_FILE_NAME, "a", encoding='utf-8') as f:
-            # Each line in the file should be a self-contained JSON object.
-            json.dump(entry, f)
-            f.write("\n")  # Newline after each JSON entry for better readability and parsing
-    except IOError as e:
-        logger.error(f"IOError writing to audit log file '{AUDIT_LOG_FILE_NAME}': {e}")
-    except Exception as e: # Catch any other unexpected errors during file write
-        logger.error(f"Unexpected error writing to audit log file '{AUDIT_LOG_FILE_NAME}': {e}", exc_info=True)
+    import os
+    debug_mode = os.environ.get("MCP_DEBUG", "false").lower() == "true"
+    if debug_mode:
+        try:
+            with open(AUDIT_LOG_FILE_NAME, "a", encoding='utf-8') as f:
+                # Each line in the file should be a self-contained JSON object.
+                json.dump(entry, f)
+                f.write("\n")  # Newline after each JSON entry for better readability and parsing
+        except IOError as e:
+            logger.error(f"IOError writing to audit log file '{AUDIT_LOG_FILE_NAME}': {e}")
+        except Exception as e: # Catch any other unexpected errors during file write
+            logger.error(f"Unexpected error writing to audit log file '{AUDIT_LOG_FILE_NAME}': {e}", exc_info=True)

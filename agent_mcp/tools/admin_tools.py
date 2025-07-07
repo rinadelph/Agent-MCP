@@ -61,7 +61,6 @@ async def create_agent_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Te
     token = arguments.get("token")
     agent_id = arguments.get("agent_id")
     capabilities = arguments.get("capabilities") # This was List[str]
-    working_directory_arg = arguments.get("working_directory") # This was str
     
     # New prompt-related parameters
     prompt_template = arguments.get("prompt_template", "worker_with_rag")  # Default to RAG worker
@@ -167,17 +166,8 @@ async def create_agent_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Te
                     text=f"Error creating worktree: {str(e)}"
                 )]
         else:
-            # Standard working directory determination
-            if working_directory_arg and isinstance(working_directory_arg, str):
-                # Ensure working_directory_arg is treated as relative to project_dir if not absolute
-                if not os.path.isabs(working_directory_arg):
-                    agent_working_dir_abs = os.path.abspath(os.path.join(base_project_dir, working_directory_arg))
-                else:
-                    agent_working_dir_abs = os.path.abspath(working_directory_arg)
-                # Security check: ensure the working directory is within the project_dir or a configured allowed path
-                # For now, we assume any absolute path provided is acceptable if admin provides it.
-            else:
-                agent_working_dir_abs = base_project_dir
+            # Standard working directory determination - always use project directory
+            agent_working_dir_abs = base_project_dir
             
             # Ensure the working directory exists
             try:
@@ -961,7 +951,7 @@ async def relaunch_agent_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.
 def register_admin_tools():
     register_tool(
         name="create_agent",
-        description="Create a new agent with the specified ID, capabilities, working directory, and prompt configuration for tmux-based launching.",
+        description="Create a new agent with the specified ID, capabilities, and prompt configuration for tmux-based launching. Agents always launch in the project directory.",
         input_schema={ # Enhanced with prompt template support
             "type": "object",
             "properties": {
@@ -972,10 +962,6 @@ def register_admin_tools():
                     "description": "List of agent capabilities (e.g., 'code_edit', 'file_read')",
                     "items": {"type": "string"},
                     "default": []
-                },
-                "working_directory": {
-                    "type": "string",
-                    "description": "Optional working directory for the agent. If relative, it's based on the project root. Defaults to project root."
                 },
                 "prompt_template": {
                     "type": "string",
