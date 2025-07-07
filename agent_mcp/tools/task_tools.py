@@ -3154,9 +3154,9 @@ def register_task_tools():
                     "type": "string",
                     "description": "Admin authentication token",
                 },
-                "agent_id": {
+                "agent_token": {
                     "type": "string",
-                    "description": "Agent ID to assign the task(s) to (optional - if not provided, creates unassigned tasks)",
+                    "description": "Agent token to assign the task(s) to (optional - if not provided, creates unassigned tasks)",
                 },
                 # Mode 1: Single task creation (existing behavior)
                 "task_title": {
