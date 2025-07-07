@@ -3014,8 +3014,8 @@ def register_task_tools():
                 },
                 # Mode 1: Single task creation (existing behavior)
                 "task_title": {
-                    "type": "string", 
-                    "description": "Title of the task (Mode 1: single task creation)"
+                    "type": "string",
+                    "description": "Title of the task (Mode 1: single task creation)",
                 },
                 "task_description": {
                     "type": "string",
@@ -3043,34 +3043,31 @@ def register_task_tools():
                     "items": {
                         "type": "object",
                         "properties": {
-                            "title": {
-                                "type": "string",
-                                "description": "Task title"
-                            },
+                            "title": {"type": "string", "description": "Task title"},
                             "description": {
-                                "type": "string", 
-                                "description": "Task description"
+                                "type": "string",
+                                "description": "Task description",
                             },
                             "priority": {
                                 "type": "string",
                                 "description": "Task priority",
                                 "enum": ["low", "medium", "high"],
-                                "default": "medium"
+                                "default": "medium",
                             },
                             "parent_task_id": {
                                 "type": "string",
-                                "description": "Parent task ID for this task"
-                            }
+                                "description": "Parent task ID for this task",
+                            },
                         },
                         "required": ["title", "description"],
-                        "additionalProperties": False
-                    }
+                        "additionalProperties": False,
+                    },
                 },
                 # Mode 3: Existing task assignment
                 "task_ids": {
                     "type": "array",
                     "description": "Array of existing task IDs to assign to agent (Mode 3: existing task assignment)",
-                    "items": {"type": "string"}
+                    "items": {"type": "string"},
                 },
                 # Smart coordination features (apply to all modes)
                 "auto_suggest_parent": {
@@ -3107,7 +3104,7 @@ def register_task_tools():
                     "description": "Reason for overriding RAG validation (required if override_rag is true)",
                 },
             },
-            "required": ["token", "agent_id"],
+            "required": ["token"],
             "additionalProperties": False,
         },
         implementation=assign_task_tool_impl,
