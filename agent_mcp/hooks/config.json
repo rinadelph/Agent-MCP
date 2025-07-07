@@ -1,0 +1,40 @@
+{
+  "name": "agent-file-locking",
+  "version": "1.0.0",
+  "description": "File-level locking system for multi-agent collaboration",
+  "tags": ["locking", "collaboration", "conflict-prevention"],
+  "requirements": ["node"],
+  "platforms": ["linux", "darwin", "win32"],
+  "hooks": {
+    "PreToolUse": {
+      "matcher": "Edit|Write|MultiEdit",
+      "script": "file-lock-manager.js",
+      "timeout": 30,
+      "description": "Prevent file conflicts through file-level locking"
+    },
+    "PostToolUse": {
+      "matcher": "Edit|Write|MultiEdit|Read|Glob|Grep",
+      "script": "activity-broadcaster.js", 
+      "timeout": 15,
+      "description": "Log agent activities and release file locks"
+    }
+  },
+  "config": {
+    "lockTimeout": 600,
+    "lockDirectory": ".agent-locks",
+    "activityDirectory": ".agent-activity",
+    "excludePatterns": [
+      "*.log",
+      "*.tmp", 
+      "*.temp",
+      "*.lock",
+      ".env*",
+      ".git/**",
+      ".agent-*/**",
+      "node_modules/**",
+      "*.pyc",
+      "__pycache__/**"
+    ],
+    "debugLogging": false
+  }
+}

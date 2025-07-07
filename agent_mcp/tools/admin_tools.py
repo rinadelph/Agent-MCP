@@ -17,7 +17,7 @@ from ..utils.project_utils import generate_system_prompt # For create_agent
 from ..utils.tmux_utils import (
     is_tmux_available, create_tmux_session, kill_tmux_session, 
     session_exists, sanitize_session_name, list_tmux_sessions,
-    send_prompt_async
+    send_prompt_async, send_command_to_session
 )
 from ..utils.prompt_templates import build_agent_prompt
 from ..db.connection import get_db_connection
@@ -68,11 +68,8 @@ async def create_agent_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Te
     send_prompt = arguments.get("send_prompt", True)  # Default to auto-send prompt
     prompt_delay = arguments.get("prompt_delay", 5)  # Default 5 second delay
     
-    # Worktree-related parameters (experimental)
-    use_worktree = arguments.get("use_worktree", False)  # Enable worktree isolation
-    branch_name = arguments.get("branch_name")  # Custom branch name
-    base_branch = arguments.get("base_branch", "main")  # Base branch for new branch
-    auto_setup = arguments.get("auto_setup", True)  # Run setup commands automatically
+    # File-level locking via Claude Code hooks provides conflict prevention
+    # All agents work in the shared project directory with real-time visibility
 
     if not verify_token(token, "admin"): # main.py:1066
         return [mcp_types.TextContent(type="text", text="Unauthorized: Admin token required")]
@@ -104,77 +101,22 @@ async def create_agent_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Te
         agent_color = AGENT_COLORS[g.agent_color_index % len(AGENT_COLORS)]
         g.agent_color_index += 1
 
-        # Determine working directory (main.py:1100-1104) with worktree support
+        # Determine working directory - all agents use shared project directory
         # MCP_PROJECT_DIR is set by cli.py or server startup.
         project_dir_env = os.environ.get("MCP_PROJECT_DIR")
         if not project_dir_env:
             logger.error("MCP_PROJECT_DIR environment variable not set. Cannot determine agent working directory.")
             return [mcp_types.TextContent(type="text", text="Server configuration error: MCP_PROJECT_DIR not set.")]
         
-        base_project_dir = os.path.abspath(project_dir_env)
-        worktree_info = None
+        # All agents work in the same shared directory with file-level locking
+        agent_working_dir_abs = os.path.abspath(project_dir_env)
         
-        # Handle worktree creation if requested
-        if use_worktree:
-            try:
-                from ..features.worktree_integration import (
-                    is_worktree_enabled, create_agent_worktree, WorktreeConfig
-                )
-                
-                if not is_worktree_enabled():
-                    return [mcp_types.TextContent(
-                        type="text", 
-                        text="Error: Worktree support is not enabled. Start server with --git flag to enable."
-                    )]
-                
-                # Create worktree configuration
-                worktree_config = WorktreeConfig(
-                    enabled=True,
-                    branch_name=branch_name,
-                    base_branch=base_branch,
-                    auto_setup=auto_setup,
-                    cleanup_strategy="on_terminate"
-                )
-                
-                # Get admin token suffix for worktree naming
-                admin_token_suffix = get_admin_token_suffix(token)
-                
-                # Create the worktree
-                logger.info(f"Creating worktree for agent {agent_id} with branch {branch_name or f'agent/{agent_id}'}")
-                worktree_result = create_agent_worktree(agent_id, admin_token_suffix, worktree_config)
-                
-                if not worktree_result["success"]:
-                    return [mcp_types.TextContent(
-                        type="text", 
-                        text=f"Error creating worktree: {worktree_result.get('error', 'Unknown error')}"
-                    )]
-                
-                # Use worktree path as working directory
-                agent_working_dir_abs = worktree_result["worktree_path"]
-                worktree_info = worktree_result["worktree_info"]
-                logger.info(f"✅ Agent {agent_id} worktree created at: {agent_working_dir_abs}")
-                
-            except ImportError:
-                return [mcp_types.TextContent(
-                    type="text", 
-                    text="Error: Worktree features not available. Check server configuration."
-                )]
-            except Exception as e:
-                logger.error(f"Failed to create worktree for agent {agent_id}: {e}")
-                return [mcp_types.TextContent(
-                    type="text", 
-                    text=f"Error creating worktree: {str(e)}"
-                )]
-        else:
-            # Standard working directory determination - always use project directory
-            agent_working_dir_abs = base_project_dir
-            
-            # Ensure the working directory exists
-            try:
-                os.makedirs(agent_working_dir_abs, exist_ok=True)
-            except OSError as e:
-                logger.error(f"Failed to create working directory {agent_working_dir_abs} for agent {agent_id}: {e}")
-                return [mcp_types.TextContent(type="text", text=f"Error creating working directory: {e}")]
+        # Ensure the working directory exists
+        try:
+            os.makedirs(agent_working_dir_abs, exist_ok=True)
+        except OSError as e:
+            logger.error(f"Failed to create working directory {agent_working_dir_abs} for agent {agent_id}: {e}")
+            return [mcp_types.TextContent(type="text", text=f"Error creating working directory: {e}")]
 
 
         # Insert into Database (main.py:1107-1117)
@@ -240,18 +182,87 @@ async def create_agent_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Te
                 if agent_id.lower().startswith("admin") and new_agent_token == g.admin_token:
                     env_vars["MCP_ADMIN_TOKEN"] = g.admin_token
                 
-                # Create the tmux session with Claude
-                claude_command = "claude --dangerously-skip-permissions"
-                
+                # Create the tmux session (without immediate command)
                 if create_tmux_session(
                     session_name=tmux_session_name,
                     working_dir=agent_working_dir_abs,
-                    command=claude_command,
+                    command=None,  # Don't start Claude immediately
                     env_vars=env_vars
                 ):
                     # Track the tmux session in globals
                     g.agent_tmux_sessions[agent_id] = tmux_session_name
-                    base_status = f"✅ tmux session '{tmux_session_name}' created for agent '{agent_id}' with Claude."
+                    
+                    # Initial setup commands for visibility in tmux session
+                    welcome_message = f"echo '=== Agent {agent_id} initialization starting ==='"
+                    if send_command_to_session(tmux_session_name, welcome_message):
+                        logger.info(f"✅ Sent welcome message to agent '{agent_id}'")
+                    else:
+                        logger.error(f"❌ Failed to send welcome message to agent '{agent_id}'")
+                    
+                    # Add setup delay to ensure commands execute properly
+                    import time
+                    
+                    def wait_for_command_completion(session_name: str, delay: float = 1.0):
+                        """Smart delay system - wait for command completion or timeout"""
+                        time.sleep(delay)
+                        # Could add tmux pane monitoring here in future for true completion detection
+                    
+                    setup_delay = 1.0  # 1 second delay between setup commands
+                    wait_for_command_completion(tmux_session_name, setup_delay)
+                    
+                    # Verify we're in the correct working directory
+                    verify_command = f"echo 'Working directory:' && pwd"
+                    if send_command_to_session(tmux_session_name, verify_command):
+                        logger.info(f"✅ Sent directory verification to agent '{agent_id}'")
+                    else:
+                        logger.error(f"❌ Failed to send directory verification to agent '{agent_id}'")
+                    
+                    wait_for_command_completion(tmux_session_name, setup_delay)
+                    
+                    # Get server port for MCP registration
+                    server_port = os.environ.get('PORT', '8080')
+                    mcp_server_url = f"http://localhost:{server_port}/sse"
+                    
+                    # Log MCP server info
+                    mcp_info_command = f"echo 'MCP Server URL: {mcp_server_url}'"
+                    send_command_to_session(tmux_session_name, mcp_info_command)
+                    
+                    wait_for_command_completion(tmux_session_name, setup_delay)
+                    
+                    # Register MCP server connection
+                    mcp_add_command = f"claude mcp add -t sse AgentMCP {mcp_server_url}"
+                    logger.info(f"Registering MCP server for agent '{agent_id}': {mcp_add_command}")
+                    
+                    if not send_command_to_session(tmux_session_name, mcp_add_command):
+                        logger.error(f"Failed to register MCP server for agent '{agent_id}'")
+                        base_status = f"❌ Failed to register MCP server for agent '{agent_id}'."
+                    else:
+                        # Add delay to ensure MCP registration completes
+                        wait_for_command_completion(tmux_session_name, setup_delay)
+                        
+                        # Verify MCP registration
+                        verify_mcp_command = "claude mcp list"
+                        logger.info(f"Verifying MCP registration for agent '{agent_id}'")
+                        send_command_to_session(tmux_session_name, verify_mcp_command)
+                        wait_for_command_completion(tmux_session_name, setup_delay)
+                        
+                        # Start Claude
+                        start_claude_message = "echo '--- Starting Claude with MCP ---'"
+                        send_command_to_session(tmux_session_name, start_claude_message)
+                        wait_for_command_completion(tmux_session_name, setup_delay)
+                        
+                        claude_command = "claude --dangerously-skip-permissions"
+                        logger.info(f"Starting Claude for agent '{agent_id}': {claude_command}")
+                        
+                        if not send_command_to_session(tmux_session_name, claude_command):
+                            logger.error(f"Failed to start Claude for agent '{agent_id}'")
+                            base_status = f"❌ Failed to start Claude for agent '{agent_id}' after MCP registration."
+                        else:
+                            base_status = f"✅ tmux session '{tmux_session_name}' created for agent '{agent_id}' with MCP registration and Claude."
+                            
+                            # Log completion message to tmux session (will appear before Claude starts)
+                            completion_message = f"echo '=== Agent {agent_id} setup complete - Claude starting ==='"
+                            send_command_to_session(tmux_session_name, completion_message)
                     
                     # Send prompt if requested
                     prompt_status = ""
@@ -291,17 +302,7 @@ async def create_agent_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Te
             logger.warning("tmux is not available - agent session cannot be launched automatically")
             launch_status = "⚠️ tmux not available - manual agent setup required."
 
-        # Build worktree status for output
-        worktree_status = ""
-        if use_worktree and worktree_info:
-            worktree_status = (
-                f"🌿 Worktree Mode: ENABLED\n"
-                f"Branch: {worktree_info.get('branch', 'unknown')}\n"
-                f"Base Branch: {worktree_info.get('base_branch', 'unknown')}\n"
-                f"Setup Commands: {', '.join(worktree_info.get('setup_commands', []) or ['none'])}\n"
-            )
-        elif use_worktree:
-            worktree_status = "🌿 Worktree Mode: REQUESTED (but failed)\n"
+        # All agents work in shared project directory with file-level locking
         
         # Log to console (main.py:1169-1174)
         console_output = (
@@ -309,7 +310,6 @@ async def create_agent_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Te
             f"Token: {new_agent_token}\n"
             f"Assigned Color: {agent_color}\n"
             f"Working Directory: {agent_working_dir_abs}\n"
-            f"{worktree_status}"
             f"{launch_status}\n"
             f"=========================\n"
             f"=== System Prompt for {agent_id} ===\n{system_prompt_str}\n"
@@ -324,7 +324,6 @@ async def create_agent_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Te
                  f"Token: {new_agent_token}\n"
                  f"Assigned Color: {agent_color}\n"
                  f"Working Directory: {agent_working_dir_abs}\n"
-                 f"{worktree_status}"
                  f"{launch_status}\n\n"
                  f"System Prompt:\n{system_prompt_str}"
         )]
@@ -501,34 +500,10 @@ async def terminate_agent_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types
                     tmux_kill_status = f" Killed orphaned tmux session '{sanitized_name}'."
                     logger.info(f"Killed orphaned tmux session '{sanitized_name}' for agent '{agent_id_to_terminate}'")
 
-        # Clean up worktree if it exists
-        worktree_cleanup_status = ""
-        try:
-            from ..features.worktree_integration import is_worktree_enabled, cleanup_agent_worktree
-            
-            if is_worktree_enabled():
-                logger.info(f"Attempting worktree cleanup for agent {agent_id_to_terminate}")
-                cleanup_result = cleanup_agent_worktree(agent_id_to_terminate, force=False)
-                
-                if cleanup_result["success"]:
-                    if "No worktree found" in cleanup_result.get("message", ""):
-                        worktree_cleanup_status = " (no worktree to clean)"
-                    else:
-                        worktree_cleanup_status = " Cleaned up worktree."
-                        logger.info(f"Successfully cleaned up worktree for agent {agent_id_to_terminate}")
-                else:
-                    worktree_cleanup_status = f" Worktree cleanup failed: {cleanup_result.get('error', 'unknown error')}"
-                    logger.warning(f"Failed to clean up worktree for agent {agent_id_to_terminate}: {cleanup_result.get('error')}")
-        except ImportError:
-            # Worktree features not available - that's okay
-            pass
-        except Exception as e:
-            logger.warning(f"Error during worktree cleanup for agent {agent_id_to_terminate}: {e}")
-            worktree_cleanup_status = f" Worktree cleanup error: {str(e)}"
 
         log_audit("admin", "terminate_agent", {"agent_id": agent_id_to_terminate}) # main.py:1313
         logger.info(f"Agent '{agent_id_to_terminate}' terminated successfully.")
-        return [mcp_types.TextContent(type="text", text=f"Agent '{agent_id_to_terminate}' terminated.{tmux_kill_status}{worktree_cleanup_status}")]
+        return [mcp_types.TextContent(type="text", text=f"Agent '{agent_id_to_terminate}' terminated.{tmux_kill_status}")]
 
     except sqlite3.Error as e_sql:
         if conn: conn.rollback()
@@ -951,7 +926,7 @@ async def relaunch_agent_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.
 def register_admin_tools():
     register_tool(
         name="create_agent",
-        description="Create a new agent with the specified ID, capabilities, and prompt configuration for tmux-based launching. Agents always launch in the project directory.",
+        description="Create a new agent with the specified ID, capabilities, and prompt configuration. Agents work in the shared project directory with file-level locking for coordination.",
         input_schema={ # Enhanced with prompt template support
             "type": "object",
             "properties": {
@@ -985,25 +960,6 @@ def register_admin_tools():
                     "minimum": 1,
                     "maximum": 30
                 },
-                "use_worktree": {
-                    "type": "boolean",
-                    "description": "Enable Git worktree isolation for this agent (requires --git server flag)",
-                    "default": False
-                },
-                "branch_name": {
-                    "type": "string",
-                    "description": "Custom branch name for worktree (auto-generated if not provided)"
-                },
-                "base_branch": {
-                    "type": "string",
-                    "description": "Base branch to create new branch from (default: main)",
-                    "default": "main"
-                },
-                "auto_setup": {
-                    "type": "boolean",
-                    "description": "Automatically run project setup commands in worktree (npm install, etc.)",
-                    "default": True
-                }
             },
             "required": ["token", "agent_id"],
             "additionalProperties": False
