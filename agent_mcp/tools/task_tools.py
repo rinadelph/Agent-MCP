@@ -362,21 +362,24 @@ def _calculate_task_health_metrics(tasks: List[Dict[str, Any]]) -> Dict[str, Any
 
 # --- Helper functions for assign_task modes ---
 
-async def _create_unassigned_tasks(arguments: Dict[str, Any]) -> List[mcp_types.TextContent]:
+
+async def _create_unassigned_tasks(
+    arguments: Dict[str, Any],
+) -> List[mcp_types.TextContent]:
     """Mode 0: Create unassigned tasks (assigned_to = NULL)"""
     task_title = arguments.get("task_title")
     task_description = arguments.get("task_description")
     tasks = arguments.get("tasks")
     priority = arguments.get("priority", "medium")
     parent_task_id_arg = arguments.get("parent_task_id")
-    
+
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         created_tasks = []
         created_at = datetime.datetime.now().isoformat()
-        
+
         if tasks:
             # Multiple unassigned task creation
             for i, task in enumerate(tasks):
@@ -385,7 +388,7 @@ async def _create_unassigned_tasks(arguments: Dict[str, Any]) -> List[mcp_types.
                 description = task["description"]
                 task_priority = task.get("priority", "medium")
                 parent_task = task.get("parent_task_id")
-                
+
                 # Create unassigned task
                 task_data = {
                     "task_id": task_id,
@@ -400,9 +403,9 @@ async def _create_unassigned_tasks(arguments: Dict[str, Any]) -> List[mcp_types.
                     "parent_task": parent_task,
                     "child_tasks": json.dumps([]),
                     "depends_on_tasks": json.dumps([]),
-                    "notes": json.dumps([])
+                    "notes": json.dumps([]),
                 }
-                
+
                 cursor.execute(
                     """
                     INSERT INTO tasks (task_id, title, description, assigned_to, created_by, status, priority, 
@@ -410,23 +413,25 @@ async def _create_unassigned_tasks(arguments: Dict[str, Any]) -> List[mcp_types.
                     VALUES (:task_id, :title, :description, :assigned_to, :created_by, :status, :priority, 
                             :created_at, :updated_at, :parent_task, :child_tasks, :depends_on_tasks, :notes)
                 """,
-                    task_data
+                    task_data,
                 )
-                
+
                 log_agent_action_to_db(
                     cursor,
                     "admin",
                     "created_unassigned_task",
                     task_id=task_id,
-                    details={"title": title, "mode": "unassigned_multiple"}
+                    details={"title": title, "mode": "unassigned_multiple"},
                 )
-                
-                created_tasks.append({"task_id": task_id, "title": title, "priority": task_priority})
-        
+
+                created_tasks.append(
+                    {"task_id": task_id, "title": title, "priority": task_priority}
+                )
+
         elif task_title and task_description:
             # Single unassigned task creation
             task_id = f"task_{int(datetime.datetime.now().timestamp() * 1000)}"
-            
+
             task_data = {
                 "task_id": task_id,
                 "title": task_title,
@@ -440,9 +445,9 @@ async def _create_unassigned_tasks(arguments: Dict[str, Any]) -> List[mcp_types.
                 "parent_task": parent_task_id_arg,
                 "child_tasks": json.dumps([]),
                 "depends_on_tasks": json.dumps([]),
-                "notes": json.dumps([])
+                "notes": json.dumps([]),
             }
-            
+
             cursor.execute(
                 """
                 INSERT INTO tasks (task_id, title, description, assigned_to, created_by, status, priority, 
@@ -450,52 +455,57 @@ async def _create_unassigned_tasks(arguments: Dict[str, Any]) -> List[mcp_types.
                 VALUES (:task_id, :title, :description, :assigned_to, :created_by, :status, :priority, 
                         :created_at, :updated_at, :parent_task, :child_tasks, :depends_on_tasks, :notes)
             """,
-                task_data
+                task_data,
             )
-            
+
             log_agent_action_to_db(
                 cursor,
                 "admin",
                 "created_unassigned_task",
                 task_id=task_id,
-                details={"title": task_title, "mode": "unassigned_single"}
+                details={"title": task_title, "mode": "unassigned_single"},
             )
-            
-            created_tasks.append({"task_id": task_id, "title": task_title, "priority": priority})
-        
+
+            created_tasks.append(
+                {"task_id": task_id, "title": task_title, "priority": priority}
+            )
+
         else:
             return [
                 mcp_types.TextContent(
                     type="text",
-                    text="Error: Provide either 'task_title' and 'task_description' for single task, or 'tasks' array for multiple tasks."
+                    text="Error: Provide either 'task_title' and 'task_description' for single task, or 'tasks' array for multiple tasks.",
                 )
             ]
-        
+
         conn.commit()
-        
+
         # Build response
         response_parts = [
             f"✅ **Unassigned Tasks Created**",
             f"   Tasks Created: {len(created_tasks)}",
             f"   Status: Pending assignment",
-            ""
+            "",
         ]
-        
+
         for i, task in enumerate(created_tasks, 1):
-            response_parts.append(f"   {i}. {task['task_id']}: {task['title']} (Priority: {task['priority']})")
-        
-        response_parts.append("\n💡 Use assign_task with task_ids parameter to assign these tasks to agents.")
-        
+            response_parts.append(
+                f"   {i}. {task['task_id']}: {task['title']} (Priority: {task['priority']})"
+            )
+
+        response_parts.append(
+            "\n💡 Use assign_task with task_ids parameter to assign these tasks to agents."
+        )
+
         return [mcp_types.TextContent(type="text", text="\n".join(response_parts))]
-        
+
     except Exception as e:
         if conn:
             conn.rollback()
         logger.error(f"Error creating unassigned tasks: {e}", exc_info=True)
         return [
             mcp_types.TextContent(
-                type="text",
-                text=f"Error creating unassigned tasks: {e}"
+                type="text", text=f"Error creating unassigned tasks: {e}"
             )
         ]
     finally:
