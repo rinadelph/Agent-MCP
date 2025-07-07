@@ -5,7 +5,7 @@ To use:
 from mcp_server_src.core import globals as g
 g.admin_token = "new_token"
 """
-import anyio # For rag_index_task type hint
+import anyio  # For rag_index_task type hint
 from typing import Dict, List, Optional, Any
 
 # --- Core Server State ---
@@ -27,7 +27,9 @@ tasks: Dict[str, Dict[str, Any]] = {}  # Task ID -> Task data (in-memory cache o
 
 # --- File and Directory State ---
 # From main.py:153
-file_map: Dict[str, Dict[str, Any]] = {}  # filepath -> {"agent_id": ..., "timestamp": ..., "status": ...}
+file_map: Dict[str, Dict[str, Any]] = (
+    {}
+)  # filepath -> {"agent_id": ..., "timestamp": ..., "status": ...}
 
 # From main.py:154
 agent_working_dirs: Dict[str, str] = {}  # agent_id -> absolute_working_directory_path
@@ -42,14 +44,16 @@ agent_tmux_sessions: Dict[str, str] = {}  # agent_id -> tmux_session_name
 audit_log: List[Dict[str, Any]] = []
 
 # From main.py:158
-agent_profile_counter: int = 20 # For cycling Cursor profile numbers
+agent_profile_counter: int = 20  # For cycling Cursor profile numbers
 
 # From main.py:166
-agent_color_index: int = 0 # For cycling through AGENT_COLORS from config.py
+agent_color_index: int = 0  # For cycling through AGENT_COLORS from config.py
 
 # --- Server Lifecycle ---
 # From main.py:169
-server_running: bool = True # Flag to control main server loop and background tasks, handled by signal_utils.py
+server_running: bool = (
+    True  # Flag to control main server loop and background tasks, handled by signal_utils.py
+)
 
 # --- External Service Clients (Placeholders) ---
 # From main.py:185
