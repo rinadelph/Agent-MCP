@@ -364,7 +364,8 @@ async def run_rag_indexing_periodically(interval_seconds: int = 300, *, task_sta
                         chunks_with_metadata = [(chunk, {'source_type': source_type}) for chunk in text_chunks]
                     
                     if not chunks_with_metadata:
-                        logger.warning(f"No chunks generated for {source_type}: {source_ref}. Skipping.")
+                        file_size = len(content) if content else 0
+                        logger.warning(f"No chunks generated for {source_type}: {source_ref} (file size: {file_size} bytes, likely empty or only whitespace). Skipping.")
                         continue
                     
                     for chunk_text, metadata in chunks_with_metadata:

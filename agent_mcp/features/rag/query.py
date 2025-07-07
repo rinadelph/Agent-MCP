@@ -133,8 +133,9 @@ async def query_rag_system(query_text: str) -> str:
                         SELECT c.chunk_text, c.source_type, c.source_ref, c.metadata, r.distance
                         FROM rag_embeddings r
                         JOIN rag_chunks c ON r.rowid = c.chunk_id
-                        WHERE r.embedding MATCH ? AND k = ?
+                        WHERE r.embedding MATCH ? 
                         ORDER BY r.distance
+                        LIMIT ? 
                     """
                     cursor.execute(sql_vector_search, (query_embedding_json, k_results))
                     raw_results = cursor.fetchall()

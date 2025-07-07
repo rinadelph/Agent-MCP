@@ -69,11 +69,13 @@ def setup_logging():
     for handler in root_logger.handlers[:]:
         root_logger.removeHandler(handler)
 
-    # 1. File Handler (always add this, no colors)
-    file_formatter = logging.Formatter(LOG_FORMAT_FILE)
-    file_handler = logging.FileHandler(LOG_FILE_NAME, mode='a', encoding='utf-8')  # Append mode
-    file_handler.setFormatter(file_formatter)
-    root_logger.addHandler(file_handler)
+    # 1. File Handler (only in debug mode)
+    debug_mode = os.environ.get("MCP_DEBUG", "false").lower() == "true"
+    if debug_mode:
+        file_formatter = logging.Formatter(LOG_FORMAT_FILE)
+        file_handler = logging.FileHandler(LOG_FILE_NAME, mode='a', encoding='utf-8')  # Append mode
+        file_handler.setFormatter(file_formatter)
+        root_logger.addHandler(file_handler)
 
     # 2. Console Handler (with colors, conditional)
     if CONSOLE_LOGGING_ENABLED:
@@ -96,6 +98,8 @@ def enable_console_logging():
     """Enable console logging dynamically (used when debug mode is enabled)."""
     global CONSOLE_LOGGING_ENABLED
     CONSOLE_LOGGING_ENABLED = True
+    # Re-setup logging to add file handler when debug mode is enabled
+    setup_logging()
     
     root_logger = logging.getLogger()
     

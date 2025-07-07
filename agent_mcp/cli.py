@@ -135,7 +135,7 @@ def main_cli(port: int, transport: str, project_dir: str, admin_token_cli: Optio
     Main Command-Line Interface for starting the MCP Server.
     
     The server supports two embedding modes:
-    - Simple mode (default): Uses text-embedding-3-large (1024 dimensions) - indexes only markdown files and context
+    - Simple mode (default): Uses text-embedding-3-large (1536 dimensions) - indexes only markdown files and context
     - Advanced mode (--advanced): Uses text-embedding-3-large (3072 dimensions) - includes code analysis, task indexing
     
     Note: Switching between modes will require re-indexing all content.
@@ -149,7 +149,8 @@ def main_cli(port: int, transport: str, project_dir: str, admin_token_cli: Optio
         config.EMBEDDING_DIMENSION = config.ADVANCED_EMBEDDING_DIMENSION
         logger.info("Advanced embeddings mode enabled (3072 dimensions, text-embedding-3-large, code & task indexing)")
     else:
-        logger.info("Using simple embeddings mode (1024 dimensions, text-embedding-3-large, markdown & context only)")
+        from .core.config import SIMPLE_EMBEDDING_DIMENSION, SIMPLE_EMBEDDING_MODEL
+        logger.info(f"Using simple embeddings mode ({SIMPLE_EMBEDDING_DIMENSION} dimensions, {SIMPLE_EMBEDDING_MODEL}, markdown & context only)")
     
     # Initialize Git worktree support if enabled
     if git:
@@ -195,8 +196,13 @@ def main_cli(port: int, transport: str, project_dir: str, admin_token_cli: Optio
 
     # Log the embedding mode being used
     embedding_mode_info = "advanced" if advanced else "simple"
-    embedding_model_info = config.EMBEDDING_MODEL if 'config' in locals() else "text-embedding-3-large"
-    embedding_dim_info = config.EMBEDDING_DIMENSION if 'config' in locals() else 1024
+    if advanced:
+        embedding_model_info = config.EMBEDDING_MODEL if 'config' in locals() else "text-embedding-3-large"
+        embedding_dim_info = config.EMBEDDING_DIMENSION if 'config' in locals() else 3072
+    else:
+        from .core.config import SIMPLE_EMBEDDING_DIMENSION, SIMPLE_EMBEDDING_MODEL
+        embedding_model_info = SIMPLE_EMBEDDING_MODEL
+        embedding_dim_info = SIMPLE_EMBEDDING_DIMENSION
     
     logger.info(f"Attempting to start MCP Server: Port={port}, Transport={transport}, ProjectDir='{project_dir}'")
     logger.info(f"Embedding Mode: {embedding_mode_info} (Model: {embedding_model_info}, Dimensions: {embedding_dim_info})")
