@@ -75,6 +75,9 @@ global_vss_load_successful: bool = False
 # The type hint `anyio.abc.CancelScope` is a common way to hold a reference that allows cancellation.
 rag_index_task_scope: Optional[anyio.abc.CancelScope] = None
 
+# Handle for the Claude Code session monitoring background task
+claude_session_task_scope: Optional[anyio.abc.CancelScope] = None
+
 # Note: The original `main.py` also had `openai_client = None` at line 185.
 # I've named it `openai_client_instance` here to avoid confusion with the module name
 # if we later have `import openai_client from ...`.
