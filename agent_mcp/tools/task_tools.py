@@ -808,41 +808,38 @@ async def assign_task_tool_impl(
     # Convert agent_token to agent_id and validate agent
     conn = get_db_connection()
     cursor = conn.cursor()
-    
+
     try:
         # Find agent by token
-        cursor.execute("SELECT agent_id FROM agents WHERE token = ?", (target_agent_token,))
+        cursor.execute(
+            "SELECT agent_id FROM agents WHERE token = ?", (target_agent_token,)
+        )
         agent_row = cursor.fetchone()
         if not agent_row:
             conn.close()
             return [
                 mcp_types.TextContent(
                     type="text",
-                    text="Error: Agent token not found. Agent may not exist or token is invalid."
+                    text="Error: Agent token not found. Agent may not exist or token is invalid.",
                 )
             ]
-        
+
         target_agent_id = agent_row["agent_id"]
-        
+
         # Prevent admin agents from being assigned tasks
         if target_agent_id.lower().startswith("admin"):
             conn.close()
             return [
                 mcp_types.TextContent(
                     type="text",
-                    text="Error: Admin agents cannot be assigned tasks. Admin agents are for coordination and management only."
+                    text="Error: Admin agents cannot be assigned tasks. Admin agents are for coordination and management only.",
                 )
             ]
-            
+
     except Exception as e:
         conn.close()
         logger.error(f"Error validating agent token: {e}", exc_info=True)
-        return [
-            mcp_types.TextContent(
-                type="text",
-                text=f"Error validating agent: {e}"
-            )
-        ]
+        return [mcp_types.TextContent(type="text", text=f"Error validating agent: {e}")]
     finally:
         conn.close()
 
