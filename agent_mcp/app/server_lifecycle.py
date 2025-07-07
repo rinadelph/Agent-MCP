@@ -300,13 +300,17 @@ async def start_background_tasks(task_group: anyio.abc.TaskGroup):
         run_rag_indexing_periodically, rag_interval
     )
     logger.info(f"RAG indexing task started with interval {rag_interval}s.")
-    
+
     # Start Claude Code Session Monitor
-    claude_session_interval = int(os.environ.get("MCP_CLAUDE_SESSION_MONITOR_INTERVAL", "5"))
+    claude_session_interval = int(
+        os.environ.get("MCP_CLAUDE_SESSION_MONITOR_INTERVAL", "5")
+    )
     g.claude_session_task_scope = await task_group.start(
         run_claude_session_monitoring, claude_session_interval
     )
-    logger.info(f"Claude Code session monitor started with interval {claude_session_interval}s.")
+    logger.info(
+        f"Claude Code session monitor started with interval {claude_session_interval}s."
+    )
 
 
 async def application_shutdown():
@@ -318,6 +322,10 @@ async def application_shutdown():
     if g.rag_index_task_scope and not g.rag_index_task_scope.cancel_called:
         logger.info("Attempting to cancel RAG indexing task...")
         g.rag_index_task_scope.cancel()
+        
+    if g.claude_session_task_scope and not g.claude_session_task_scope.cancel_called:
+        logger.info("Attempting to cancel Claude session monitoring task...")
+        g.claude_session_task_scope.cancel()
         # Note: Actual waiting for task completion is usually handled by the AnyIO TaskGroup context manager.
 
     # Add any other cleanup (e.g., closing persistent connections if not managed by context)
