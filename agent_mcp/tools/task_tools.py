@@ -650,16 +650,12 @@ async def assign_task_tool_impl(
             )
         ]
 
-    # Validate that agent_id is always required
+    # Handle unassigned task creation (agent_id is optional)
     if not target_agent_id:
-        return [
-            mcp_types.TextContent(
-                type="text",
-                text="Error: agent_id is required.",
-            )
-        ]
+        # Mode 0: Create unassigned tasks
+        return await _create_unassigned_tasks(arguments)
 
-    # Determine operation mode and validate parameters
+    # Determine operation mode and validate parameters (when agent_id provided)
     if task_ids:
         # Mode 3: Assign to existing tasks
         operation_mode = "existing"
