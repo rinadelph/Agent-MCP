@@ -261,7 +261,7 @@ async def create_agent_tool_impl(
         for task_id in task_ids:
             # Update task assignment
             cursor.execute(
-                "UPDATE tasks SET assigned_to = ?, status = 'assigned', updated_at = ? WHERE task_id = ?",
+                "UPDATE tasks SET assigned_to = ?, status = 'pending', updated_at = ? WHERE task_id = ?",
                 (agent_id, created_at_iso, task_id),
             )
 
@@ -272,7 +272,7 @@ async def create_agent_tool_impl(
                 )
 
             assigned_tasks.append(task_id)
-            
+
             # Update the in-memory global cache (g.tasks) to reflect the assignment
             if task_id in g.tasks:
                 g.tasks[task_id]["assigned_to"] = agent_id
@@ -284,7 +284,9 @@ async def create_agent_tool_impl(
                 task_row = cursor.fetchone()
                 if task_row:
                     task_data = dict(task_row)
-                    task_data["assigned_to"] = agent_id  # Ensure assignment is reflected
+                    task_data["assigned_to"] = (
+                        agent_id  # Ensure assignment is reflected
+                    )
                     task_data["status"] = "assigned"
                     task_data["updated_at"] = created_at_iso
                     g.tasks[task_id] = task_data
