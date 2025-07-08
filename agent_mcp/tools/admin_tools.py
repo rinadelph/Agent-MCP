@@ -521,6 +521,8 @@ async def create_agent_tool_impl(
             f"Token: {new_agent_token}\n"
             f"Assigned Color: {agent_color}\n"
             f"Working Directory: {agent_working_dir_abs}\n"
+            f"Assigned Tasks: {', '.join(assigned_tasks)}\n"
+            f"Current Task: {assigned_tasks[0] if assigned_tasks else 'None'}\n"
             f"{launch_status}\n"
             f"=========================\n"
             f"=== System Prompt for {agent_id} ===\n{system_prompt_str}\n"
