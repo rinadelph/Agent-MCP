@@ -255,22 +255,24 @@ async def create_agent_tool_impl(
                 "wd": agent_working_dir_abs,
             },
         )
-        
+
         # Assign tasks to the agent atomically
         assigned_tasks = []
         for task_id in task_ids:
             # Update task assignment
             cursor.execute(
                 "UPDATE tasks SET assigned_to = ?, status = 'assigned', updated_at = ? WHERE task_id = ?",
-                (agent_id, created_at_iso, task_id)
+                (agent_id, created_at_iso, task_id),
             )
-            
+
             if cursor.rowcount == 0:
                 # This should not happen since we validated earlier, but let's be safe
-                raise Exception(f"Failed to assign task '{task_id}' to agent '{agent_id}'")
-            
+                raise Exception(
+                    f"Failed to assign task '{task_id}' to agent '{agent_id}'"
+                )
+
             assigned_tasks.append(task_id)
-            
+
             # Log task assignment action
             log_agent_action_to_db(
                 cursor,
@@ -279,17 +281,17 @@ async def create_agent_tool_impl(
                 details={
                     "agent_id": agent_id,
                     "task_id": task_id,
-                    "assignment_mode": "agent_creation"
+                    "assignment_mode": "agent_creation",
                 },
             )
-        
+
         # Update agent with current task (set to first task if multiple)
         if assigned_tasks:
             cursor.execute(
                 "UPDATE agents SET current_task = ? WHERE agent_id = ?",
-                (assigned_tasks[0], agent_id)
+                (assigned_tasks[0], agent_id),
             )
-        
+
         # Commit the transaction (agent creation + task assignments)
         conn.commit()
 
@@ -299,7 +301,7 @@ async def create_agent_tool_impl(
             "capabilities": capabilities or [],
             "created_at": created_at_iso,
             "status": status,
-            "current_task": None,
+            "current_task": assigned_tasks[0] if assigned_tasks else None,
             "color": agent_color,
         }
         g.agent_working_dirs[agent_id] = agent_working_dir_abs
