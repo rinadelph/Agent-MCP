@@ -61,6 +61,7 @@ async def create_agent_tool_impl(arguments: Dict[str, Any]) -> List[mcp_types.Te
     token = arguments.get("token")
     agent_id = arguments.get("agent_id")
     capabilities = arguments.get("capabilities") # This was List[str]
+    task_ids = arguments.get("task_ids")  # Required list of task IDs
     
     # New prompt-related parameters
     prompt_template = arguments.get("prompt_template", "worker_with_rag")  # Default to RAG worker
