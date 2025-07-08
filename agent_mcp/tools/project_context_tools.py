@@ -562,7 +562,9 @@ async def _handle_bulk_context_update(
                 try:
                     context_key = update["context_key"]
                     context_value = update["context_value"]
-                    description = update.get("description", f"Bulk update operation {i+1}")
+                    description = update.get(
+                        "description", f"Bulk update operation {i+1}"
+                    )
 
                     # Validate JSON serialization
                     value_json_str = json.dumps(context_value)
@@ -627,7 +629,9 @@ async def _handle_bulk_context_update(
         except sqlite3.Error as e_sql:
             if conn:
                 conn.rollback()
-            logger.error(f"Database error in bulk context update: {e_sql}", exc_info=True)
+            logger.error(
+                f"Database error in bulk context update: {e_sql}", exc_info=True
+            )
             raise e_sql
         except Exception as e:
             if conn:

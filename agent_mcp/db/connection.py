@@ -228,10 +228,10 @@ def get_db_connection_read() -> sqlite3.Connection:
 async def execute_db_write(operation_func):
     """
     Execute a database write operation through the write queue.
-    
+
     Args:
         operation_func: A function that performs the database write operation
-        
+
     Returns:
         The result of the write operation
     """
