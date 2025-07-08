@@ -438,7 +438,7 @@ async def _create_unassigned_tasks(
                 "description": task_description,
                 "assigned_to": None,  # UNASSIGNED
                 "created_by": "admin",
-                "status": "pending",
+                "status": "unassigned",
                 "priority": priority,
                 "created_at": created_at,
                 "updated_at": created_at,
