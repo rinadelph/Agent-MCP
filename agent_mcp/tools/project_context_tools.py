@@ -455,72 +455,84 @@ async def _handle_single_context_update(
             )
         ]
 
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        updated_at_iso = datetime.datetime.now().isoformat()
+    # Define the write operation as an async function
+    async def write_operation():
+        conn = None
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            updated_at_iso = datetime.datetime.now().isoformat()
 
-        # Use INSERT OR REPLACE (UPSERT)
-        cursor.execute(
-            """
-            INSERT OR REPLACE INTO project_context (context_key, value, last_updated, updated_by, description)
-            VALUES (?, ?, ?, ?, ?)
-        """,
-            (
-                context_key_to_update,
-                value_json_str,
-                updated_at_iso,
+            # Use INSERT OR REPLACE (UPSERT)
+            cursor.execute(
+                """
+                INSERT OR REPLACE INTO project_context (context_key, value, last_updated, updated_by, description)
+                VALUES (?, ?, ?, ?, ?)
+            """,
+                (
+                    context_key_to_update,
+                    value_json_str,
+                    updated_at_iso,
+                    requesting_agent_id,
+                    description_for_context,
+                ),
+            )
+
+            # Log to agent_actions table
+            log_agent_action_to_db(
+                cursor,
                 requesting_agent_id,
-                description_for_context,
-            ),
-        )
+                "updated_context",
+                details={"context_key": context_key_to_update, "action": "set/update"},
+            )
+            conn.commit()
 
-        # Log to agent_actions table
-        log_agent_action_to_db(
-            cursor,
-            requesting_agent_id,
-            "updated_context",
-            details={"context_key": context_key_to_update, "action": "set/update"},
-        )
-        conn.commit()
+            logger.info(
+                f"Project context for key '{context_key_to_update}' updated by '{requesting_agent_id}'."
+            )
+            return "success"
 
-        logger.info(
-            f"Project context for key '{context_key_to_update}' updated by '{requesting_agent_id}'."
-        )
+        except sqlite3.Error as e_sql:
+            if conn:
+                conn.rollback()
+            logger.error(
+                f"Database error updating project context for key '{context_key_to_update}': {e_sql}",
+                exc_info=True,
+            )
+            raise e_sql
+        except Exception as e:
+            if conn:
+                conn.rollback()
+            logger.error(
+                f"Unexpected error updating project context for key '{context_key_to_update}': {e}",
+                exc_info=True,
+            )
+            raise e
+        finally:
+            if conn:
+                conn.close()
+
+    # Execute the write operation through the queue
+    try:
+        await execute_db_write(write_operation)
         return [
             mcp_types.TextContent(
                 type="text",
                 text=f"Project context updated successfully for key '{context_key_to_update}'.",
             )
         ]
-
     except sqlite3.Error as e_sql:
-        if conn:
-            conn.rollback()
-        logger.error(
-            f"Database error updating project context for key '{context_key_to_update}': {e_sql}",
-            exc_info=True,
-        )
         return [
             mcp_types.TextContent(
                 type="text", text=f"Database error updating project context: {e_sql}"
             )
         ]
     except Exception as e:
-        if conn:
-            conn.rollback()
-        logger.error(
-            f"Unexpected error updating project context for key '{context_key_to_update}': {e}",
-            exc_info=True,
-        )
         return [
             mcp_types.TextContent(
                 type="text", text=f"Unexpected error updating project context: {e}"
             )
         ]
-    finally:
-        if conn:
-            conn.close()
 
 
 async def _handle_bulk_context_update(
