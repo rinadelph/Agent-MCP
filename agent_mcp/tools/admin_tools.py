@@ -1345,8 +1345,8 @@ async def relaunch_agent_tool_impl(
 def register_admin_tools():
     register_tool(
         name="create_agent",
-        description="Create a new agent with the specified ID, capabilities, and prompt configuration. Agents work in the shared project directory with file-level locking for coordination.",
-        input_schema={  # Enhanced with prompt template support
+        description="Create a new agent with the specified ID, capabilities, and prompt configuration. The agent will be assigned the specified tasks upon creation. Agents work in the shared project directory with file-level locking for coordination.",
+        input_schema={  # Enhanced with prompt template support and required task_ids
             "type": "object",
             "properties": {
                 "token": {
@@ -1356,6 +1356,12 @@ def register_admin_tools():
                 "agent_id": {
                     "type": "string",
                     "description": "Unique identifier for the agent",
+                },
+                "task_ids": {
+                    "type": "array",
+                    "description": "List of task IDs to assign to the agent (required). Tasks must exist and be unassigned.",
+                    "items": {"type": "string"},
+                    "minItems": 1,
                 },
                 "capabilities": {
                     "type": "array",
@@ -1392,7 +1398,7 @@ def register_admin_tools():
                     "maximum": 30,
                 },
             },
-            "required": ["token", "agent_id"],
+            "required": ["token", "agent_id", "task_ids"],
             "additionalProperties": False,
         },
         implementation=create_agent_tool_impl,
