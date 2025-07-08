@@ -15,6 +15,9 @@ except ImportError:
 from ..core.config import logger, get_db_path
 from ..core import globals as g # For setting global VSS flags
 
+# Import write queue for serializing database write operations
+from .write_queue import get_write_queue, execute_write_operation
+
 # Module-level flags for VSS loadability, now directly using the global ones.
 # These are initialized in mcp_server_src.core.globals
 # _vss_load_tested: bool = False # Replaced by g.global_vss_load_tested
