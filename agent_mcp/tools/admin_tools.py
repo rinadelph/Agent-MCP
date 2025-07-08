@@ -152,7 +152,10 @@ async def create_agent_tool_impl(
 
         # Validate task existence and availability
         for task_id in task_ids:
-            cursor.execute("SELECT task_id, assigned_to, status FROM tasks WHERE task_id = ?", (task_id,))
+            cursor.execute(
+                "SELECT task_id, assigned_to, status FROM tasks WHERE task_id = ?",
+                (task_id,),
+            )
             task_row = cursor.fetchone()
             if not task_row:
                 return [
@@ -161,9 +164,9 @@ async def create_agent_tool_impl(
                         text=f"Error: Task '{task_id}' not found in database.",
                     )
                 ]
-            
+
             task_data = dict(task_row)
-            
+
             # Check if task is already assigned
             if task_data.get("assigned_to") is not None:
                 return [
@@ -172,7 +175,7 @@ async def create_agent_tool_impl(
                         text=f"Error: Task '{task_id}' is already assigned to agent '{task_data['assigned_to']}'.",
                     )
                 ]
-            
+
             # Check if task is in a valid state for assignment
             task_status = task_data.get("status", "").lower()
             if task_status not in ["pending", "created", "unassigned"]:
@@ -252,6 +255,42 @@ async def create_agent_tool_impl(
                 "wd": agent_working_dir_abs,
             },
         )
+        
+        # Assign tasks to the agent atomically
+        assigned_tasks = []
+        for task_id in task_ids:
+            # Update task assignment
+            cursor.execute(
+                "UPDATE tasks SET assigned_to = ?, status = 'assigned', updated_at = ? WHERE task_id = ?",
+                (agent_id, created_at_iso, task_id)
+            )
+            
+            if cursor.rowcount == 0:
+                # This should not happen since we validated earlier, but let's be safe
+                raise Exception(f"Failed to assign task '{task_id}' to agent '{agent_id}'")
+            
+            assigned_tasks.append(task_id)
+            
+            # Log task assignment action
+            log_agent_action_to_db(
+                cursor,
+                "admin",
+                "assigned_task",
+                details={
+                    "agent_id": agent_id,
+                    "task_id": task_id,
+                    "assignment_mode": "agent_creation"
+                },
+            )
+        
+        # Update agent with current task (set to first task if multiple)
+        if assigned_tasks:
+            cursor.execute(
+                "UPDATE agents SET current_task = ? WHERE agent_id = ?",
+                (assigned_tasks[0], agent_id)
+            )
+        
+        # Commit the transaction (agent creation + task assignments)
         conn.commit()
 
         # Update in-memory state (main.py:1126-1133)
