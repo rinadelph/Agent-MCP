@@ -546,103 +546,114 @@ async def _handle_bulk_context_update(
         {"update_count": len(updates_list)},
     )
 
-    conn = None
-    results = []
-    failed_updates = []
+    # Define the write operation as an async function
+    async def write_operation():
+        conn = None
+        results = []
+        failed_updates = []
 
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        updated_at_iso = datetime.datetime.now().isoformat()
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            updated_at_iso = datetime.datetime.now().isoformat()
 
-        # Process each update atomically
-        for i, update in enumerate(updates_list):
-            try:
-                context_key = update["context_key"]
-                context_value = update["context_value"]
-                description = update.get("description", f"Bulk update operation {i+1}")
+            # Process each update atomically
+            for i, update in enumerate(updates_list):
+                try:
+                    context_key = update["context_key"]
+                    context_value = update["context_value"]
+                    description = update.get("description", f"Bulk update operation {i+1}")
 
-                # Validate JSON serialization
-                value_json_str = json.dumps(context_value)
+                    # Validate JSON serialization
+                    value_json_str = json.dumps(context_value)
 
-                # Execute update
-                cursor.execute(
-                    """
-                    INSERT OR REPLACE INTO project_context (context_key, value, last_updated, updated_by, description)
-                    VALUES (?, ?, ?, ?, ?)
-                """,
-                    (
-                        context_key,
-                        value_json_str,
-                        updated_at_iso,
+                    # Execute update
+                    cursor.execute(
+                        """
+                        INSERT OR REPLACE INTO project_context (context_key, value, last_updated, updated_by, description)
+                        VALUES (?, ?, ?, ?, ?)
+                    """,
+                        (
+                            context_key,
+                            value_json_str,
+                            updated_at_iso,
+                            requesting_agent_id,
+                            description,
+                        ),
+                    )
+
+                    results.append(f"✓ Updated '{context_key}'")
+
+                    # Log individual action
+                    log_agent_action_to_db(
+                        cursor,
                         requesting_agent_id,
-                        description,
-                    ),
-                )
+                        "bulk_updated_context",
+                        details={
+                            "context_key": context_key,
+                            "operation": f"bulk_update_{i+1}",
+                        },
+                    )
 
-                results.append(f"✓ Updated '{context_key}'")
+                except (TypeError, json.JSONEncodeError) as e_json:
+                    failed_updates.append(
+                        f"✗ Failed '{update.get('context_key', 'unknown')}': Invalid JSON - {e_json}"
+                    )
+                except Exception as e_update:
+                    failed_updates.append(
+                        f"✗ Failed '{update.get('context_key', 'unknown')}': {str(e_update)}"
+                    )
 
-                # Log individual action
-                log_agent_action_to_db(
-                    cursor,
-                    requesting_agent_id,
-                    "bulk_updated_context",
-                    details={
-                        "context_key": context_key,
-                        "operation": f"bulk_update_{i+1}",
-                    },
-                )
+            conn.commit()
 
-            except (TypeError, json.JSONEncodeError) as e_json:
-                failed_updates.append(
-                    f"✗ Failed '{update.get('context_key', 'unknown')}': Invalid JSON - {e_json}"
-                )
-            except Exception as e_update:
-                failed_updates.append(
-                    f"✗ Failed '{update.get('context_key', 'unknown')}': {str(e_update)}"
-                )
+            # Build response
+            response_parts = [
+                f"Bulk update completed: {len(results)} successful, {len(failed_updates)} failed"
+            ]
 
-        conn.commit()
+            if results:
+                response_parts.append("\nSuccessful updates:")
+                response_parts.extend(results)
 
-        # Build response
-        response_parts = [
-            f"Bulk update completed: {len(results)} successful, {len(failed_updates)} failed"
-        ]
+            if failed_updates:
+                response_parts.append("\nFailed updates:")
+                response_parts.extend(failed_updates)
 
-        if results:
-            response_parts.append("\nSuccessful updates:")
-            response_parts.extend(results)
+            logger.info(
+                f"Bulk context update by '{requesting_agent_id}': {len(results)} successful, {len(failed_updates)} failed."
+            )
+            return response_parts
 
-        if failed_updates:
-            response_parts.append("\nFailed updates:")
-            response_parts.extend(failed_updates)
+        except sqlite3.Error as e_sql:
+            if conn:
+                conn.rollback()
+            logger.error(f"Database error in bulk context update: {e_sql}", exc_info=True)
+            raise e_sql
+        except Exception as e:
+            if conn:
+                conn.rollback()
+            logger.error(f"Unexpected error in bulk context update: {e}", exc_info=True)
+            raise e
+        finally:
+            if conn:
+                conn.close()
 
-        logger.info(
-            f"Bulk context update by '{requesting_agent_id}': {len(results)} successful, {len(failed_updates)} failed."
-        )
+    # Execute the write operation through the queue
+    try:
+        response_parts = await execute_db_write(write_operation)
         return [mcp_types.TextContent(type="text", text="\n".join(response_parts))]
-
     except sqlite3.Error as e_sql:
-        if conn:
-            conn.rollback()
-        logger.error(f"Database error in bulk context update: {e_sql}", exc_info=True)
         return [
             mcp_types.TextContent(
                 type="text", text=f"Database error in bulk update: {e_sql}"
             )
         ]
     except Exception as e:
-        if conn:
-            conn.rollback()
-        logger.error(f"Unexpected error in bulk context update: {e}", exc_info=True)
         return [
             mcp_types.TextContent(
                 type="text", text=f"Unexpected error in bulk update: {e}"
             )
         ]
-    finally:
-        if conn:
-            conn.close()
 
 
 async def update_project_context_tool_impl(
