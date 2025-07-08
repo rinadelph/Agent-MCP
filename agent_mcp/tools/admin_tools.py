@@ -276,7 +276,7 @@ async def create_agent_tool_impl(
             # Update the in-memory global cache (g.tasks) to reflect the assignment
             if task_id in g.tasks:
                 g.tasks[task_id]["assigned_to"] = agent_id
-                g.tasks[task_id]["status"] = "assigned"
+                g.tasks[task_id]["status"] = "pending"
                 g.tasks[task_id]["updated_at"] = created_at_iso
             else:
                 # If task not in cache, fetch from database and add to cache
@@ -287,7 +287,7 @@ async def create_agent_tool_impl(
                     task_data["assigned_to"] = (
                         agent_id  # Ensure assignment is reflected
                     )
-                    task_data["status"] = "assigned"
+                    task_data["status"] = "pending"
                     task_data["updated_at"] = created_at_iso
                     g.tasks[task_id] = task_data
 
