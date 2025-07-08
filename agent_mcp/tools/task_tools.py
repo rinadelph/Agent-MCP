@@ -490,7 +490,7 @@ async def _create_unassigned_tasks(
         response_parts = [
             f"✅ **Unassigned Tasks Created**",
             f"   Tasks Created: {len(created_tasks)}",
-            f"   Status: Pending assignment",
+            f"   Status: Unassigned",
             "",
         ]
 
