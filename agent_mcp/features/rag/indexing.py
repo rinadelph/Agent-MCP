@@ -901,9 +901,10 @@ async def index_task_data(task_id: str, task_data: Dict[str, Any]) -> None:
                 chunk_id = cursor.lastrowid
 
                 # Insert embedding
+                embedding_json_str = json.dumps(embedding_vector)
                 cursor.execute(
                     "INSERT INTO rag_embeddings (rowid, embedding) VALUES (?, ?)",
-                    (chunk_id, embedding_vector),
+                    (chunk_id, embedding_json_str),
                 )
 
             except Exception as e:
