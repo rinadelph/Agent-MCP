@@ -178,11 +178,11 @@ async def create_agent_tool_impl(
 
             # Check if task is in a valid state for assignment
             task_status = task_data.get("status", "").lower()
-            if task_status not in ["pending", "created", "unassigned"]:
+            if task_status not in ["created", "unassigned"]:
                 return [
                     mcp_types.TextContent(
                         type="text",
-                        text=f"Error: Task '{task_id}' has status '{task_status}' and cannot be assigned. Only tasks with status 'pending', 'created', or 'unassigned' can be assigned.",
+                        text=f"Error: Task '{task_id}' has status '{task_status}' and cannot be assigned. Only tasks with status 'created' or 'unassigned' can be assigned.",
                     )
                 ]
 
