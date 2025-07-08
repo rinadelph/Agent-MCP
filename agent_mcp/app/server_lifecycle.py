@@ -275,6 +275,12 @@ async def application_startup(
         )
         # Server can continue, but RAG won't work.
 
+    # 6.5. Initialize Database Write Queue
+    # This prevents SQLite lock contention during concurrent write operations
+    write_queue = get_write_queue()
+    await write_queue.start()
+    logger.info("Database write queue initialized and started.")
+
     # 7. Perform VSS Loadability Check (Original main.py: called by init_database)
     # This ensures g.global_vss_load_successful is set.
     check_vss_loadability()  # db.connection.check_vss_loadability
