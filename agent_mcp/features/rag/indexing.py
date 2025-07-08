@@ -582,7 +582,7 @@ async def index_task_data(task_id: str, task_data: Dict[str, Any]) -> None:
         )
         
         # Get OpenAI client for embeddings
-        client = await get_openai_client()
+        client = get_openai_client()
         if not client:
             logger.error("OpenAI client not available for task indexing")
             return
