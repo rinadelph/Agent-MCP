@@ -426,7 +426,7 @@ async def _create_unassigned_tasks(
 
                 # Add to global cache
                 g.tasks[task_id] = task_data
-                
+
                 created_tasks.append(
                     {"task_id": task_id, "title": title, "priority": task_priority}
                 )
@@ -468,6 +468,9 @@ async def _create_unassigned_tasks(
                 task_id=task_id,
                 details={"title": task_title, "mode": "unassigned_single"},
             )
+
+            # Add to global cache
+            g.tasks[task_id] = task_data
 
             created_tasks.append(
                 {"task_id": task_id, "title": task_title, "priority": priority}
