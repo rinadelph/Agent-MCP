@@ -103,23 +103,26 @@ async def create_agent_tool_impl(
     if not task_ids:
         return [
             mcp_types.TextContent(
-                type="text", text="Error: task_ids is required and must be a non-empty list."
+                type="text",
+                text="Error: task_ids is required and must be a non-empty list.",
             )
         ]
-    
+
     if not isinstance(task_ids, list) or not task_ids:
         return [
             mcp_types.TextContent(
-                type="text", text="Error: task_ids must be a non-empty list of task IDs."
+                type="text",
+                text="Error: task_ids must be a non-empty list of task IDs.",
             )
         ]
-    
+
     # Validate each task_id is a string
     for task_id in task_ids:
         if not isinstance(task_id, str):
             return [
                 mcp_types.TextContent(
-                    type="text", text=f"Error: All task IDs must be strings. Found: {type(task_id).__name__}"
+                    type="text",
+                    text=f"Error: All task IDs must be strings. Found: {type(task_id).__name__}",
                 )
             ]
 
@@ -146,6 +149,39 @@ async def create_agent_tool_impl(
                     text=f"Agent '{agent_id}' already exists (in database).",
                 )
             ]
+
+        # Validate task existence and availability
+        for task_id in task_ids:
+            cursor.execute("SELECT task_id, assigned_to, status FROM tasks WHERE task_id = ?", (task_id,))
+            task_row = cursor.fetchone()
+            if not task_row:
+                return [
+                    mcp_types.TextContent(
+                        type="text",
+                        text=f"Error: Task '{task_id}' not found in database.",
+                    )
+                ]
+            
+            task_data = dict(task_row)
+            
+            # Check if task is already assigned
+            if task_data.get("assigned_to") is not None:
+                return [
+                    mcp_types.TextContent(
+                        type="text",
+                        text=f"Error: Task '{task_id}' is already assigned to agent '{task_data['assigned_to']}'.",
+                    )
+                ]
+            
+            # Check if task is in a valid state for assignment
+            task_status = task_data.get("status", "").lower()
+            if task_status not in ["pending", "created", "unassigned"]:
+                return [
+                    mcp_types.TextContent(
+                        type="text",
+                        text=f"Error: Task '{task_id}' has status '{task_status}' and cannot be assigned. Only tasks with status 'pending', 'created', or 'unassigned' can be assigned.",
+                    )
+                ]
 
         # Generate token and prepare data (main.py:1089-1092)
         new_agent_token = generate_token()
