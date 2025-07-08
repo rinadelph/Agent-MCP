@@ -11,7 +11,7 @@ from ..core.config import logger
 from ..core import globals as g  # Not directly used here, but auth uses it
 from ..core.auth import get_agent_id, verify_token
 from ..utils.audit_utils import log_audit
-from ..db.connection import get_db_connection
+from ..db.connection import get_db_connection, execute_db_write
 from ..db.actions.agent_actions_db import log_agent_action_to_db
 
 
