@@ -385,7 +385,9 @@ async def _create_unassigned_tasks(
             if tasks:
                 # Multiple unassigned task creation
                 for i, task in enumerate(tasks):
-                    task_id = f"task_{int(datetime.datetime.now().timestamp() * 1000)}_{i}"
+                    task_id = (
+                        f"task_{int(datetime.datetime.now().timestamp() * 1000)}_{i}"
+                    )
                     title = task["title"]
                     description = task["description"]
                     task_priority = task.get("priority", "medium")
@@ -479,7 +481,9 @@ async def _create_unassigned_tasks(
                 )
 
             else:
-                raise ValueError("Error: Provide either 'task_title' and 'task_description' for single task, or 'tasks' array for multiple tasks.")
+                raise ValueError(
+                    "Error: Provide either 'task_title' and 'task_description' for single task, or 'tasks' array for multiple tasks."
+                )
 
             conn.commit()
             return created_tasks
@@ -496,7 +500,7 @@ async def _create_unassigned_tasks(
     # Execute the write operation through the queue
     try:
         created_tasks = await execute_db_write(write_operation)
-        
+
         # Build response
         response_parts = [
             f"✅ **Unassigned Tasks Created**",
