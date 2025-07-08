@@ -272,6 +272,22 @@ async def create_agent_tool_impl(
                 )
 
             assigned_tasks.append(task_id)
+            
+            # Update the in-memory global cache (g.tasks) to reflect the assignment
+            if task_id in g.tasks:
+                g.tasks[task_id]["assigned_to"] = agent_id
+                g.tasks[task_id]["status"] = "assigned"
+                g.tasks[task_id]["updated_at"] = created_at_iso
+            else:
+                # If task not in cache, fetch from database and add to cache
+                cursor.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,))
+                task_row = cursor.fetchone()
+                if task_row:
+                    task_data = dict(task_row)
+                    task_data["assigned_to"] = agent_id  # Ensure assignment is reflected
+                    task_data["status"] = "assigned"
+                    task_data["updated_at"] = created_at_iso
+                    g.tasks[task_id] = task_data
 
             # Log task assignment action
             log_agent_action_to_db(
