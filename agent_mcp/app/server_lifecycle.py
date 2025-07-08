@@ -335,6 +335,11 @@ async def application_shutdown():
         g.claude_session_task_scope.cancel()
         # Note: Actual waiting for task completion is usually handled by the AnyIO TaskGroup context manager.
 
+    # Stop database write queue
+    write_queue = get_write_queue()
+    await write_queue.stop()
+    logger.info("Database write queue stopped.")
+
     # Add any other cleanup (e.g., closing persistent connections if not managed by context)
     # For SQLite, connections are typically short-lived per request/operation.
 
