@@ -315,6 +315,8 @@ async def create_agent_tool_impl(
                 "capabilities": capabilities or [],
                 "working_directory": agent_working_dir_abs,
                 "assigned_color": agent_color,
+                "assigned_tasks": assigned_tasks,
+                "current_task": assigned_tasks[0] if assigned_tasks else None,
             },
         )
 
