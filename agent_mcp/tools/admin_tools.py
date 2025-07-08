@@ -28,7 +28,7 @@ from ..utils.tmux_utils import (
     send_command_to_session,
 )
 from ..utils.prompt_templates import build_agent_prompt
-from ..db.connection import get_db_connection
+from ..db.connection import get_db_connection, execute_db_write
 from ..db.actions.agent_actions_db import log_agent_action_to_db  # For DB logging
 
 
