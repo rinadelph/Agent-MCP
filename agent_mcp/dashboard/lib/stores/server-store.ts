@@ -34,16 +34,7 @@ interface ServerStore {
 export const useServerStore = create<ServerStore>()(
   persist(
     (set, get) => ({
-      servers: [
-        {
-          id: 'default',
-          name: config.defaultServer.name,
-          host: config.defaultServer.host,
-          port: config.defaultServer.port,
-          status: 'disconnected',
-          description: 'Default local MCP server'
-        }
-      ],
+      servers: [],
       activeServerId: null,
       isConnecting: false,
       connectionError: null,
