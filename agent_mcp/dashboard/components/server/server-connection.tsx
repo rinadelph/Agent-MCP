@@ -25,12 +25,12 @@ export function ServerConnection() {
   const connectedServers = servers.filter(s => s.status === 'connected')
   const disconnectedServers = servers.filter(s => s.status !== 'connected')
 
-  // Auto-detect servers on mount if enabled and no active server
-  useEffect(() => {
-    if (config.autoDetect.enabled && !activeServerId && !isConnecting) {
-      handleAutoDetect()
-    }
-  }, [])
+  // Auto-detection is now manual - users need to click the button
+  // useEffect(() => {
+  //   if (config.autoDetect.enabled && !activeServerId && !isConnecting) {
+  //     handleAutoDetect()
+  //   }
+  // }, [])
 
   const handleAutoDetect = async () => {
     setIsDetecting(true)
