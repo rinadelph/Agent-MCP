@@ -164,10 +164,19 @@ export function ServerConnection() {
 
         {/* Quick Actions */}
         {connectedServers.length === 0 && (
-          <div className="text-center pt-4">
+          <div className="text-center pt-4 space-y-3">
             <p className="text-sm text-muted-foreground">
               No servers connected. Add a server above or check your connection settings.
             </p>
+            <Button
+              onClick={handleAutoDetect}
+              disabled={isDetecting}
+              variant="outline"
+              className="gap-2"
+            >
+              <RefreshCw className={`w-4 h-4 ${isDetecting ? 'animate-spin' : ''}`} />
+              {isDetecting ? 'Searching...' : 'Auto-detect Servers'}
+            </Button>
           </div>
         )}
       </div>
