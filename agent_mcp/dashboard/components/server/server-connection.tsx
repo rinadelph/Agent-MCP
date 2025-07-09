@@ -105,6 +105,19 @@ export function ServerConnection() {
                             Active
                           </Badge>
                         )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="opacity-50 hover:opacity-100 text-destructive hover:text-destructive"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            if (confirm(`Delete server "${server.name}"?`)) {
+                              removeServer(server.id)
+                            }
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
                       </div>
                     </div>
                   </CardContent>
