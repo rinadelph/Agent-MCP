@@ -152,9 +152,24 @@ export function ServerConnection() {
                           </p>
                         </div>
                       </div>
-                      <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950 dark:text-orange-300 dark:border-orange-800">
-                        {server.status === 'connecting' ? 'Connecting...' : 'Disconnected'}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950 dark:text-orange-300 dark:border-orange-800">
+                          {server.status === 'connecting' ? 'Connecting...' : 'Disconnected'}
+                        </Badge>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="opacity-50 hover:opacity-100 text-destructive hover:text-destructive"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            if (confirm(`Delete server "${server.name}"?`)) {
+                              removeServer(server.id)
+                            }
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
