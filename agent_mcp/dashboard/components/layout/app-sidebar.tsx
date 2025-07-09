@@ -14,6 +14,7 @@ import {
 import { Navigation } from "./navigation"
 import { useSidebar } from "@/lib/store"
 import { cn } from "@/lib/utils"
+import { ServerManagementModal } from "../server/server-management-modal"
 
 export function AppSidebar() {
   // Zustand store (used by Navigation component)
