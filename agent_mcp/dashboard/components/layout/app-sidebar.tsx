@@ -93,12 +93,15 @@ export function AppSidebar() {
 
       {/* Sidebar Footer */}
       <SidebarFooter className="border-t p-3">
-        {!collapsed && (
-          <div className="text-xs text-muted-foreground text-center">
-            <div className="font-medium text-foreground">AgentMCP Dashboard</div>
-            <div className="text-muted-foreground">v2.2 • Improved Dashboard</div>
-          </div>
-        )}
+        <div className="flex items-center justify-between">
+          {!collapsed && (
+            <div className="text-xs text-muted-foreground">
+              <div className="font-medium text-foreground">AgentMCP Dashboard</div>
+              <div className="text-muted-foreground">v2.2 • Improved Dashboard</div>
+            </div>
+          )}
+          <ServerManagementModal />
+        </div>
       </SidebarFooter>
 
       <SidebarRail />
