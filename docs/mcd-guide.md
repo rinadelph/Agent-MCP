@@ -42,6 +42,7 @@ MCDs are the practical application of **Cognitive Empathy** - understanding that
 ```
 
 **Real Example**:
+
 ```markdown
 ## 🎯 Overview & Goals  
 **Project Vision**: Build a real-time collaborative task management SaaS platform that enables remote teams to track project progress with integrated video communication and file sharing.
@@ -78,6 +79,7 @@ MCDs are the practical application of **Cognitive Empathy** - understanding that
 ```
 
 **Real Example**:
+
 ```markdown
 ## 🏗️ Technical Architecture
 **Frontend**: 
@@ -127,7 +129,8 @@ MCDs are the practical application of **Cognitive Empathy** - understanding that
 ```
 
 **Real Example**:
-```markdown
+
+````markdown
 ## 📋 Detailed Implementation
 
 ### Database Schema
@@ -210,7 +213,7 @@ interface TaskCardProps {
   onStartCall: (taskId: string) => void;
 }
 ```
-```
+````
 
 ### 📁 **4. File Structure & Organization**
 **Purpose**: Guide physical implementation
@@ -224,7 +227,8 @@ interface TaskCardProps {
 ```
 
 **Real Example**:
-```markdown
+
+````markdown
 ## 📁 File Structure & Organization
 
 ### Project Layout
@@ -287,7 +291,7 @@ JWT_SECRET=your-super-secret-key
 AWS_ACCESS_KEY_ID=your-aws-key
 AWS_SECRET_ACCESS_KEY=your-aws-secret
 ```
-```
+````
 
 ### ✅ **5. Task Breakdown & Implementation Plan**
 **Purpose**: Define execution sequence
