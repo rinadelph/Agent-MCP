@@ -330,7 +330,7 @@ async def query_rag_system_with_model(
         if is_vss_loadable():
             query_embedding_response = openai_client.embeddings.create(
                 input=[query_text],
-                model=model_name,
+                model=EMBEDDING_MODEL,
                 dimensions=EMBEDDING_DIMENSION
             )
             query_embedding = query_embedding_response.data[0].embedding
