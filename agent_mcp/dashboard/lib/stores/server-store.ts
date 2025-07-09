@@ -231,16 +231,7 @@ export const useServerStore = create<ServerStore>()(
       clearPersistedData: () => {
         // Reset to default state
         set({
-          servers: [
-            {
-              id: 'default',
-              name: config.defaultServer.name,
-              host: config.defaultServer.host,
-              port: config.defaultServer.port,
-              status: 'disconnected',
-              description: 'Default local MCP server'
-            }
-          ],
+          servers: [],
           activeServerId: null,
           isConnecting: false,
           connectionError: null
