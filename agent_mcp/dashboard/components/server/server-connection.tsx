@@ -17,6 +17,7 @@ export function ServerConnection() {
     setActiveServer, 
     autoDetectServers, 
     clearPersistedData,
+    removeServer,
     isConnecting 
   } = useServerStore()
   const activeServer = servers.find(s => s.id === activeServerId)
