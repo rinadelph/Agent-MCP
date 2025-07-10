@@ -219,6 +219,16 @@ def main_cli(
     else:
         logger.info("Git worktree support disabled (use --git to enable)")
 
+    # Set auto-indexing configuration
+    if no_index:
+        from .core import config
+        config.DISABLE_AUTO_INDEXING = True
+        logger.info("Automatic markdown indexing disabled. Use manual indexing via RAG tools for selective content.")
+    else:
+        from .core import config
+        config.DISABLE_AUTO_INDEXING = False
+        logger.info("Automatic markdown indexing enabled.")
+
     if debug:
         os.environ["MCP_DEBUG"] = (
             "true"  # Ensure env var is set for Starlette debug mode
