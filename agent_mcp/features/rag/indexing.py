@@ -244,26 +244,29 @@ async def run_rag_indexing_periodically(
             max_md_mod_timestamp = last_md_timestamp
             max_code_mod_timestamp = last_code_timestamp
 
-            # Find all markdown files
+            # Find all markdown files (only if auto-indexing is enabled)
             all_md_files_found = []
-            for md_file_path_str in glob.glob(
-                str(current_project_dir / "**/*.md"), recursive=True
-            ):
-                md_path_obj = Path(md_file_path_str)
-                should_ignore = False
-                # Path component check from main.py:560-565
-                for part in md_path_obj.parts:
-                    if part in IGNORE_DIRS_FOR_INDEXING or (
-                        part.startswith(".") and part not in [".", ".."]
-                    ):
-                        should_ignore = True
-                        break
-                if not should_ignore:
-                    all_md_files_found.append(md_path_obj)
+            if not DISABLE_AUTO_INDEXING:
+                for md_file_path_str in glob.glob(
+                    str(current_project_dir / "**/*.md"), recursive=True
+                ):
+                    md_path_obj = Path(md_file_path_str)
+                    should_ignore = False
+                    # Path component check from main.py:560-565
+                    for part in md_path_obj.parts:
+                        if part in IGNORE_DIRS_FOR_INDEXING or (
+                            part.startswith(".") and part not in [".", ".."]
+                        ):
+                            should_ignore = True
+                            break
+                    if not should_ignore:
+                        all_md_files_found.append(md_path_obj)
 
-            logger.info(
-                f"Found {len(all_md_files_found)} markdown files to consider for indexing (after filtering ignored dirs)."
-            )
+                logger.info(
+                    f"Found {len(all_md_files_found)} markdown files to consider for indexing (after filtering ignored dirs)."
+                )
+            else:
+                logger.info("Automatic markdown indexing disabled. Skipping markdown file scanning.")
 
             # Find all code files (only in advanced mode)
             all_code_files_found = []
