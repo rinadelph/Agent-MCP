@@ -247,6 +247,7 @@ async def run_rag_indexing_periodically(
             all_md_files_found = []
             # Check config at runtime after CLI has set it
             from ...core.config import DISABLE_AUTO_INDEXING
+
             if not DISABLE_AUTO_INDEXING:
                 for md_file_path_str in glob.glob(
                     str(current_project_dir / "**/*.md"), recursive=True
