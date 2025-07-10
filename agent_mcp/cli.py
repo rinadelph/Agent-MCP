@@ -170,8 +170,12 @@ def main_cli(
     Main Command-Line Interface for starting the MCP Server.
 
     The server supports two embedding modes:
-    - Simple mode (default): Uses text-embedding-3-large (1536 dimensions) - indexes only markdown files and context
+    - Simple mode (default): Uses text-embedding-3-large (1536 dimensions) - indexes markdown files and context
     - Advanced mode (--advanced): Uses text-embedding-3-large (3072 dimensions) - includes code analysis, task indexing
+
+    Indexing options:
+    - Default: Automatic indexing of all markdown files in project directory
+    - --no-index: Disable automatic markdown indexing for selective manual control
 
     Note: Switching between modes will require re-indexing all content.
     """
@@ -222,10 +226,14 @@ def main_cli(
     # Set auto-indexing configuration
     if no_index:
         from .core import config
+
         config.DISABLE_AUTO_INDEXING = True
-        logger.info("Automatic markdown indexing disabled. Use manual indexing via RAG tools for selective content.")
+        logger.info(
+            "Automatic markdown indexing disabled. Use manual indexing via RAG tools for selective content."
+        )
     else:
         from .core import config
+
         config.DISABLE_AUTO_INDEXING = False
         logger.info("Automatic markdown indexing enabled.")
 
