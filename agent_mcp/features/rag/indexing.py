@@ -266,7 +266,9 @@ async def run_rag_indexing_periodically(
                     f"Found {len(all_md_files_found)} markdown files to consider for indexing (after filtering ignored dirs)."
                 )
             else:
-                logger.info("Automatic markdown indexing disabled. Skipping markdown file scanning.")
+                logger.info(
+                    "Automatic markdown indexing disabled. Skipping markdown file scanning."
+                )
 
             # Find all code files (only in advanced mode)
             all_code_files_found = []
