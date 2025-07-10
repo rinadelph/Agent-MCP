@@ -136,7 +136,7 @@ def generate_system_prompt(agent_id: str, agent_token_for_prompt: str, admin_tok
     working_dir = g.agent_working_dirs.get(agent_id, os.getcwd())
 
     # Base prompt content from original main.py lines 1208-1224
-    base_prompt = f"""You are an AI agent running in Claude Code, connected to a Multi-Agent Collaboration Protocol (MCP) server.
+    base_prompt = f"""You are an AI agent running in Cursor, connected to a Multi-Agent Collaboration Protocol (MCP) server.
 
 Your goal is to complete tasks efficiently and collaboratively using a shared, persistent knowledge base.
 
