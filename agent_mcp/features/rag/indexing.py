@@ -292,24 +292,25 @@ async def run_rag_indexing_periodically(
                     f"Found {len(all_code_files_found)} code files to consider for indexing (after filtering ignored dirs)."
                 )
 
-            # Process markdown files
-            for md_path_obj in all_md_files_found:
-                try:
-                    mod_time = md_path_obj.stat().st_mtime
-                    content = md_path_obj.read_text(encoding="utf-8")
-                    normalized_path = str(
-                        md_path_obj.relative_to(current_project_dir).as_posix()
-                    )
-                    current_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
-                    sources_to_check.append(
-                        ("markdown", normalized_path, content, mod_time, current_hash)
-                    )
-                    if mod_time > max_md_mod_timestamp:
-                        max_md_mod_timestamp = mod_time
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to read or process markdown file {md_path_obj}: {e}"
-                    )
+            # Process markdown files (only if auto-indexing is enabled)
+            if not DISABLE_AUTO_INDEXING:
+                for md_path_obj in all_md_files_found:
+                    try:
+                        mod_time = md_path_obj.stat().st_mtime
+                        content = md_path_obj.read_text(encoding="utf-8")
+                        normalized_path = str(
+                            md_path_obj.relative_to(current_project_dir).as_posix()
+                        )
+                        current_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+                        sources_to_check.append(
+                            ("markdown", normalized_path, content, mod_time, current_hash)
+                        )
+                        if mod_time > max_md_mod_timestamp:
+                            max_md_mod_timestamp = mod_time
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to read or process markdown file {md_path_obj}: {e}"
+                        )
 
             # Process code files
             for code_path_obj in all_code_files_found:
