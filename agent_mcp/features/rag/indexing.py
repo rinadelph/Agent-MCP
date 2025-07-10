@@ -25,6 +25,7 @@ from ...core.config import (
     get_project_dir,
     OPENAI_API_KEY_ENV,  # Also import the API key env variable
     ADVANCED_EMBEDDINGS,  # Import advanced mode flag at module level
+    DISABLE_AUTO_INDEXING,  # Import auto-indexing control flag
 )
 from ...core import globals as g  # For server_running flag
 from ...db.connection import get_db_connection, is_vss_loadable
