@@ -130,6 +130,12 @@ def get_admin_token_from_db(project_dir: str) -> Optional[str]:
     default=False,
     help="Enable experimental Git worktree support for parallel agent development (advanced users only)."
 )
+@click.option(
+    "--no-index",
+    is_flag=True,
+    default=False,
+    help="Disable automatic markdown file indexing. Allows selective manual indexing of specific content into the RAG system."
+)
 def main_cli(port: int, transport: str, project_dir: str, admin_token_cli: Optional[str], debug: bool, no_tui: bool, advanced: bool, git: bool):
     """
     Main Command-Line Interface for starting the MCP Server.
