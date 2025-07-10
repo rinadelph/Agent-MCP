@@ -765,7 +765,9 @@ async def run_rag_indexing_periodically(
                 # Only update markdown timestamp if auto-indexing is enabled
                 if not DISABLE_AUTO_INDEXING:
                     new_md_time_iso = (
-                        datetime.datetime.fromtimestamp(max_md_mod_timestamp).isoformat()
+                        datetime.datetime.fromtimestamp(
+                            max_md_mod_timestamp
+                        ).isoformat()
                         + "Z"
                     )
                     cursor.execute(
