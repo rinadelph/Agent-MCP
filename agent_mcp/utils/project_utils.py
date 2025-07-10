@@ -6,7 +6,10 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 
 from ..core import globals as g
-from ..core.config import logger, get_project_dir # Import get_project_dir for MCP_VERSION if needed
+from ..core.config import (
+    logger,
+    get_project_dir,
+)  # Import get_project_dir for MCP_VERSION if needed
 
 # __version__ was in mcp_template/__init__.py.
 # If MCP_VERSION is needed here, it should ideally be sourced from a single place.
@@ -16,8 +19,11 @@ try:
     # Attempt to get version from the root __init__.py of agent-mcp
     from agent_mcp import __version__ as MCP_VERSION
 except ImportError:
-    logger.warning("Could not import __version__ from agent_mcp. Using default '0.1.0'.")
-    MCP_VERSION = "0.1.0" # Fallback, matches original main.py:1041
+    logger.warning(
+        "Could not import __version__ from agent_mcp. Using default '0.1.0'."
+    )
+    MCP_VERSION = "0.1.0"  # Fallback, matches original main.py:1041
+
 
 # Original location: main.py lines 876-929 (init_agent_directory)
 def init_agent_directory(project_dir_str: str) -> Optional[Path]:
@@ -42,13 +48,22 @@ def init_agent_directory(project_dir_str: str) -> Optional[Path]:
     # .parent.parent.parent.parent -> .../Agent-MCP (This is the repository root)
     # The original check was against `Path(__file__).resolve().parent.parent` from `main.py`
     # which would be `agent-mcp`.
-    agent_mcp_codebase_root_for_check = Path(__file__).resolve().parent.parent.parent # This should point to agent-mcp
+    agent_mcp_codebase_root_for_check = (
+        Path(__file__).resolve().parent.parent.parent
+    )  # This should point to agent-mcp
 
     # Original main.py line 880-884
-    if project_path == agent_mcp_codebase_root_for_check or project_path in agent_mcp_codebase_root_for_check.parents:
+    if (
+        project_path == agent_mcp_codebase_root_for_check
+        or project_path in agent_mcp_codebase_root_for_check.parents
+    ):
         # This warning matches the original behavior.
-        logger.warning(f"WARNING: Initializing .agent in the MCP directory itself ({project_path}) or its parent is not recommended!")
-        logger.warning(f"Please specify a project directory that is NOT the MCP codebase.")
+        logger.warning(
+            f"WARNING: Initializing .agent in the MCP directory itself ({project_path}) or its parent is not recommended!"
+        )
+        logger.warning(
+            f"Please specify a project directory that is NOT the MCP codebase."
+        )
         # Original code proceeded with a warning, so we do the same.
 
     agent_dir = project_path / ".agent"
@@ -68,7 +83,7 @@ def init_agent_directory(project_dir_str: str) -> Optional[Path]:
             (agent_dir / directory_suffix).mkdir(parents=True, exist_ok=True)
     except OSError as e:
         logger.error(f"Failed to create .agent directory structure in {agent_dir}: {e}")
-        return None # Indicate failure
+        return None  # Indicate failure
 
     # Create initial config file if it doesn't exist
     # Original main.py lines 902-914
@@ -81,22 +96,24 @@ def init_agent_directory(project_dir_str: str) -> Optional[Path]:
         # or ensure g.admin_token is reliably set before this.
         # For now, let's assume g.admin_token will be set by the time this is called in a meaningful way,
         # or it will be None if called very early (e.g. initial setup).
-        current_admin_token = g.admin_token # Get current global admin token
+        current_admin_token = g.admin_token  # Get current global admin token
 
         config_data = {
             "project_name": project_path.name,
             "created_at": datetime.datetime.now().isoformat(),
-            "admin_token": current_admin_token, # Use the admin token available at call time
-            "mcp_version": MCP_VERSION
+            "admin_token": current_admin_token,  # Use the admin token available at call time
+            "mcp_version": MCP_VERSION,
         }
         try:
-            with open(config_path, "w", encoding='utf-8') as f:
+            with open(config_path, "w", encoding="utf-8") as f:
                 json.dump(config_data, f, indent=2)
         except IOError as e:
             logger.error(f"Failed to write initial config.json to {config_path}: {e}")
-            return None # Indicate failure
+            return None  # Indicate failure
         except Exception as e:
-            logger.error(f"Unexpected error writing initial config.json: {e}", exc_info=True)
+            logger.error(
+                f"Unexpected error writing initial config.json: {e}", exc_info=True
+            )
             return None
 
     # Create initial daily logs file if it doesn't exist
@@ -108,23 +125,31 @@ def init_agent_directory(project_dir_str: str) -> Optional[Path]:
         log_entry = {
             "timestamp": datetime.datetime.now().isoformat(),
             "event": "agent_directory_initialized",
-            "details": "Initial setup of .agent directory"
+            "details": "Initial setup of .agent directory",
         }
         try:
-            with open(log_file_path, "w", encoding='utf-8') as f:
-                json.dump([log_entry], f, indent=2) # Original stored a list with one entry
+            with open(log_file_path, "w", encoding="utf-8") as f:
+                json.dump(
+                    [log_entry], f, indent=2
+                )  # Original stored a list with one entry
         except IOError as e:
-            logger.error(f"Failed to write initial daily log file to {log_file_path}: {e}")
+            logger.error(
+                f"Failed to write initial daily log file to {log_file_path}: {e}"
+            )
             # Continue, as this is less critical than config.json, matching original behavior.
         except Exception as e:
-            logger.error(f"Unexpected error writing initial daily log file: {e}", exc_info=True)
-
+            logger.error(
+                f"Unexpected error writing initial daily log file: {e}", exc_info=True
+            )
 
     logger.info(f".agent directory structure initialized/verified in {agent_dir}")
     return agent_dir
 
+
 # Original location: main.py lines 1206-1239 (generate_system_prompt)
-def generate_system_prompt(agent_id: str, agent_token_for_prompt: str, admin_token_runtime: Optional[str]) -> str:
+def generate_system_prompt(
+    agent_id: str, agent_token_for_prompt: str, admin_token_runtime: Optional[str]
+) -> str:
     """
     Generate a system prompt for an agent.
     Original main.py: lines 1206-1239.
@@ -155,7 +180,7 @@ Your goal is to complete tasks efficiently and collaboratively using a shared, p
 
 Your working directory is: {working_dir}
 """
-    
+
     # Determine agent type for the prompt
     # (Original main.py line 1227: agent_details, and line 1210 for admin_token check)
     agent_type = "Worker"
@@ -163,52 +188,58 @@ Your working directory is: {working_dir}
     # as the third argument to generate_system_prompt if the agent_id started with "admin".
     # So, `admin_token_runtime` here corresponds to that third argument.
     # An agent is "Admin" type in the prompt if its own token IS the admin token.
-    if agent_id.lower().startswith("admin") and agent_token_for_prompt == admin_token_runtime:
+    if (
+        agent_id.lower().startswith("admin")
+        and agent_token_for_prompt == admin_token_runtime
+    ):
         agent_type = "Admin"
     # A simpler check might be if the agent_token_for_prompt itself is the known g.admin_token
     # However, the original call structure was a bit specific.
     # Let's refine: the prompt should reflect if this *specific agent instance* is an admin.
     # This happens if its `agent_token_for_prompt` is the same as the system's `admin_token_runtime`.
     # The `agent_id.lower().startswith("admin")` is a secondary check.
-    if agent_token_for_prompt == admin_token_runtime: # Primary check: is this agent's token THE admin token?
-         agent_type = "Admin"
-
+    if (
+        agent_token_for_prompt == admin_token_runtime
+    ):  # Primary check: is this agent's token THE admin token?
+        agent_type = "Admin"
 
     agent_details_str = f"""Agent ID: {agent_id}
 Agent Type: {agent_type}
 """
-    
+
     # Connection code snippet for the agent to use
     # (Original main.py lines 1229-1237 for connection code structure)
     # The MCP_SERVER_URL should come from a config or be dynamically determined.
     # The original used os.environ.get('PORT', '8080') which implies it's for the SSE server.
     # The client connection example in the prompt should use the /messages/ endpoint for tool calls if that's the design.
     # Let's assume the agent's env var MCP_SERVER_URL points to the correct base for /messages/
-    mcp_server_url_for_client = os.environ.get("MCP_SERVER_URL", f"http://localhost:{os.environ.get('PORT', '8080')}/messages/")
-    
+    mcp_server_url_for_client = os.environ.get(
+        "MCP_SERVER_URL", f"http://localhost:{os.environ.get('PORT', '8080')}/messages/"
+    )
+
     # The original connection code snippet in main.py was quite extensive and specific.
     # For 1-to-1, we should replicate that structure.
     # It assumed the agent would use 'requests' and provided a `call_mcp_tool` like function.
     # The token used in HEADERS should be `agent_token_for_prompt`.
     connection_code_lines = [
-        f"MCP_SERVER_URL = \"{mcp_server_url_for_client}\"  # Adjust if your server's tool endpoint is different",
-        f"AGENT_TOKEN = \"{agent_token_for_prompt}\" # This is your unique agent token",
+        f'MCP_SERVER_URL = "{mcp_server_url_for_client}"  # Adjust if your server\'s tool endpoint is different',
+        f'AGENT_TOKEN = "{agent_token_for_prompt}" # This is your unique agent token',
         "",
         "HEADERS = {",
-        "    \"Content-Type\": \"application/json\",",
+        '    "Content-Type": "application/json",',
         # The original prompt had a complex way of deciding which token to use in Authorization.
         # It should always be the AGENT_TOKEN for the agent's own calls.
-        "    \"Authorization\": f\"Bearer {{AGENT_TOKEN}}\"",
+        '    "Authorization": f"Bearer {{AGENT_TOKEN}}"',
         "}",
         "",
         "def call_mcp_tool(tool_name: str, arguments: dict) -> dict:",
         "    payload = {",
-        "        \"id\": f\"call_{{requests.compat.urlencode(arguments)[:10]}}\", # Example unique ID",
-        "        \"type\": \"tool_call\",",
-        "        \"tool\": tool_name,",
-        "        \"arguments\": arguments",
+        '        "id": f"call_{{requests.compat.urlencode(arguments)[:10]}}", # Example unique ID',
+        '        "type": "tool_call",',
+        '        "tool": tool_name,',
+        '        "arguments": arguments',
         "    }",
-        "    print(f\"Calling tool: {{tool_name}} with args: {{arguments}}\") # Debug print",
+        '    print(f"Calling tool: {{tool_name}} with args: {{arguments}}") # Debug print',
         "    try:",
         "        response = requests.post(MCP_SERVER_URL, headers=HEADERS, json=payload, timeout=60)",
         "        response.raise_for_status()  # Raise an HTTPError for bad responses (4XX or 5XX)",
@@ -221,29 +252,29 @@ Agent Type: {agent_type}
         "                return {{'text_response': first_item.get('text', '')}}",
         "        return {{'raw_response': response_data}} # Fallback",
         "    except requests.exceptions.Timeout:",
-        "        print(f\"Timeout calling MCP tool {{tool_name}}\")",
+        '        print(f"Timeout calling MCP tool {{tool_name}}")',
         "        return {{'error': 'Timeout'}}"
         "    except requests.exceptions.RequestException as e:",
-        "        print(f\"Error calling MCP tool {{tool_name}}: {{e}}\")",
+        '        print(f"Error calling MCP tool {{tool_name}}: {{e}}")',
         "        if e.response is not None:",
-        "            print(f\"Response content: {{e.response.text}}\")",
+        '            print(f"Response content: {{e.response.text}}")',
         "            return {{'error': str(e), 'response_text': e.response.text}}",
         "        return {{'error': str(e)}}",
         "",
         "# Example usage:",
-        "# result = call_mcp_tool(\"view_tasks\", {{\"token\": AGENT_TOKEN}})",
-        "# if result and 'error' not in result: print(json.dumps(result, indent=2))"
+        '# result = call_mcp_tool("view_tasks", {{"token": AGENT_TOKEN}})',
+        "# if result and 'error' not in result: print(json.dumps(result, indent=2))",
     ]
     connection_code_str = "\n".join(connection_code_lines)
-    
+
     # Construct full prompt (Original main.py line 1238)
     full_prompt = (
-        base_prompt +
-        agent_details_str +
-        "\nCopy-paste this Python code into your environment to connect and interact with the MCP server:\n" +
-        "```python\nimport requests\nimport json\n\n" +
-        connection_code_str +
-        "\n```\n\n" +
-        "Use the available tools (the server will list them or consult documentation) via `call_mcp_tool` to manage your work."
+        base_prompt
+        + agent_details_str
+        + "\nCopy-paste this Python code into your environment to connect and interact with the MCP server:\n"
+        + "```python\nimport requests\nimport json\n\n"
+        + connection_code_str
+        + "\n```\n\n"
+        + "Use the available tools (the server will list them or consult documentation) via `call_mcp_tool` to manage your work."
     )
     return full_prompt
