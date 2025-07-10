@@ -89,7 +89,9 @@ async function startDev() {
     
     const nextProcess = spawn('npx', ['next', ...args], {
       stdio: 'inherit',
-      cwd: process.cwd()
+      cwd: process.cwd(),
+      env: process.env,
+      shell: true
     });
     
     // Handle process termination
