@@ -549,7 +549,20 @@ We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md) for:
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+
+This project is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**.
+
+**What this means:**
+- ✅ You can use, modify, and distribute this software
+- ✅ You can use it for commercial purposes
+- ⚠️ **Important**: If you run a modified version on a server that users interact with over a network, you **must** provide the source code to those users
+- ⚠️ Any derivative works must also be licensed under AGPL-3.0
+- ⚠️ You must include copyright notices and license information
+
+See the [LICENSE](LICENSE) file for complete terms and conditions.
+
+**Why AGPL?** We chose AGPL to ensure that improvements to Agent-MCP benefit the entire community, even when used in server/SaaS deployments. This prevents proprietary forks that don't contribute back to the ecosystem.
 
 ---
 
