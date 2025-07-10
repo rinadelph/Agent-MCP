@@ -133,6 +133,9 @@ AGENT_COLORS: List[str] = [ # From main.py:160-164 (Note: original had 160-165, 
 # Advanced mode flag - set by CLI
 ADVANCED_EMBEDDINGS: bool = False  # Default to simple mode
 
+# Auto-indexing control - set by CLI
+DISABLE_AUTO_INDEXING: bool = False  # Default to automatic indexing
+
 # Original/Simple mode configuration (default) - restored to original values
 SIMPLE_EMBEDDING_MODEL: str = "text-embedding-3-large" # Original embedding model (unchanged)
 SIMPLE_EMBEDDING_DIMENSION: int = 1536 # Increased from 1024 for better performance
