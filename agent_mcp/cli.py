@@ -1,4 +1,22 @@
-# Agent-MCP/mcp_template/mcp_server_src/cli.py
+#!/usr/bin/env python3
+"""
+Agent-MCP CLI: Command-line interface for multi-agent collaboration.
+
+Copyright (C) 2025 Luis Alejandro Rincon (rinadelph)
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+"""
 import click
 import uvicorn  # For running the Starlette app in SSE mode
 import anyio  # For running async functions and task groups
