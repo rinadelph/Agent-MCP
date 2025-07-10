@@ -301,9 +301,17 @@ async def run_rag_indexing_periodically(
                         normalized_path = str(
                             md_path_obj.relative_to(current_project_dir).as_posix()
                         )
-                        current_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+                        current_hash = hashlib.sha256(
+                            content.encode("utf-8")
+                        ).hexdigest()
                         sources_to_check.append(
-                            ("markdown", normalized_path, content, mod_time, current_hash)
+                            (
+                                "markdown",
+                                normalized_path,
+                                content,
+                                mod_time,
+                                current_hash,
+                            )
                         )
                         if mod_time > max_md_mod_timestamp:
                             max_md_mod_timestamp = mod_time
@@ -754,14 +762,16 @@ async def run_rag_indexing_periodically(
             if (
                 "embeddings_api_successful" not in locals() or embeddings_api_successful
             ):  # Check if flag exists and is True
-                new_md_time_iso = (
-                    datetime.datetime.fromtimestamp(max_md_mod_timestamp).isoformat()
-                    + "Z"
-                )
-                cursor.execute(
-                    "INSERT OR REPLACE INTO rag_meta (meta_key, meta_value) VALUES (?, ?)",
-                    ("last_indexed_markdown", new_md_time_iso),
-                )
+                # Only update markdown timestamp if auto-indexing is enabled
+                if not DISABLE_AUTO_INDEXING:
+                    new_md_time_iso = (
+                        datetime.datetime.fromtimestamp(max_md_mod_timestamp).isoformat()
+                        + "Z"
+                    )
+                    cursor.execute(
+                        "INSERT OR REPLACE INTO rag_meta (meta_key, meta_value) VALUES (?, ?)",
+                        ("last_indexed_markdown", new_md_time_iso),
+                    )
                 cursor.execute(
                     "INSERT OR REPLACE INTO rag_meta (meta_key, meta_value) VALUES (?, ?)",
                     ("last_indexed_context", max_ctx_mod_time_iso),
