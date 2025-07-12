@@ -37,6 +37,9 @@ cp .env.example .env
 
 # Install dependencies
 uv venv && uv pip install -e .
+
+# Configure Claude Code hooks for multi-agent file locking
+./setup-claude-hooks.sh
 ```
 
 ### 2. Start MCP Server
@@ -50,7 +53,27 @@ uv run -m agent_mcp.cli --project-dir /path/to/your/project
 # 📊 Dashboard: Start with 'cd agent_mcp/dashboard && npm run dev'
 ```
 
-### 3. Launch Dashboard (Optional but Recommended)
+### 3. Configure Multi-Agent File Locking
+
+Agent-MCP requires Claude Code hooks for proper multi-agent coordination. The setup script configures these automatically:
+
+```bash
+# If you missed it in step 1, run:
+./setup-claude-hooks.sh
+```
+
+**What this does:**
+- Configures PreToolUse hooks to check file locks before editing
+- Configures PostToolUse hooks to log activity and release locks
+- Creates necessary directories (`.agent-locks`, `.agent-activity`)
+- Prevents file conflicts when multiple agents work simultaneously
+
+**Troubleshooting:**
+- If you see "MODULE_NOT_FOUND" errors when editing files, the hooks aren't configured properly
+- Run the setup script again: `./setup-claude-hooks.sh`
+- Ensure you're running Claude Code from the Agent-MCP project root directory
+
+### 4. Launch Dashboard (Optional but Recommended)
 ```bash
 # In a new terminal
 cd agent_mcp/dashboard
@@ -60,7 +83,7 @@ npm run dev
 # Dashboard available at http://localhost:3847
 ```
 
-### 4. Connect AI Assistant
+### 5. Connect AI Assistant
 **For Claude Code**, add to your `mcp.json`:
 ```json
 {
