@@ -117,7 +117,7 @@ mkdir src docs tests
 
 Create `MCD.md` in your project root:
 
-```markdown
+````markdown
 # Task Manager MCD
 
 ## 🎯 Overview & Goals  
@@ -286,7 +286,7 @@ my-task-manager/
 - Data persists across browser sessions
 - No JavaScript errors in console
 - Interface is fully responsive
-```
+````
 
 ### Step 3: Initialize Admin Agent
 
