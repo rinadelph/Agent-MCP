@@ -1,5 +1,4 @@
 # Agent-MCP/agent_mcp/features/claude_session_monitor.py
-# DISABLED - Hook functionality temporarily disabled
 import os
 import json
 import asyncio
