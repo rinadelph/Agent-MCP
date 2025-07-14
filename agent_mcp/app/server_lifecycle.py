@@ -18,7 +18,7 @@ from ..db.connection import get_db_connection, check_vss_loadability
 from ..external.openai_service import initialize_openai_client
 from ..features.rag.indexing import run_rag_indexing_periodically
 
-# from ..features.claude_session_monitor import run_claude_session_monitoring  # DISABLED - Hook functionality temporarily disabled
+from ..features.claude_session_monitor import run_claude_session_monitoring
 from ..utils.signal_utils import register_signal_handlers  # For graceful shutdown
 from ..db.write_queue import get_write_queue
 
