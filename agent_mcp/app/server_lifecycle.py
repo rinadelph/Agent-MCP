@@ -319,7 +319,9 @@ async def start_background_tasks(task_group: anyio.abc.TaskGroup):
     # logger.info(
     #     f"Claude Code session monitor started with interval {claude_session_interval}s."
     # )
-    logger.info("Claude Code session monitor disabled - hook functionality temporarily disabled")
+    logger.info(
+        "Claude Code session monitor disabled - hook functionality temporarily disabled"
+    )
 
 
 async def application_shutdown():
