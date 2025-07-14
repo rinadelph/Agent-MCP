@@ -82,9 +82,6 @@ async def create_agent_tool_impl(
     send_prompt = arguments.get("send_prompt", True)  # Default to auto-send prompt
     prompt_delay = arguments.get("prompt_delay", 5)  # Default 5 second delay
 
-    # File-level locking via Claude Code hooks provides conflict prevention
-    # All agents work in the shared project directory with real-time visibility
-
     if not verify_token(token, "admin"):  # main.py:1066
         return [
             mcp_types.TextContent(
