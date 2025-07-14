@@ -77,7 +77,7 @@ async def view_file_metadata_tool_impl(arguments: Dict[str, Any]) -> List[mcp_ty
                 "metadata": metadata_parsed,
                 "last_updated_by": row["updated_by"],
                 "last_updated_at": row["last_updated"],
-                "content_hash": row.get("content_hash", "N/A") # content_hash was added later
+                "content_hash": row["content_hash"] if "content_hash" in row.keys() else "N/A" # content_hash was added later
             }
             response_message = f"Metadata for file '{filepath_arg}' (normalized: {normalized_filepath_str}):\n\n{json.dumps(response_data, indent=2, ensure_ascii=False)}"
         else: # main.py:1527
