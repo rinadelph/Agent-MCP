@@ -17,6 +17,7 @@ from ..db.schema import init_database as initialize_database_schema
 from ..db.connection import get_db_connection, check_vss_loadability
 from ..external.openai_service import initialize_openai_client
 from ..features.rag.indexing import run_rag_indexing_periodically
+
 # from ..features.claude_session_monitor import run_claude_session_monitoring  # DISABLED - Hook functionality temporarily disabled
 from ..utils.signal_utils import register_signal_handlers  # For graceful shutdown
 from ..db.write_queue import get_write_queue
@@ -308,16 +309,17 @@ async def start_background_tasks(task_group: anyio.abc.TaskGroup):
     )
     logger.info(f"RAG indexing task started with interval {rag_interval}s.")
 
-    # Start Claude Code Session Monitor
-    claude_session_interval = int(
-        os.environ.get("MCP_CLAUDE_SESSION_MONITOR_INTERVAL", "5")
-    )
-    g.claude_session_task_scope = await task_group.start(
-        run_claude_session_monitoring, claude_session_interval
-    )
-    logger.info(
-        f"Claude Code session monitor started with interval {claude_session_interval}s."
-    )
+    # Start Claude Code Session Monitor - DISABLED
+    # claude_session_interval = int(
+    #     os.environ.get("MCP_CLAUDE_SESSION_MONITOR_INTERVAL", "5")
+    # )
+    # g.claude_session_task_scope = await task_group.start(
+    #     run_claude_session_monitoring, claude_session_interval
+    # )
+    # logger.info(
+    #     f"Claude Code session monitor started with interval {claude_session_interval}s."
+    # )
+    logger.info("Claude Code session monitor disabled - hook functionality temporarily disabled")
 
 
 async def application_shutdown():
