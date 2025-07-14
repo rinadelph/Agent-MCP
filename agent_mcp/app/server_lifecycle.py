@@ -309,18 +309,15 @@ async def start_background_tasks(task_group: anyio.abc.TaskGroup):
     )
     logger.info(f"RAG indexing task started with interval {rag_interval}s.")
 
-    # Start Claude Code Session Monitor - DISABLED
-    # claude_session_interval = int(
-    #     os.environ.get("MCP_CLAUDE_SESSION_MONITOR_INTERVAL", "5")
-    # )
-    # g.claude_session_task_scope = await task_group.start(
-    #     run_claude_session_monitoring, claude_session_interval
-    # )
-    # logger.info(
-    #     f"Claude Code session monitor started with interval {claude_session_interval}s."
-    # )
+    # Start Claude Code Session Monitor
+    claude_session_interval = int(
+        os.environ.get("MCP_CLAUDE_SESSION_MONITOR_INTERVAL", "5")
+    )
+    g.claude_session_task_scope = await task_group.start(
+        run_claude_session_monitoring, claude_session_interval
+    )
     logger.info(
-        "Claude Code session monitor disabled - hook functionality temporarily disabled"
+        f"Claude Code session monitor started with interval {claude_session_interval}s."
     )
 
 
