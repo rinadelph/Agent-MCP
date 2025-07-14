@@ -349,6 +349,11 @@ mcp_template_terminal_ui/
 # Claude memory file
 CLAUDE.md
 
+# Agent-MCP hook runtime files
+.agent-activity/
+.agent-locks/
+.claude/settings.json.backup.*
+
 # Cleanup scripts
 cleanup.sh
 cleanup_unix.sh
