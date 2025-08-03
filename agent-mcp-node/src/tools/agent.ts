@@ -621,6 +621,37 @@ registerTool(
       
       const tasksUnassigned = transaction();
       
+      // Kill tmux session if it exists
+      const tmuxSessionName = globalState.agentTmuxSessions.get(agent_id);
+      let tmuxStatus = '';
+      
+      if (tmuxSessionName) {
+        try {
+          if (await sessionExists(tmuxSessionName)) {
+            const killed = await killTmuxSession(tmuxSessionName);
+            if (killed) {
+              tmuxStatus = `- Tmux session '${tmuxSessionName}' killed`;
+              if (MCP_DEBUG) {
+                console.log(`✅ Killed tmux session for agent '${agent_id}': ${tmuxSessionName}`);
+              }
+            } else {
+              tmuxStatus = `- ⚠️ Failed to kill tmux session '${tmuxSessionName}'`;
+              console.warn(`Failed to kill tmux session for agent '${agent_id}': ${tmuxSessionName}`);
+            }
+          } else {
+            tmuxStatus = `- Tmux session '${tmuxSessionName}' already stopped`;
+          }
+        } catch (error) {
+          tmuxStatus = `- ⚠️ Error killing tmux session: ${error instanceof Error ? error.message : String(error)}`;
+          console.error(`Error killing tmux session for agent '${agent_id}':`, error);
+        }
+        
+        // Remove from session tracking
+        globalState.agentTmuxSessions.delete(agent_id);
+      } else {
+        tmuxStatus = '- No tmux session found';
+      }
+      
       // Update global state
       globalState.activeAgents.delete(agent_id);
       globalState.agentWorkingDirs.delete(agent_id);
@@ -630,9 +661,10 @@ registerTool(
         '',
         `- Terminated at: ${terminatedAt}`,
         `- Tasks unassigned: ${tasksUnassigned}`,
+        tmuxStatus,
         '- Removed from active memory',
         '',
-        '🔴 Agent is no longer active'
+        '🔴 Agent is fully stopped'
       ];
       
       return {
@@ -737,6 +769,557 @@ registerTool(
           type: 'text' as const,
           text: `❌ Error listing agents: ${error instanceof Error ? error.message : String(error)}`
         }],
+        isError: true
+      };
+    }
+  }
+);
+
+/**
+ * Relaunch a terminated/completed/failed/cancelled agent in its existing tmux session
+ */
+registerTool(
+  'relaunch_agent',
+  'Relaunch an existing terminated/completed/failed/cancelled agent by reusing its tmux session. Sends /clear to reset and sends a new prompt.',
+  z.object({
+    admin_token: z.string().describe('Admin authentication token'),
+    agent_id: z.string().describe('ID of the agent to relaunch'),
+    generate_new_token: z.boolean().optional().default(false).describe('Generate a new token for the relaunched agent'),
+    custom_prompt: z.string().optional().describe('Custom prompt to send instead of template prompt'),
+    prompt_template: z.string().optional().default('worker_with_rag').describe('Prompt template to use')
+  }),
+  async (args, context) => {
+    try {
+      const { admin_token, agent_id, generate_new_token = false, custom_prompt, prompt_template = 'worker_with_rag' } = args;
+
+      // Admin authentication
+      if (!verifyToken(admin_token, 'admin')) {
+        return {
+          content: [{ type: 'text' as const, text: 'Unauthorized: Admin token required' }],
+          isError: true
+        };
+      }
+
+      if (!agent_id) {
+        return {
+          content: [{ type: 'text' as const, text: 'Error: agent_id is required' }],
+          isError: true
+        };
+      }
+
+      const db = getDbConnection();
+      
+      // Check if agent exists and get current status
+      const agent = db.prepare('SELECT * FROM agents WHERE agent_id = ?').get(agent_id) as any;
+      if (!agent) {
+        return {
+          content: [{ type: 'text' as const, text: `Agent '${agent_id}' not found` }],
+          isError: true
+        };
+      }
+
+      const currentStatus = agent.status;
+      
+      // Only allow relaunch for certain statuses
+      const allowedStatuses = ['terminated', 'completed', 'failed', 'cancelled'];
+      if (!allowedStatuses.includes(currentStatus)) {
+        return {
+          content: [{ 
+            type: 'text' as const, 
+            text: `Cannot relaunch agent with status '${currentStatus}'. Allowed statuses: ${allowedStatuses.join(', ')}` 
+          }],
+          isError: true
+        };
+      }
+
+      // Check if tmux session still exists
+      const sessionName = globalState.agentTmuxSessions.get(agent_id);
+      if (!sessionName) {
+        return {
+          content: [{ 
+            type: 'text' as const, 
+            text: `Agent '${agent_id}' has no active tmux session to relaunch. Use create_agent instead.` 
+          }],
+          isError: true
+        };
+      }
+
+      if (!(await sessionExists(sessionName))) {
+        // Clean up the dead session reference
+        globalState.agentTmuxSessions.delete(agent_id);
+        return {
+          content: [{ 
+            type: 'text' as const, 
+            text: `Tmux session '${sessionName}' for agent '${agent_id}' no longer exists. Use create_agent instead.` 
+          }],
+          isError: true
+        };
+      }
+
+      // Send /clear command to reset the session
+      const clearSuccess = await sendCommandToSession(sessionName, '/clear');
+      if (!clearSuccess) {
+        return {
+          content: [{ 
+            type: 'text' as const, 
+            text: `Failed to send /clear command to session '${sessionName}'` 
+          }],
+          isError: true
+        };
+      }
+
+      // Generate new token if requested
+      let agentToken = agent.token;
+      if (generate_new_token) {
+        agentToken = authGenerateToken();
+        db.prepare('UPDATE agents SET token = ? WHERE agent_id = ?').run(agentToken, agent_id);
+      }
+
+      // Update agent status to active
+      const updatedAt = new Date().toISOString();
+      db.prepare('UPDATE agents SET status = ?, updated_at = ? WHERE agent_id = ?')
+        .run('active', updatedAt, agent_id);
+
+      // Build and send new prompt
+      let promptToSend: string;
+      
+      if (custom_prompt) {
+        promptToSend = custom_prompt;
+      } else {
+        // Build agent prompt (simplified version - you may want to enhance this)
+        promptToSend = `You are an AI agent with ID "${agent_id}". Your task is to figure out what you were working on before and continue your work.
+
+First, check your previous work by:
+1. Reviewing your task: call view_tasks with your token
+2. Checking recent file changes: look at your working directory
+3. Reading any relevant project context: use ask_project_rag to understand the project
+
+Your token: ${agentToken}
+Admin token: ${admin_token}
+
+Start by calling view_tasks to see what you were assigned to work on.`;
+      }
+
+      // Send the new prompt to restart the agent with a delay
+      setTimeout(async () => {
+        try {
+          await sendPromptToSession(sessionName, promptToSend);
+        } catch (error) {
+          console.error(`Failed to send restart prompt to ${agent_id}:`, error);
+        }
+      }, 2000);
+
+      // Update in-memory state
+      globalState.activeAgents.set(agentToken, {
+        token: agentToken,
+        agent_id,
+        status: 'active',
+        capabilities: JSON.parse(agent.capabilities || '[]'),
+        working_directory: agent.working_directory,
+        color: agent.color,
+        created_at: agent.created_at,
+        updated_at: updatedAt,
+        current_task: agent.current_task
+      });
+
+      // Log the action
+      const actionDetails = {
+        agent_id,
+        session_name: sessionName,
+        previous_status: currentStatus,
+        new_token_generated: generate_new_token,
+        prompt_template
+      };
+
+      db.prepare(`
+        INSERT INTO agent_actions (agent_id, action_type, timestamp, details)
+        VALUES (?, ?, ?, ?)
+      `).run('admin', 'relaunch_agent', new Date().toISOString(), JSON.stringify(actionDetails));
+
+      const responseParts = [
+        `✅ **Agent '${agent_id}' successfully relaunched**`,
+        ``,
+        `**Session:** ${sessionName}`,
+        `**Status:** ${currentStatus} → active`,
+        `**Action:** Session cleared and new prompt sent`,
+        ``
+      ];
+
+      if (generate_new_token) {
+        responseParts.push(`**New Token:** ${agentToken}`);
+      } else {
+        responseParts.push(`**Token:** ${agentToken} (existing)`);
+      }
+
+      responseParts.push(``, `🚀 Agent is now active and should start working shortly`);
+
+      return {
+        content: [{ type: 'text' as const, text: responseParts.join('\n') }],
+        isError: false
+      };
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('Error relaunching agent:', error);
+      return {
+        content: [{ type: 'text' as const, text: `❌ Error relaunching agent: ${errorMessage}` }],
+        isError: true
+      };
+    }
+  }
+);
+
+/**
+ * Audit agent sessions and clean up inconsistencies
+ */
+registerTool(
+  'audit_agent_sessions',
+  'Intelligently audit agent tmux sessions. Analyzes activity patterns, task status, and recommends actions rather than auto-fixing.',
+  z.object({
+    admin_token: z.string().describe('Admin authentication token'),
+    auto_cleanup_dead: z.boolean().optional().default(true).describe('Auto cleanup clearly dead sessions'),
+    stale_threshold_minutes: z.number().optional().default(10).describe('Minutes of inactivity before considering stale'),
+    kill_stale_sessions: z.boolean().optional().default(false).describe('Automatically kill stale sessions')
+  }),
+  async (args, context) => {
+    try {
+      const { admin_token, auto_cleanup_dead = true, stale_threshold_minutes = 10, kill_stale_sessions = false } = args;
+
+      // Admin authentication
+      if (!verifyToken(admin_token, 'admin')) {
+        return {
+          content: [{ type: 'text' as const, text: 'Unauthorized: Admin token required' }],
+          isError: true
+        };
+      }
+
+      const db = getDbConnection();
+      const adminTokenSuffix = admin_token.slice(-4).toLowerCase();
+      
+      // Get all agents from database
+      const agents = db.prepare('SELECT agent_id, status, token FROM agents').all() as any[];
+      
+      // Get all tmux sessions with the admin token suffix
+      const { stdout: tmuxOutput } = await execAsync('tmux list-sessions -F "#{session_name}"');
+      const allTmuxSessions = tmuxOutput.trim().split('\n').filter(line => line.length > 0);
+      const agentSessions = allTmuxSessions.filter(session => session.includes(`-${adminTokenSuffix}`));
+      
+      const auditResults = [];
+      const cleanupActions = [];
+
+      // Check each agent in database
+      for (const agent of agents) {
+        const expectedSessionName = `${agent.agent_id}-${adminTokenSuffix}`;
+        const hasActiveTmuxSession = agentSessions.includes(expectedSessionName);
+        const isInMemory = globalState.agentTmuxSessions.has(agent.agent_id);
+        const memorySessionName = globalState.agentTmuxSessions.get(agent.agent_id);
+
+        const result = {
+          agent_id: agent.agent_id,
+          status: agent.status,
+          expected_session: expectedSessionName,
+          has_tmux_session: hasActiveTmuxSession,
+          in_memory: isInMemory,
+          memory_session: memorySessionName,
+          consistency: 'OK'
+        };
+
+        // Check for inconsistencies
+        if (agent.status === 'active' && !hasActiveTmuxSession) {
+          result.consistency = 'INCONSISTENT: Active agent without tmux session';
+          if (auto_cleanup_dead) {
+            // Update agent status to terminated
+            db.prepare('UPDATE agents SET status = ?, updated_at = ? WHERE agent_id = ?')
+              .run('terminated', new Date().toISOString(), agent.agent_id);
+            cleanupActions.push(`Set ${agent.agent_id} to terminated (no tmux session)`);
+          }
+        } else if ((agent.status === 'terminated' || agent.status === 'failed') && hasActiveTmuxSession) {
+          result.consistency = 'INCONSISTENT: Terminated agent with live tmux session';
+          if (auto_cleanup_dead) {
+            // Add to memory so it can be relaunched
+            globalState.agentTmuxSessions.set(agent.agent_id, expectedSessionName);
+            cleanupActions.push(`Added ${agent.agent_id} to memory (found live tmux session)`);
+          }
+        } else if (isInMemory && !hasActiveTmuxSession) {
+          result.consistency = 'INCONSISTENT: In memory but no tmux session';
+          if (auto_cleanup_dead) {
+            globalState.agentTmuxSessions.delete(agent.agent_id);
+            cleanupActions.push(`Removed ${agent.agent_id} from memory (no tmux session)`);
+          }
+        } else if (!isInMemory && hasActiveTmuxSession && agent.status !== 'terminated') {
+          result.consistency = 'INCONSISTENT: Has tmux session but not in memory';
+          if (auto_cleanup_dead) {
+            globalState.agentTmuxSessions.set(agent.agent_id, expectedSessionName);
+            cleanupActions.push(`Added ${agent.agent_id} to memory (found tmux session)`);
+          }
+        }
+
+        auditResults.push(result);
+      }
+
+      // Check for orphaned tmux sessions (sessions without corresponding agents)
+      for (const sessionName of agentSessions) {
+        const agentIdMatch = sessionName.match(/^(.+)-[a-f0-9]{4}$/);
+        if (agentIdMatch) {
+          const agentId = agentIdMatch[1];
+          const agentExists = agents.some(a => a.agent_id === agentId);
+          
+          if (!agentExists) {
+            auditResults.push({
+              agent_id: agentId,
+              status: 'ORPHANED',
+              expected_session: sessionName,
+              has_tmux_session: true,
+              in_memory: false,
+              memory_session: null,
+              consistency: 'ORPHANED: Tmux session without database entry'
+            });
+            
+            if (auto_cleanup_dead) {
+              cleanupActions.push(`Found orphaned session: ${sessionName} (no database entry)`);
+            }
+          }
+        }
+      }
+
+      // Build report
+      const reportParts = [
+        '🔍 **Agent Session Audit Report**',
+        '',
+        `**Summary:**`,
+        `- Total agents in DB: ${agents.length}`,
+        `- Active tmux sessions: ${agentSessions.length}`,
+        `- Inconsistencies found: ${auditResults.filter(r => r.consistency !== 'OK').length}`,
+        ''
+      ];
+
+      if (auto_cleanup_dead && cleanupActions.length > 0) {
+        reportParts.push(
+          '🧹 **Cleanup Actions Performed:**',
+          ...cleanupActions.map(action => `- ${action}`),
+          ''
+        );
+      }
+
+      const inconsistentAgents = auditResults.filter(r => r.consistency !== 'OK');
+      if (inconsistentAgents.length > 0) {
+        reportParts.push(
+          '⚠️ **Inconsistencies:**',
+          ...inconsistentAgents.map(agent => 
+            `- **${agent.agent_id}** (${agent.status}): ${agent.consistency}`
+          ),
+          ''
+        );
+      }
+
+      reportParts.push(
+        '✅ **Consistent Agents:**',
+        ...auditResults.filter(r => r.consistency === 'OK').map(agent =>
+          `- **${agent.agent_id}** (${agent.status}): Tmux=${agent.has_tmux_session}, Memory=${agent.in_memory}`
+        )
+      );
+
+      return {
+        content: [{ type: 'text' as const, text: reportParts.join('\n') }],
+        isError: false
+      };
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('Error auditing agent sessions:', error);
+      return {
+        content: [{ type: 'text' as const, text: `❌ Error auditing sessions: ${errorMessage}` }],
+        isError: true
+      };
+    }
+  }
+);
+
+/**
+ * Smart audit with activity analysis and intelligent recommendations
+ */
+registerTool(
+  'smart_audit_agents',
+  'Intelligently audit agents with activity analysis, task status checking, and smart recommendations for cleanup.',
+  z.object({
+    admin_token: z.string().describe('Admin authentication token'),
+    stale_threshold_minutes: z.number().optional().default(10).describe('Minutes of inactivity before considering stale'),
+    auto_kill_stale: z.boolean().optional().default(false).describe('Automatically kill sessions with no activity')
+  }),
+  async (args, context) => {
+    try {
+      const { admin_token, stale_threshold_minutes = 10, auto_kill_stale = false } = args;
+
+      // Admin authentication
+      if (!verifyToken(admin_token, 'admin')) {
+        return {
+          content: [{ type: 'text' as const, text: 'Unauthorized: Admin token required' }],
+          isError: true
+        };
+      }
+
+      const db = getDbConnection();
+      const adminTokenSuffix = admin_token.slice(-4).toLowerCase();
+      const staleThresholdMs = stale_threshold_minutes * 60 * 1000;
+      const now = new Date();
+      
+      // Get all agents with extended info
+      const agents = db.prepare(`
+        SELECT a.agent_id, a.status, a.token, a.created_at, a.terminated_at, a.current_task,
+               t.title as task_title, t.status as task_status
+        FROM agents a 
+        LEFT JOIN tasks t ON a.current_task = t.task_id
+      `).all() as any[];
+      
+      // Get tmux sessions
+      const { stdout: tmuxOutput } = await execAsync('tmux list-sessions -F "#{session_name}"');
+      const allTmuxSessions = tmuxOutput.trim().split('\n').filter(line => line.length > 0);
+      const agentSessions = allTmuxSessions.filter(session => session.includes(`-${adminTokenSuffix}`));
+      
+      // Get recent activity for all agents (last hour)
+      const recentActivity = db.prepare(`
+        SELECT agent_id, action_type, timestamp 
+        FROM agent_actions 
+        WHERE timestamp > datetime('now', '-1 hour')
+        ORDER BY timestamp DESC
+      `).all() as any[];
+      
+      const auditResults = [];
+      const recommendations = [];
+      const autoActions = [];
+
+      // Analyze each agent
+      for (const agent of agents) {
+        const expectedSessionName = `${agent.agent_id}-${adminTokenSuffix}`;
+        const hasActiveTmuxSession = agentSessions.includes(expectedSessionName);
+        const isInMemory = globalState.agentTmuxSessions.has(agent.agent_id);
+        
+        // Get last activity for this agent
+        const agentActivity = recentActivity.filter(a => a.agent_id === agent.agent_id);
+        const lastActivity = agentActivity.length > 0 ? new Date(agentActivity[0].timestamp) : null;
+        const minutesSinceActivity = lastActivity ? (now.getTime() - lastActivity.getTime()) / (1000 * 60) : Infinity;
+        
+        // Check if task is still relevant
+        const taskRelevant = agent.task_status === 'in_progress' || agent.task_status === 'pending';
+        
+        const result = {
+          agent_id: agent.agent_id,
+          status: agent.status,
+          task_status: agent.task_status || 'none',
+          task_title: agent.task_title || 'none',
+          has_tmux_session: hasActiveTmuxSession,
+          in_memory: isInMemory,
+          last_activity: lastActivity ? lastActivity.toISOString() : 'never',
+          minutes_inactive: lastActivity ? Math.round(minutesSinceActivity) : 'never',
+          is_stale: minutesSinceActivity > stale_threshold_minutes,
+          recommendation: 'OK'
+        };
+
+        // Generate intelligent recommendations
+        if (hasActiveTmuxSession && agent.status === 'terminated') {
+          if (minutesSinceActivity > stale_threshold_minutes) {
+            result.recommendation = 'KILL SESSION: Terminated agent with stale session';
+            recommendations.push(`🗑️ Kill ${agent.agent_id} session (terminated ${Math.round(minutesSinceActivity)}min ago)`);
+            
+            if (auto_kill_stale) {
+              try {
+                await killTmuxSession(expectedSessionName);
+                globalState.agentTmuxSessions.delete(agent.agent_id);
+                autoActions.push(`Killed stale session: ${expectedSessionName}`);
+              } catch (error) {
+                autoActions.push(`Failed to kill session ${expectedSessionName}: ${error}`);
+              }
+            }
+          } else if (taskRelevant) {
+            result.recommendation = 'CONSIDER RELAUNCH: Recent termination with active task';
+            recommendations.push(`🔄 Consider relaunching ${agent.agent_id} (task ${agent.task_status}, terminated recently)`);
+          } else {
+            result.recommendation = 'KILL SESSION: Terminated with completed/irrelevant task';
+            recommendations.push(`🗑️ Kill ${agent.agent_id} session (task ${agent.task_status})`);
+          }
+        } else if (hasActiveTmuxSession && agent.status === 'created') {
+          if (minutesSinceActivity > stale_threshold_minutes) {
+            result.recommendation = 'KILL SESSION: Created but never activated';
+            recommendations.push(`🗑️ Kill ${agent.agent_id} session (created but inactive ${Math.round(minutesSinceActivity)}min)`);
+          } else {
+            result.recommendation = 'MONITOR: Recently created, may be starting up';
+            recommendations.push(`👀 Monitor ${agent.agent_id} (recently created)`);
+          }
+        } else if (hasActiveTmuxSession && agent.status === 'active') {
+          if (minutesSinceActivity > stale_threshold_minutes) {
+            result.recommendation = 'INVESTIGATE: Active agent but no recent activity';
+            recommendations.push(`🔍 Check ${agent.agent_id} (active but silent ${Math.round(minutesSinceActivity)}min)`);
+          } else {
+            result.recommendation = 'HEALTHY: Active with recent activity';
+          }
+        } else if (!hasActiveTmuxSession && agent.status === 'active') {
+          result.recommendation = 'UPDATE STATUS: Active agent without session';
+          recommendations.push(`📝 Set ${agent.agent_id} status to terminated (no session)`);
+        }
+
+        // Auto-add to memory if session exists but not tracked
+        if (hasActiveTmuxSession && !isInMemory && agent.status !== 'terminated') {
+          globalState.agentTmuxSessions.set(agent.agent_id, expectedSessionName);
+          autoActions.push(`Added ${agent.agent_id} to memory tracking`);
+        }
+
+        auditResults.push(result);
+      }
+
+      // Build smart report
+      const totalSessions = agentSessions.length;
+      const staleSessions = auditResults.filter(r => r.is_stale && r.has_tmux_session).length;
+      const activeSessions = auditResults.filter(r => r.has_tmux_session && r.status === 'active').length;
+      
+      const reportParts = [
+        '🧠 **Smart Agent Audit Report**',
+        '',
+        `**Activity Summary:**`,
+        `- Total agents: ${agents.length}`,
+        `- Live tmux sessions: ${totalSessions}`,
+        `- Active agents: ${activeSessions}`,
+        `- Stale sessions (>${stale_threshold_minutes}min): ${staleSessions}`,
+        ''
+      ];
+
+      if (autoActions.length > 0) {
+        reportParts.push(
+          '⚡ **Auto Actions Performed:**',
+          ...autoActions.map(action => `- ${action}`),
+          ''
+        );
+      }
+
+      if (recommendations.length > 0) {
+        reportParts.push(
+          '💡 **Recommendations:**',
+          ...recommendations,
+          ''
+        );
+      }
+
+      // Show detailed status for agents with sessions
+      const agentsWithSessions = auditResults.filter(r => r.has_tmux_session);
+      if (agentsWithSessions.length > 0) {
+        reportParts.push(
+          '📊 **Agents with Sessions:**',
+          ...agentsWithSessions.map(agent => 
+            `- **${agent.agent_id}** (${agent.status}): Task=${agent.task_status}, Last=${agent.minutes_inactive === 'never' ? 'never' : agent.minutes_inactive + 'min ago'}, ${agent.recommendation}`
+          ),
+          ''
+        );
+      }
+
+      return {
+        content: [{ type: 'text' as const, text: reportParts.join('\n') }],
+        isError: false
+      };
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('Error in smart agent audit:', error);
+      return {
+        content: [{ type: 'text' as const, text: `❌ Error in smart audit: ${errorMessage}` }],
         isError: true
       };
     }

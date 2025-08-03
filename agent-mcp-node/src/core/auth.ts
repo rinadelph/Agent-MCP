@@ -15,7 +15,7 @@ export function generateToken(): string {
 
 /**
  * Verify if a token is valid and has the required role
- * Ported from Python auth.py verify_token()
+ * Enhanced with database fallback for better agent recognition
  * 
  * @param token - The token to verify
  * @param requiredRole - Required role: "admin" or "agent" 
@@ -31,14 +31,28 @@ export function verifyToken(token: string, requiredRole: 'admin' | 'agent' = 'ag
     return true;
   }
   
-  // Check active agents (for agent role)
-  if (requiredRole === 'agent' && globalState.activeAgents.has(token)) {
-    return true;
-  }
-  
-  // Allow admin token to be used for agent roles as well
-  if (requiredRole === 'agent' && token === globalState.adminToken) {
-    return true; // Admins can act as agents
+  // For agent role verification
+  if (requiredRole === 'agent') {
+    // Allow admin token to be used for agent roles
+    if (token === globalState.adminToken) {
+      return true; // Admins can act as agents
+    }
+    
+    // Check active agents (runtime tracking)
+    if (globalState.activeAgents.has(token)) {
+      return true;
+    }
+    
+    // Fallback: Check database for agent token
+    try {
+      const db = getDbConnection();
+      const agent = db.prepare('SELECT agent_id FROM agents WHERE token = ?').get(token) as any;
+      if (agent) {
+        return true; // Agent exists in database
+      }
+    } catch (error) {
+      // Database error, continue to false
+    }
   }
   
   return false;
@@ -46,7 +60,7 @@ export function verifyToken(token: string, requiredRole: 'admin' | 'agent' = 'ag
 
 /**
  * Get agent ID from token
- * Ported from Python auth.py get_agent_id()
+ * Enhanced with database fallback for better agent recognition
  * 
  * @param token - The token to look up
  * @returns agent_id if token is valid, null otherwise
@@ -61,10 +75,21 @@ export function getAgentId(token: string): string | null {
     return 'admin';
   }
   
-  // Check active agents
+  // Check active agents first (runtime tracking)
   const agentData = globalState.activeAgents.get(token);
   if (agentData && agentData.agent_id) {
     return agentData.agent_id;
+  }
+  
+  // Fallback: Check database for agent token
+  try {
+    const db = getDbConnection();
+    const agent = db.prepare('SELECT agent_id FROM agents WHERE token = ?').get(token) as any;
+    if (agent) {
+      return agent.agent_id;
+    }
+  } catch (error) {
+    // Database error, continue to null
   }
   
   return null;

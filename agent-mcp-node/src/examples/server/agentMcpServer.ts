@@ -21,6 +21,7 @@ import { initializeAdminToken } from "../../core/auth.js";
 import "../../tools/basic.js"; // Register basic tools
 import "../../tools/agent.js"; // Register agent management tools  
 import "../../tools/agentCommunication.js"; // Register agent communication tools
+import "../../tools/assistanceRequest.js"; // Register intelligent assistance request
 import "../../tools/tasks/index.js"; // Register task management tools
 import "../../tools/rag.js"; // Register RAG tools
 import "../../tools/file_management.js"; // Register file management tools

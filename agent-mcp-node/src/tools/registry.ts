@@ -3,6 +3,8 @@
 
 import { z } from 'zod';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { verifyToken } from '../core/auth.js';
+import { detectCallingTmuxSession, detectAdminSessionByToken, updateAdminSession } from '../utils/sessionDetection.js';
 
 // Tool execution context
 export interface ToolContext {
@@ -108,6 +110,9 @@ class ToolRegistry {
       // Validate arguments against schema
       const validatedArgs = tool.inputSchema.parse(args);
       
+      // Track admin session if this is an admin tool call
+      await this.trackAdminSession(validatedArgs);
+      
       // Execute tool handler
       const result = await tool.handler(validatedArgs, context);
       return result;
@@ -132,6 +137,29 @@ class ToolRegistry {
         }],
         isError: true
       };
+    }
+  }
+
+  /**
+   * Track admin session for intelligent assistance routing
+   */
+  private async trackAdminSession(args: Record<string, any>): Promise<void> {
+    try {
+      // Check if this call uses an admin token
+      const adminToken = args.admin_token || args.token;
+      
+      if (adminToken && verifyToken(adminToken, 'admin')) {
+        // Detect the admin session by looking for token usage in tmux sessions
+        const sessionName = await detectAdminSessionByToken(adminToken);
+        
+        if (sessionName) {
+          // Update admin's current session in database
+          await updateAdminSession(sessionName);
+        }
+      }
+    } catch (error) {
+      // Don't fail tool execution if session tracking fails
+      console.error('Error tracking admin session:', error);
     }
   }
 
