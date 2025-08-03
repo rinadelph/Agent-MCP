@@ -14,6 +14,7 @@ import {
   logTaskAction,
   validateTaskStatus 
 } from './core.js';
+import { autoLaunchTestingAgents } from '../../utils/testingAgent.js';
 
 // Helper function to get agent ID from token
 function getAgentIdFromToken(token: string): string | null {
@@ -482,6 +483,44 @@ registerTool(
       });
       
       transaction();
+      
+      // Auto-launch testing agents for completed tasks
+      const completedTasks: Array<{ task_id: string; completed_by: string }> = [];
+      if (new_status === 'completed') {
+        for (const taskId of targetTaskIds) {
+          const successfulUpdate = results.find(r => r.includes(`✅ Updated '${taskId}'`));
+          if (successfulUpdate) {
+            completedTasks.push({
+              task_id: taskId,
+              completed_by: requestingAgentId || 'admin'
+            });
+          }
+        }
+        
+        if (completedTasks.length > 0) {
+          try {
+            console.log(`🧪 Auto-launching testing agents for ${completedTasks.length} completed task(s)`);
+            const testingAgentResults = await autoLaunchTestingAgents(completedTasks);
+            
+            // Add testing agent launch results to response
+            for (const result of testingAgentResults) {
+              if (result.testing_agent_launched) {
+                results.push(`  🧪 Testing agent '${result.testing_agent_id}' launched for validation`);
+              } else {
+                results.push(`  ⚠️ Failed to launch testing agent for task '${result.task_id}': ${result.error || 'Unknown error'}`);
+              }
+            }
+            
+            if (MCP_DEBUG) {
+              const successfulLaunches = testingAgentResults.filter(r => r.testing_agent_launched).length;
+              console.log(`🧪 Testing agent launches: ${successfulLaunches}/${testingAgentResults.length} successful`);
+            }
+          } catch (error) {
+            console.error('❌ Error auto-launching testing agents:', error);
+            results.push(`  ⚠️ Failed to auto-launch testing agents: ${error instanceof Error ? error.message : String(error)}`);
+          }
+        }
+      }
       
       const response = [
         `📝 **Task Status Update Results**`,
