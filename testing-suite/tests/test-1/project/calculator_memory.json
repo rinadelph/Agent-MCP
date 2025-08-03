@@ -1,0 +1,24 @@
+{
+  "memory_slots": {
+    "M1": 42
+  },
+  "active_slot": "M1",
+  "last_recalled": 42,
+  "memory_history": [
+    {
+      "operation": "MS",
+      "slot": "M1",
+      "value": 42,
+      "old_value": null,
+      "timestamp": "2025-07-22T04:24:53.614047"
+    },
+    {
+      "operation": "MR",
+      "slot": "M1",
+      "value": 42,
+      "old_value": null,
+      "timestamp": "2025-07-22T04:24:53.614053"
+    }
+  ],
+  "version": "1.0"
+}

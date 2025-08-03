@@ -28,6 +28,17 @@ from ..features.rag.indexing import index_task_data
 # from main.py:1191 (generate_id - not present, assuming secrets.token_hex was intended)
 from .agent_communication_tools import send_agent_message_tool_impl
 
+# For testing agent auto-launch
+from ..core.auth import generate_token
+from ..core.config import AGENT_COLORS
+from ..utils.tmux_utils import (
+    create_tmux_session,
+    send_prompt_async,
+    send_command_to_session,
+    sanitize_session_name,
+)
+from ..utils.prompt_templates import build_agent_prompt
+
 
 def estimate_tokens(text: str) -> int:
     """Accurate token estimation using tiktoken for GPT-4"""
@@ -52,6 +63,303 @@ def _generate_task_id() -> str:
 def _generate_notification_id() -> str:
     """Generates a unique notification ID."""
     return f"notification_{secrets.token_hex(8)}"
+
+
+async def _send_escape_to_agent(agent_id: str) -> bool:
+    """Send escape sequences to pause an agent's tmux session."""
+    try:
+        if agent_id in g.agent_tmux_sessions:
+            session_name = g.agent_tmux_sessions[agent_id]
+            logger.info(
+                f"Sending escape sequences to pause agent {agent_id} in session {session_name}"
+            )
+
+            # Send 4 escape sequences with 1 second intervals to stop current operation
+            import subprocess
+            import time
+
+            clean_session_name = sanitize_session_name(session_name)
+
+            for i in range(4):
+                result = subprocess.run(
+                    ["tmux", "send-keys", "-t", clean_session_name, "Escape"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                if result.returncode != 0:
+                    logger.error(
+                        f"Failed to send Escape {i+1}/4 to agent {agent_id}: {result.stderr}"
+                    )
+                    return False
+                logger.debug(f"Sent Escape {i+1}/4 to agent {agent_id}")
+                if i < 3:  # Don't sleep after the last one
+                    time.sleep(1)
+
+            logger.info(f"Successfully paused agent {agent_id}")
+            return True
+        else:
+            logger.warning(f"Agent {agent_id} has no active tmux session to pause")
+            return False
+    except Exception as e:
+        logger.error(f"Error sending escape to agent {agent_id}: {e}")
+        return False
+
+
+async def _launch_testing_agent_for_completed_task(
+    cursor, completed_task_id: str, completed_by_agent: str
+) -> bool:
+    """Launch testing agent when task completes."""
+    try:
+        # 1. Send Escape sequences to pause completing agent
+        await _send_escape_to_agent(completed_by_agent)
+
+        # 2. Get task details for context
+        cursor.execute("SELECT * FROM tasks WHERE task_id = ?", (completed_task_id,))
+        task_row = cursor.fetchone()
+        if not task_row:
+            logger.error(f"Cannot find completed task {completed_task_id} for testing")
+            return False
+
+        task_data = dict(task_row)
+
+        # 3. Generate testing agent ID
+        testing_agent_id = f"test-{completed_task_id[-6:]}"
+
+        # 4. Kill existing testing agent if it exists (task re-completed after fixes)
+        from ..utils.tmux_utils import kill_tmux_session
+
+        # Check if testing agent already exists
+        existing_agent = None
+        cursor.execute(
+            "SELECT agent_id FROM agents WHERE agent_id = ?", (testing_agent_id,)
+        )
+        existing_agent = cursor.fetchone()
+
+        if existing_agent or testing_agent_id in g.agent_working_dirs:
+            logger.info(
+                f"Task {completed_task_id} re-completed - killing existing testing agent {testing_agent_id} to launch fresh one"
+            )
+
+            # Kill tmux session if it exists
+            if testing_agent_id in g.agent_tmux_sessions:
+                session_name = g.agent_tmux_sessions[testing_agent_id]
+                kill_tmux_session(session_name)
+                del g.agent_tmux_sessions[testing_agent_id]
+
+            # Clean up global tracking
+            if testing_agent_id in g.agent_working_dirs:
+                del g.agent_working_dirs[testing_agent_id]
+            if testing_agent_id in g.active_agents:
+                del g.active_agents[testing_agent_id]
+
+            # Remove from database
+            cursor.execute("DELETE FROM agents WHERE agent_id = ?", (testing_agent_id,))
+            logger.info(f"Cleaned up existing testing agent {testing_agent_id}")
+
+        # 5. Create testing agent token and database entry
+        testing_token = generate_token()
+        created_at_iso = datetime.datetime.now().isoformat()
+
+        # Assign a color for the testing agent
+        agent_color = AGENT_COLORS[g.agent_color_index % len(AGENT_COLORS)]
+        g.agent_color_index += 1
+
+        # Get project directory
+        project_dir_env = os.environ.get("MCP_PROJECT_DIR")
+        if not project_dir_env:
+            logger.error("MCP_PROJECT_DIR not set, cannot launch testing agent")
+            return False
+
+        # Insert testing agent into database
+        cursor.execute(
+            """
+            INSERT INTO agents (token, agent_id, capabilities, created_at, status, 
+                              current_task, working_directory, color)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+            (
+                testing_token,
+                testing_agent_id,
+                json.dumps(["testing", "validation", "criticism"]),
+                created_at_iso,
+                "created",
+                completed_task_id,  # Set the completed task as current task
+                project_dir_env,
+                agent_color,
+            ),
+        )
+
+        # 6. Build enriched prompt for testing agent
+        prompt = build_agent_prompt(
+            agent_id=testing_agent_id,
+            agent_token=testing_token,
+            admin_token=g.admin_token,
+            template_name="testing_agent",
+            completed_by_agent=completed_by_agent,
+            completed_task_id=completed_task_id,
+            completed_task_title=task_data.get("title", "Unknown"),
+            completed_task_description=task_data.get("description", "No description"),
+        )
+
+        if not prompt:
+            logger.error(f"Failed to build prompt for testing agent {testing_agent_id}")
+            return False
+
+        # 7. Create tmux session for testing agent
+        def get_admin_token_suffix(admin_token: str) -> str:
+            """Extract last 4 chars from admin token for session naming."""
+            if not admin_token or len(admin_token) < 4:
+                return "0000"
+            return admin_token[-4:].lower()
+
+        suffix = get_admin_token_suffix(g.admin_token)
+        clean_agent_id = sanitize_session_name(testing_agent_id)
+        session_name = f"{clean_agent_id}-{suffix}"
+
+        # Set up environment variables for the testing agent
+        env_vars = {
+            "MCP_AGENT_ID": testing_agent_id,
+            "MCP_AGENT_TOKEN": testing_token,
+            "MCP_SERVER_URL": f"http://localhost:{os.environ.get('PORT', '8080')}",
+            "MCP_WORKING_DIR": project_dir_env,
+        }
+
+        # Create tmux session with environment variables
+        success = create_tmux_session(
+            session_name=session_name,
+            working_dir=project_dir_env,
+            command=None,  # Don't start Claude immediately
+            env_vars=env_vars,
+        )
+        if not success:
+            logger.error(
+                f"Failed to create tmux session for testing agent {testing_agent_id}"
+            )
+            return False
+
+        # 8. Store session mapping and update in-memory state
+        g.agent_tmux_sessions[testing_agent_id] = session_name
+        g.agent_working_dirs[testing_agent_id] = project_dir_env
+        g.active_agents[testing_token] = {
+            "agent_id": testing_agent_id,
+            "created_at": created_at_iso,
+            "last_activity": created_at_iso,
+        }
+
+        # 9. Follow proper agent setup procedure
+        try:
+            import time
+
+            def wait_for_command_completion(delay: float = 1.0):
+                """Smart delay system - wait for command completion or timeout"""
+                time.sleep(delay)
+
+            setup_delay = 1.0  # 1 second delay between setup commands
+
+            # Welcome message
+            welcome_message = f"echo '=== Testing Agent {testing_agent_id} initialization starting ==='"
+            if send_command_to_session(session_name, welcome_message):
+                logger.info(
+                    f"✅ Sent welcome message to testing agent '{testing_agent_id}'"
+                )
+            else:
+                logger.error(
+                    f"❌ Failed to send welcome message to testing agent '{testing_agent_id}'"
+                )
+
+            wait_for_command_completion(setup_delay)
+
+            # Verify working directory
+            verify_command = f"echo 'Working directory:' && pwd"
+            if send_command_to_session(session_name, verify_command):
+                logger.info(
+                    f"✅ Sent directory verification to testing agent '{testing_agent_id}'"
+                )
+
+            wait_for_command_completion(setup_delay)
+
+            # Get server port for MCP registration
+            server_port = os.environ.get("PORT", "8080")
+            mcp_server_url = f"http://localhost:{server_port}/sse"
+
+            # Log MCP server info
+            mcp_info_command = f"echo 'MCP Server URL: {mcp_server_url}'"
+            send_command_to_session(session_name, mcp_info_command)
+            wait_for_command_completion(setup_delay)
+
+            # Register MCP server connection
+            mcp_add_command = f"claude mcp add -t sse AgentMCP {mcp_server_url}"
+            logger.info(
+                f"Registering MCP server for testing agent '{testing_agent_id}': {mcp_add_command}"
+            )
+
+            if not send_command_to_session(session_name, mcp_add_command):
+                logger.error(
+                    f"Failed to register MCP server for testing agent '{testing_agent_id}'"
+                )
+                return False
+
+            # Add delay to ensure MCP registration completes
+            wait_for_command_completion(setup_delay)
+
+            # Verify MCP registration
+            verify_mcp_command = "claude mcp list"
+            logger.info(
+                f"Verifying MCP registration for testing agent '{testing_agent_id}'"
+            )
+            send_command_to_session(session_name, verify_mcp_command)
+            wait_for_command_completion(setup_delay)
+
+            # Start Claude
+            start_claude_message = "echo '--- Starting Claude with MCP ---'"
+            send_command_to_session(session_name, start_claude_message)
+            wait_for_command_completion(setup_delay)
+
+            claude_command = "claude --dangerously-skip-permissions"
+            logger.info(
+                f"Starting Claude for testing agent '{testing_agent_id}': {claude_command}"
+            )
+
+            if not send_command_to_session(session_name, claude_command):
+                logger.error(
+                    f"Failed to start Claude for testing agent '{testing_agent_id}'"
+                )
+                return False
+
+            # Log completion message
+            completion_message = f"echo '=== Testing Agent {testing_agent_id} setup complete - Claude starting ==='"
+            send_command_to_session(session_name, completion_message)
+
+            # Send enriched prompt with delay
+            send_prompt_async(session_name, prompt, delay_seconds=5)
+            logger.info(
+                f"Testing agent {testing_agent_id} launched successfully for task {completed_task_id}"
+            )
+
+            # Log the testing agent creation
+            log_agent_action_to_db(
+                cursor,
+                "admin",
+                "create_testing_agent",
+                details={
+                    "testing_agent_id": testing_agent_id,
+                    "completed_task_id": completed_task_id,
+                    "completed_by_agent": completed_by_agent,
+                },
+            )
+
+            return True
+
+        except Exception as e:
+            logger.error(
+                f"Failed to send prompt to testing agent {testing_agent_id}: {e}"
+            )
+            return False
+
+    except Exception as e:
+        logger.error(f"Error launching testing agent for task {completed_task_id}: {e}")
+        return False
 
 
 async def _update_single_task(
@@ -1824,6 +2132,35 @@ async def update_task_status_tool_impl(
                                         None,
                                     )
                                     dependency_updates.append(dep_result)
+
+        # Phase 3.5: Auto-launch testing agents for completed tasks
+        testing_agent_launches = []
+        for result in results:
+            if result["success"] and new_status == "completed":
+                try:
+                    testing_success = await _launch_testing_agent_for_completed_task(
+                        cursor, result["task_id"], requesting_agent_id
+                    )
+                    testing_agent_launches.append(
+                        {
+                            "task_id": result["task_id"],
+                            "testing_agent_launched": testing_success,
+                        }
+                    )
+                    logger.info(
+                        f"Testing agent launch for task {result['task_id']}: {'SUCCESS' if testing_success else 'FAILED'}"
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Failed to launch testing agent for task {result['task_id']}: {e}"
+                    )
+                    testing_agent_launches.append(
+                        {
+                            "task_id": result["task_id"],
+                            "testing_agent_launched": False,
+                            "error": str(e),
+                        }
+                    )
 
         # Commit all changes
         conn.commit()
