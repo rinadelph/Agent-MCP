@@ -1,0 +1,64 @@
+✅ Global state management loaded
+✅ Authentication system loaded
+✅ Registered tool: health
+✅ Health tool registered successfully
+✅ Registered tool: create_agent
+✅ Registered tool: view_status
+✅ Registered tool: terminate_agent
+✅ Registered tool: list_agents
+✅ Agent management tools registered successfully
+✅ Task core utilities loaded successfully
+✅ Registered tool: create_self_task
+✅ Registered tool: assign_task
+✅ Task creation tools registered successfully
+✅ Registered tool: view_tasks
+✅ Registered tool: update_task_status
+✅ Task management tools registered successfully
+✅ Registered tool: search_tasks
+✅ Registered tool: delete_task
+✅ Task operations tools registered successfully
+✅ All task tools loaded and registered successfully
+🚀 Starting Agent-MCP Node.js Server...
+📊 Checking database extensions...
+✅ sqlite-vec extension loaded successfully
+🗄️  Initializing database...
+🗄️  Initializing database schema...
+CRITICAL: MCP_PROJECT_DIR environment variable is not set.
+✅ Core tables created successfully
+✅ Vector table 'rag_embeddings' created (vec0 with dimension 1536)
+✅ Database schema initialized successfully
+📈 Database statistics: {
+  agents: 2,
+  tasks: 0,
+  agent_actions: 2,
+  project_context: 0,
+  file_metadata: 0,
+  rag_chunks: 0,
+  rag_meta: 5,
+  agent_messages: 0,
+  claude_code_sessions: 0,
+  rag_embeddings: 0
+}
+🔐 Initializing authentication system...
+🔑 Generated new admin token: fdc514038063092cfa4e45df7feb0baf
+💡 Set MCP_ADMIN_TOKEN environment variable to persist this token
+✅ Authentication system ready
+
+🎉 Agent-MCP Node.js Server is ready!
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🌐 Server URL: http://localhost:3001
+📡 MCP Endpoint: http://localhost:3001/mcp
+❤️  Health Check: http://localhost:3001/health
+📊 Statistics: http://localhost:3001/stats
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔧 Available Tools: 11
+🗄️  Vector Search: Enabled
+📝 Debug Mode: Off
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ Ready for Claude Code connections!
+🔒 Closing database connection...
+
+🛑 Received SIGTERM, shutting down...
+
+🛑 Shutting down Agent-MCP Node.js server...
+✅ Agent-MCP Node.js server shutdown complete

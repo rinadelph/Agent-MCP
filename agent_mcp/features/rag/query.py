@@ -162,7 +162,7 @@ async def query_rag_system(query_text: str) -> str:
                     query_embedding_json = json.dumps(query_embedding)
 
                     # Search Vector Table with metadata
-                    k_results = 10  # Increased to get more diverse results
+                    k_results = 13  # Optimized based on recent RAG research
                     sql_vector_search = """
                         SELECT c.chunk_text, c.source_type, c.source_ref, c.metadata, r.distance
                         FROM rag_embeddings r
@@ -409,7 +409,7 @@ async def query_rag_system_with_model(
                     query_embedding_json = json.dumps(query_embedding)
 
                     # Perform vector search using sqlite-vec (matching working implementation)
-                    k_results = 10  # Top 10 results
+                    k_results = 13  # Optimized based on recent RAG research
                     vector_search_sql = """
                         SELECT c.chunk_text, c.source_type, c.source_ref, c.metadata, r.distance
                         FROM rag_embeddings r

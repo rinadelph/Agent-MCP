@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "sqlite-vec": "^0.1.7-alpha.2",
+    "typescript": "^5.9.2"
+  }
+}
