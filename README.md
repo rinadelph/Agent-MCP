@@ -1,6 +1,7 @@
 # Agent-MCP
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/rinadelph/Agent-MCP)
+[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/rinadelph/Agent-MCP)](https://archestra.ai/mcp-catalog/rinadelph__agent-mcp)
 
 > 🚀 **Advanced Tool Notice**: This framework is designed for experienced AI developers who need sophisticated multi-agent orchestration capabilities. Agent-MCP requires familiarity with AI coding workflows, MCP protocols, and distributed systems concepts. We're actively working to improve documentation and ease of use. If you're new to AI-assisted development, consider starting with simpler tools and returning when you need advanced multi-agent capabilities.
 >
