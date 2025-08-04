@@ -88,12 +88,12 @@ export async function detectAdminSessionByToken(adminToken: string): Promise<str
         if (MCP_DEBUG) {
           console.log(`⚠️ Could not inspect session "${name}": ${error instanceof Error ? error.message : String(error)}`);
         }
-        // Still add to candidates with zero score
+        // Still add to candidates with zero score - no boost for attachment without token
         sessionCandidates.push({
           name,
           attached,
           tokenCount: 0,
-          score: attached ? 10 : 0 // Small boost for attached sessions even without token
+          score: 0 // No score boost for sessions without valid token usage
         });
       }
     }
@@ -114,9 +114,9 @@ export async function detectAdminSessionByToken(adminToken: string): Promise<str
       );
     }
     
-    // Return the best candidate if it has token usage or is attached
+    // Return the best candidate if it has valid token usage
     const bestCandidate = sessionCandidates[0];
-    if (bestCandidate && (bestCandidate.tokenCount > 0 || bestCandidate.attached)) {
+    if (bestCandidate && bestCandidate.tokenCount > 0) {
       if (MCP_DEBUG) {
         console.log(`🎯 Selected admin session: "${bestCandidate.name}" (${bestCandidate.tokenCount} token uses, attached: ${bestCandidate.attached})`);
       }

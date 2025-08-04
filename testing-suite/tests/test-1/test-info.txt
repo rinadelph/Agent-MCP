@@ -1,11 +1,11 @@
 Agent-MCP Test Environment
-Created: Tue Jul 22 03:27:51 AM -04 2025
+Created: Sun Aug  3 03:13:28 AM -04 2025
 
 Configuration:
-- Port: 8010
-- Project Directory: /home/alejandro/Code/MCP/Agent-MCP/testing-suite/tests/test-1/project
+- Port: 8002
+- Project Directory: /home/alejandro/VPS/Agent-MCP/testing-suite/tests/test-1/project
 - Admin Token: [0;34m[INFO][0m Extracting admin token from MCP server output...
-02663140d674bfaec7e6acd916de7126
+6ee5b690645c0790d710ceddc62d6250
 
 Tmux Sessions:
 - MCP Server: agentmcp-test
@@ -16,9 +16,9 @@ Commands to access:
 - Claude Code: tmux attach-session -t claude-test
 
 Test Project Structure:
-/home/alejandro/Code/MCP/Agent-MCP/testing-suite/tests/test-1/project/src/__init__.py
-/home/alejandro/Code/MCP/Agent-MCP/testing-suite/tests/test-1/project/README.md
-/home/alejandro/Code/MCP/Agent-MCP/testing-suite/tests/test-1/project/pyproject.toml
-/home/alejandro/Code/MCP/Agent-MCP/testing-suite/tests/test-1/project/.agent/config.json
-/home/alejandro/Code/MCP/Agent-MCP/testing-suite/tests/test-1/project/.agent/mcp_state.db
-/home/alejandro/Code/MCP/Agent-MCP/testing-suite/tests/test-1/project/.agent/logs/2025-07-22.json
+/home/alejandro/VPS/Agent-MCP/testing-suite/tests/test-1/project/src/__init__.py
+/home/alejandro/VPS/Agent-MCP/testing-suite/tests/test-1/project/README.md
+/home/alejandro/VPS/Agent-MCP/testing-suite/tests/test-1/project/pyproject.toml
+/home/alejandro/VPS/Agent-MCP/testing-suite/tests/test-1/project/.agent/config.json
+/home/alejandro/VPS/Agent-MCP/testing-suite/tests/test-1/project/.agent/mcp_state.db
+/home/alejandro/VPS/Agent-MCP/testing-suite/tests/test-1/project/.agent/logs/2025-08-03.json

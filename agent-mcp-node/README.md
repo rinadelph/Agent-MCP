@@ -34,13 +34,60 @@ npm install
 npm run dev
 
 # Or run directly
-npm run test-server
+npm run server
+
+# Or with custom port and project directory
+npm run server -- --port 4000 --project-dir /path/to/project
 ```
 
-The server will start on `http://localhost:3000` with these endpoints:
+### Global Installation (Optional)
 
-- **Streamable HTTP**: `http://localhost:3000/mcp` (GET/POST/DELETE)
-- **SSE (deprecated)**: `http://localhost:3000/sse` (GET) and `http://localhost:3000/messages` (POST)
+After building the project, you can create a global command:
+
+```bash
+npm run build
+npm link
+
+# Now you can run from anywhere
+agent-mcp --port 4000 --project-dir /path/to/any/project
+```
+
+#### CLI Options
+
+The server supports the following command line options:
+
+- `-p, --port <number>`: Port to run the server on (default: 3001)
+- `--project-dir <path>`: Project directory to operate in (default: current working directory)
+- `-V, --version`: Display version number
+- `-h, --help`: Display help information
+
+**Note:** You can also set the port using environment variables:
+```bash
+PORT=4000 npm run server
+```
+CLI options take precedence over environment variables.
+
+**Examples:**
+
+```bash
+# Start on port 4000
+npm run server -- --port 4000
+
+# Start with custom project directory
+npm run server -- --project-dir /home/user/my-project
+
+# Start on port 5000 in specific directory
+npm run server -- --port 5000 --project-dir /path/to/project
+
+# Show help
+npm run server -- --help
+```
+
+The server will start on the specified port (default: `http://localhost:3001`) with these endpoints:
+
+- **MCP Endpoint**: `http://localhost:3001/mcp` (GET/POST/DELETE)
+- **Health Check**: `http://localhost:3001/health` (GET)
+- **Statistics**: `http://localhost:3001/stats` (GET)
 
 ### Test with Client
 

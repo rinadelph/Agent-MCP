@@ -12,6 +12,8 @@ import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { InMemoryEventStore } from "@modelcontextprotocol/sdk/examples/shared/inMemoryEventStore.js";
 import cors from "cors";
 import { z } from "zod";
+import { Command } from 'commander';
+import { resolve } from 'path';
 
 // Import Agent-MCP components
 import { checkVssLoadability } from "../../db/connection.js";
@@ -29,10 +31,36 @@ import "../../tools/project_context.js"; // Register project context tools
 // Resources will be handled directly in server setup
 import { MCP_DEBUG, VERSION } from "../../core/config.js";
 
-const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3001;
+// Parse command line arguments
+const program = new Command();
+program
+  .name('agent-mcp-server')
+  .description('Agent-MCP Node.js Server with Multi-Agent Collaboration Protocol')
+  .version(VERSION)
+  .option('-p, --port <number>', 'port to run the server on', '3001')
+  .option('--project-dir <path>', 'project directory to operate in', process.cwd())
+  .parse();
+
+const options = program.opts();
+const PORT = parseInt(options.port);
+const PROJECT_DIR = resolve(options.projectDir);
+
+// Change to project directory if specified
+if (options.projectDir !== process.cwd()) {
+  try {
+    process.chdir(PROJECT_DIR);
+    console.log(`📁 Changed to project directory: ${PROJECT_DIR}`);
+  } catch (error) {
+    console.error(`❌ Failed to change to project directory: ${PROJECT_DIR}`);
+    console.error(error);
+    process.exit(1);
+  }
+}
 
 // Initialize database and check VSS on startup
 console.log("🚀 Starting Agent-MCP Node.js Server...");
+console.log(`📁 Project Directory: ${PROJECT_DIR}`);
+console.log(`🌐 Server Port: ${PORT}`);
 console.log(`📊 Checking database extensions...`);
 
 const vssAvailable = checkVssLoadability();

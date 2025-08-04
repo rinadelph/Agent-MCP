@@ -58,7 +58,7 @@ export const AGENT_COLORS = [
 
 // Directory helpers
 export function getProjectDir(): string {
-  return process.cwd(); // Use current working directory
+  return process.cwd(); // Use current working directory (will be changed if --project-dir is used)
 }
 
 export function getAgentDir(): string {

@@ -19,7 +19,7 @@ import {
   killTmuxSession,
   sessionExists
 } from '../utils/tmux.js';
-import { buildAgentPrompt, TemplateType } from '../utils/promptTemplates.js';
+// import { buildAgentPrompt, TemplateType } from '../utils/promptTemplates.js';
 import path from 'path';
 import { promises as fs } from 'fs';
 import { exec } from 'child_process';
@@ -340,7 +340,7 @@ registerTool(
                 console.log(`🔥 SCHEDULING TIMEOUT for agent '${agent_id}' with session '${tmuxSessionName}'`);
                 const timeoutId = setTimeout(async () => {
                   console.log(`🎯 TIMEOUT CALLBACK EXECUTING for agent '${agent_id}'`);
-                  const prompt = `This is your agent token: ${newToken} Ask the project RAG agent at least 5-7 questions to understand what you need to do. I want you to critically think when asking a question, then criticize yourself before asking that question. How you criticize yourself is by proposing an idea, criticizing it, and based on that criticism you pull through with that idea. It's better to add too much context versus too little. Add all these context entries to the agent mcp. ACT AUTO --worker --memory`;
+                  const prompt = `You are ${agent_id} - Agent Token: ${newToken}. Start working on your assigned tasks.`;
 
                   try {
                     console.log(`🔧 About to send keys to session: ${tmuxSessionName}`);
@@ -886,18 +886,8 @@ registerTool(
       if (custom_prompt) {
         promptToSend = custom_prompt;
       } else {
-        // Build agent prompt (simplified version - you may want to enhance this)
-        promptToSend = `You are an AI agent with ID "${agent_id}". Your task is to figure out what you were working on before and continue your work.
-
-First, check your previous work by:
-1. Reviewing your task: call view_tasks with your token
-2. Checking recent file changes: look at your working directory
-3. Reading any relevant project context: use ask_project_rag to understand the project
-
-Your token: ${agentToken}
-Admin token: ${admin_token}
-
-Start by calling view_tasks to see what you were assigned to work on.`;
+        // Build agent prompt using template system
+        promptToSend = `You are ${agent_id} - Agent Token: ${agentToken}. Start working on your assigned tasks.`;
       }
 
       // Send the new prompt to restart the agent with a delay

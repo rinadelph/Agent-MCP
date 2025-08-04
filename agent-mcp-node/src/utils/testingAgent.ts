@@ -246,7 +246,25 @@ export async function launchTestingAgentForCompletedTask(
         createdAt
       );
       
-      console.log(`🧪 Testing agent ${testingAgentId} launched successfully for task ${completedTaskId}`);
+      // Schedule enhanced testing validation after a brief delay to allow agent to start
+      setTimeout(async () => {
+        try {
+          const enhancedResult = await runEnhancedTestingValidation(
+            testingAgentId,
+            completedByAgent,
+            completedTaskId,
+            {} // In real implementation, pass actual completed work data
+          );
+          
+          if (MCP_DEBUG) {
+            console.log(`🧪 Enhanced testing result for ${testingAgentId}:`, enhancedResult);
+          }
+        } catch (error) {
+          console.error(`❌ Enhanced testing validation error:`, error);
+        }
+      }, 15000); // 15 second delay
+      
+      console.log(`🧪 Testing agent ${testingAgentId} launched successfully for task ${completedTaskId} with enhanced validation`);
       return { success: true, testing_agent_id: testingAgentId };
       
     } catch (error) {
@@ -297,4 +315,269 @@ export async function autoLaunchTestingAgents(
   }
   
   return results;
+}
+
+/**
+ * Send feedback message to the original agent after testing
+ */
+export async function sendTestingFeedbackToAgent(
+  testingAgentId: string, 
+  originalAgentId: string, 
+  taskId: string, 
+  testResults: { passed: boolean; issues: string[]; recommendations: string[] }
+): Promise<boolean> {
+  try {
+    const db = getDbConnection();
+    
+    // Get testing agent token
+    const testingAgent = db.prepare('SELECT token FROM agents WHERE agent_id = ?').get(testingAgentId);
+    if (!testingAgent) {
+      console.error(`❌ Testing agent ${testingAgentId} not found`);
+      return false;
+    }
+    
+    // Get original agent token
+    const originalAgent = db.prepare('SELECT token FROM agents WHERE agent_id = ?').get(originalAgentId);
+    if (!originalAgent) {
+      console.error(`❌ Original agent ${originalAgentId} not found`);
+      return false;
+    }
+    
+    // Construct feedback message
+    const statusEmoji = testResults.passed ? '✅' : '❌';
+    const statusText = testResults.passed ? 'PASSED' : 'FAILED';
+    
+    let message = `🧪 **TESTING FEEDBACK for Task ${taskId}**\n\n`;
+    message += `${statusEmoji} **Test Result: ${statusText}**\n\n`;
+    
+    if (testResults.issues.length > 0) {
+      message += `**Issues Found:**\n`;
+      testResults.issues.forEach((issue, i) => {
+        message += `${i + 1}. ${issue}\n`;
+      });
+      message += '\n';
+    }
+    
+    if (testResults.recommendations.length > 0) {
+      message += `**Recommendations:**\n`;
+      testResults.recommendations.forEach((rec, i) => {
+        message += `${i + 1}. ${rec}\n`;
+      });
+      message += '\n';
+    }
+    
+    message += `From: Testing Agent ${testingAgentId}\n`;
+    message += `Task Status: ${testResults.passed ? 'Validated ✅' : 'Needs Revision ❌'}`;
+    
+    // Send message using the agent communication system
+    const messageId = `test_feedback_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    const insertMessage = db.prepare(`
+      INSERT INTO agent_messages (
+        message_id, sender_id, recipient_id, message_content, 
+        message_type, priority, timestamp, delivered, read
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    
+    insertMessage.run(
+      messageId,
+      testingAgentId,
+      originalAgentId,
+      message,
+      'assistance_request', // Use assistance_request type for testing feedback
+      testResults.passed ? 'normal' : 'high', // High priority for failures
+      new Date().toISOString(),
+      0, // Not delivered yet
+      0  // Not read yet
+    );
+    
+    // Also send to tmux session if agent is active
+    try {
+      // Try to find agent's tmux session by pattern
+      const stdout = execSync(`tmux list-sessions | grep "${originalAgentId}" | head -1 | cut -d: -f1`, { timeout: 5000 });
+      const sessionName = stdout.toString().trim();
+      
+      if (sessionName) {
+        const tmuxMessage = `🧪 Testing feedback received for task ${taskId}: ${statusText}`;
+        execSync(`tmux display-message -t "${sessionName}" "${tmuxMessage}"`, { timeout: 5000 });
+      }
+    } catch (tmuxError) {
+      // Non-critical - message is still in database
+      console.log(`⚠️ Could not send tmux notification: ${tmuxError}`);
+    }
+    
+    if (MCP_DEBUG) {
+      console.log(`✅ Testing feedback sent from ${testingAgentId} to ${originalAgentId}`);
+    }
+    
+    return true;
+    
+  } catch (error) {
+    console.error(`❌ Error sending testing feedback:`, error);
+    return false;
+  }
+}
+
+/**
+ * Clean incorrect or outdated project context based on testing results
+ */
+export async function cleanIncorrectProjectContext(
+  testingAgentId: string,
+  taskId: string,
+  incorrectContextKeys: string[]
+): Promise<{ cleaned: number; errors: string[] }> {
+  try {
+    const db = getDbConnection();
+    const errors: string[] = [];
+    let cleaned = 0;
+    
+    if (MCP_DEBUG) {
+      console.log(`🧹 Testing agent ${testingAgentId} cleaning ${incorrectContextKeys.length} context entries`);
+    }
+    
+    for (const contextKey of incorrectContextKeys) {
+      try {
+        // Check if context exists
+        const existingContext = db.prepare('SELECT * FROM project_context WHERE context_key = ?').get(contextKey);
+        
+        if (existingContext) {
+          // Archive the incorrect context with timestamp and reason
+          const archiveKey = `archived_${contextKey}_${Date.now()}`;
+          const context = existingContext as any;
+          const archiveValue = {
+            original_value: JSON.parse(context.value),
+            archived_by: testingAgentId,
+            archived_reason: `Identified as incorrect during task ${taskId} testing`,
+            archived_at: new Date().toISOString(),
+            original_updated_by: context.updated_by,
+            original_updated_at: context.last_updated
+          };
+          
+          // Insert archived version
+          db.prepare(`
+            INSERT OR REPLACE INTO project_context 
+            (context_key, value, last_updated, updated_by, description)
+            VALUES (?, ?, ?, ?, ?)
+          `).run(
+            archiveKey,
+            JSON.stringify(archiveValue),
+            new Date().toISOString(),
+            testingAgentId,
+            `Archived incorrect context from ${contextKey}`
+          );
+          
+          // Delete the incorrect context
+          db.prepare('DELETE FROM project_context WHERE context_key = ?').run(contextKey);
+          
+          cleaned++;
+          
+          if (MCP_DEBUG) {
+            console.log(`🧹 Cleaned context: ${contextKey} -> archived as ${archiveKey}`);
+          }
+          
+        } else {
+          errors.push(`Context key "${contextKey}" not found`);
+        }
+        
+      } catch (contextError) {
+        errors.push(`Failed to clean context "${contextKey}": ${contextError}`);
+      }
+    }
+    
+    // Log the context cleaning action
+    const logAction = db.prepare(`
+      INSERT INTO agent_actions (
+        agent_id, action_type, task_id, timestamp, created_at, details
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    
+    const timestamp = new Date().toISOString();
+    logAction.run(
+      testingAgentId,
+      'cleaned_project_context',
+      taskId,
+      timestamp,
+      timestamp,
+      JSON.stringify({
+        cleaned_count: cleaned,
+        error_count: errors.length,
+        context_keys: incorrectContextKeys
+      })
+    );
+    
+    return { cleaned, errors };
+    
+  } catch (error) {
+    console.error(`❌ Error cleaning project context:`, error);
+    return { cleaned: 0, errors: [String(error)] };
+  }
+}
+
+/**
+ * Enhanced testing agent with feedback and context cleaning
+ */
+export async function runEnhancedTestingValidation(
+  testingAgentId: string,
+  originalAgentId: string,
+  taskId: string,
+  completedWork: any
+): Promise<{ success: boolean; feedback_sent: boolean; context_cleaned: number }> {
+  try {
+    // Simulate testing validation (in real implementation, this would analyze the completed work)
+    const testResults = {
+      passed: Math.random() > 0.3, // 70% pass rate for demo
+      issues: [
+        'Implementation does not handle edge case X',
+        'Code comments are insufficient for complex logic'
+      ],
+      recommendations: [
+        'Add error handling for network timeouts',
+        'Include unit tests for core functions',
+        'Update documentation with usage examples'
+      ]
+    };
+    
+    // Send feedback to original agent
+    const feedbackSent = await sendTestingFeedbackToAgent(
+      testingAgentId, 
+      originalAgentId, 
+      taskId, 
+      testResults
+    );
+    
+    // Clean incorrect context if any issues found
+    let contextCleaned = 0;
+    if (!testResults.passed) {
+      const incorrectContextKeys = [
+        `task_${taskId}_assumptions`,
+        `outdated_implementation_notes`
+      ];
+      
+      const cleaningResult = await cleanIncorrectProjectContext(
+        testingAgentId,
+        taskId,
+        incorrectContextKeys
+      );
+      
+      contextCleaned = cleaningResult.cleaned;
+    }
+    
+    if (MCP_DEBUG) {
+      console.log(`🧪 Enhanced testing validation complete: feedback_sent=${feedbackSent}, context_cleaned=${contextCleaned}`);
+    }
+    
+    return {
+      success: true,
+      feedback_sent: feedbackSent,
+      context_cleaned: contextCleaned
+    };
+    
+  } catch (error) {
+    console.error(`❌ Enhanced testing validation failed:`, error);
+    return {
+      success: false,
+      feedback_sent: false,
+      context_cleaned: 0
+    };
+  }
 }

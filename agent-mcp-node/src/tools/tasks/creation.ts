@@ -99,36 +99,38 @@ registerTool(
         };
       }
       
-      // Phase-based task management: Only one active phase (root task) at a time
+      // Smart task placement: Suggest parent when trying to create root task with existing roots  
       if (!actualParentTaskId) {
         const rootCheck = db.prepare('SELECT task_id, title, status FROM tasks WHERE parent_task IS NULL ORDER BY created_at DESC LIMIT 1').get();
         
         if (rootCheck) {
           const existingPhase = rootCheck as any;
           
-          // Check if current phase is complete using helper function
-          if (!isPhaseComplete(db, existingPhase.task_id)) {
-            // Get available parent tasks for suggestions
-            const availableParents = getAvailableParentTasks(db, existingPhase.task_id);
-            
-            let suggestionText = '';
-            if (availableParents.length > 0) {
-              suggestionText = `\n\n💡 **Available Parent Tasks:**\n${availableParents.map((p: any) => `- ${p.task_id}: ${p.title}`).join('\n')}`;
-            } else {
-              suggestionText = `\n\n💡 **Create a parent task first:** Add a task with parent_task_id="${existingPhase.task_id}"`;
-            }
-            
-            return {
-              content: [{
-                type: 'text' as const,
-                text: `❌ **Cannot Start New Phase**\n\nPhase "${existingPhase.title}" (${existingPhase.task_id}) is still active with incomplete tasks.\n\n🎯 **Agent-MCP enforces focused work:** Complete the current phase before starting a new one.\n\n**To add work to current phase:** Specify a parent_task_id pointing to an existing task.${suggestionText}\n\n**To start new phase:** Complete all tasks in "${existingPhase.title}" first.`
-              }],
-              isError: true
-            };
+          // Get smart parent suggestions using RAG if available, otherwise use similarity
+          const suggestions = await getSmartParentSuggestions(db, task_title!, task_description!);
+          
+          let suggestionText = '\n\n💡 **Smart Parent Suggestions:**\n';
+          if (suggestions.length > 0) {
+            suggestions.forEach((suggestion: any, i: number) => {
+              suggestionText += `  ${i + 1}. ${suggestion.task_id}: ${suggestion.title}\n`;
+              suggestionText += `     Status: ${suggestion.status} | Priority: ${suggestion.priority} | ${suggestion.reason}\n`;
+            });
           } else {
-            // Current phase is complete, allow new phase
-            console.log(`✅ Phase "${existingPhase.title}" completed. Allowing new phase creation.`);
+            suggestionText += `  Consider using parent_task_id="${existingPhase.task_id}" to add to current phase\n`;
+            suggestionText += `  Or complete existing tasks to start a new phase\n`;
           }
+          
+          suggestionText += '\n🧠 **Use RAG for smarter suggestions:** The system can analyze task content for optimal placement.';
+          
+          return {
+            content: [{
+              type: 'text' as const,
+              text: `📋 **Task Placement Guidance**\n\nRoot task "${existingPhase.title}" (${existingPhase.task_id}) already exists.\n\n` +
+                `Every task except the first must have a parent for better organization.${suggestionText}\n\n` +
+                `Use 'view_tasks' to see all available parent options.`
+            }],
+            isError: false // Changed to false - this is guidance, not an error
+          };
         }
       }
       
@@ -309,7 +311,7 @@ registerTool(
     
     // Handle unassigned task creation
     if (!agent_token) {
-      return createUnassignedTasks(args);
+      return await createUnassignedTasks(args);
     }
     
     // Validate agent
@@ -386,7 +388,7 @@ registerTool(
 );
 
 // Helper functions for different assignment modes
-function createUnassignedTasks(args: any) {
+async function createUnassignedTasks(args: any) {
   const { 
     task_title, 
     task_description, 
@@ -401,47 +403,43 @@ function createUnassignedTasks(args: any) {
   const createdTasks: string[] = [];
   
   try {
-    const transaction = db.transaction(() => {
-      // Handle single task creation
-      if (task_title && task_description) {
-        const taskId = createSingleUnassignedTask({
-          title: task_title,
-          description: task_description,
-          priority,
-          depends_on_tasks,
-          parent_task_id
+    // Handle single task creation
+    if (task_title && task_description) {
+      const taskId = await createSingleUnassignedTask({
+        title: task_title,
+        description: task_description,
+        priority,
+        depends_on_tasks,
+        parent_task_id
+      });
+      
+      if (taskId) {
+        createdTasks.push(taskId);
+        results.push(`✅ Created unassigned task '${taskId}': ${task_title}`);
+      } else {
+        results.push(`❌ Failed to create task: ${task_title} (check server logs for details)`);
+      }
+    }
+    
+    // Handle multiple task creation
+    if (tasks && Array.isArray(tasks)) {
+      for (const task of tasks) {
+        const taskId = await createSingleUnassignedTask({
+          title: task.title,
+          description: task.description,
+          priority: task.priority || 'medium',
+          depends_on_tasks: task.depends_on_tasks || [],
+          parent_task_id: task.parent_task_id
         });
         
         if (taskId) {
           createdTasks.push(taskId);
-          results.push(`✅ Created unassigned task '${taskId}': ${task_title}`);
+          results.push(`✅ Created unassigned task '${taskId}': ${task.title}`);
         } else {
-          results.push(`❌ Failed to create task: ${task_title} (check server logs for details)`);
+          results.push(`❌ Failed to create task: ${task.title} (check server logs for details)`);
         }
       }
-      
-      // Handle multiple task creation
-      if (tasks && Array.isArray(tasks)) {
-        for (const task of tasks) {
-          const taskId = createSingleUnassignedTask({
-            title: task.title,
-            description: task.description,
-            priority: task.priority || 'medium',
-            depends_on_tasks: task.depends_on_tasks || [],
-            parent_task_id: task.parent_task_id
-          });
-          
-          if (taskId) {
-            createdTasks.push(taskId);
-            results.push(`✅ Created unassigned task '${taskId}': ${task.title}`);
-          } else {
-            results.push(`❌ Failed to create task: ${task.title} (check server logs for details)`);
-          }
-        }
-      }
-    });
-    
-    transaction();
+    }
     
     const response = [
       `📝 **Unassigned Task Creation Results**`,
@@ -475,13 +473,13 @@ function createUnassignedTasks(args: any) {
   }
 }
 
-function createSingleUnassignedTask(taskData: {
+async function createSingleUnassignedTask(taskData: {
   title: string;
   description: string;
   priority: string;
   depends_on_tasks: string[];
   parent_task_id?: string;
-}): string | null {
+}): Promise<string | null> {
   const db = getDbConnection();
   
   try {
@@ -493,24 +491,32 @@ function createSingleUnassignedTask(taskData: {
       }
     }
     
-    // Phase-based task management: Only one active phase (root task) at a time
+    // Smart task placement: Suggest parent when trying to create root task with existing roots
     if (!taskData.parent_task_id) {
       const rootCheck = db.prepare('SELECT task_id, title, status FROM tasks WHERE parent_task IS NULL ORDER BY created_at DESC LIMIT 1').get();
       
       if (rootCheck) {
         const existingPhase = rootCheck as any;
         
-        // Check if current phase is complete using helper function
-        if (!isPhaseComplete(db, existingPhase.task_id)) {
-          const availableParents = getAvailableParentTasks(db, existingPhase.task_id);
-          const suggestions = availableParents.length > 0 
-            ? `Available parents: ${availableParents.map(p => p.task_id).join(', ')}`
-            : `Use parent_task_id="${existingPhase.task_id}" to add to current phase`;
-          
-          throw new Error(`Cannot start new phase. Phase "${existingPhase.title}" (${existingPhase.task_id}) has incomplete tasks. ${suggestions}`);
+        // Get smart parent suggestions using RAG if available, otherwise use similarity
+        const suggestions = await getSmartParentSuggestions(db, taskData.title, taskData.description);
+        
+        let suggestionText = '\n\n💡 **Smart Parent Suggestions:**\n';
+        if (suggestions.length > 0) {
+          suggestions.forEach((suggestion: any, i: number) => {
+            suggestionText += `  ${i + 1}. ${suggestion.task_id}: ${suggestion.title}\n`;
+            suggestionText += `     Status: ${suggestion.status} | Priority: ${suggestion.priority} | ${suggestion.reason}\n`;
+          });
         } else {
-          console.log(`✅ Phase "${existingPhase.title}" completed. Allowing new phase creation.`);
+          suggestionText += `  Consider using parent_task_id="${existingPhase.task_id}" to add to current phase\n`;
+          suggestionText += `  Or complete existing tasks to start a new phase\n`;
         }
+        
+        suggestionText += '\n🧠 **Use RAG for smarter suggestions:** The system can analyze task content for optimal placement.';
+        
+        throw new Error(`Task placement guidance needed. Root task "${existingPhase.title}" (${existingPhase.task_id}) already exists.\n\n` +
+          `Every task except the first must have a parent for better organization.${suggestionText}\n\n` +
+          `Use 'view_tasks' to see all available parent options.`);
       }
     }
     
@@ -762,6 +768,78 @@ function isPhaseComplete(db: any, phaseTaskId: string): boolean {
     console.error('Error checking phase completion:', error);
     return false;
   }
+}
+
+// Smart parent suggestion function (inspired by Python _suggest_optimal_parent_task)
+async function getSmartParentSuggestions(db: any, taskTitle: string, taskDescription: string): Promise<any[]> {
+  try {
+    // First try to use RAG system for context-aware suggestions
+    try {
+      const ragQuery = `Find tasks related to: ${taskTitle}. ${taskDescription}`;
+      // Note: This would connect to the RAG system if available
+      // For now, fall back to similarity-based suggestions
+    } catch (ragError) {
+      // RAG not available, use similarity scoring
+    }
+    
+    // Get recent active tasks that could be parents
+    const candidates = db.prepare(`
+      SELECT task_id, title, description, status, priority, updated_at
+      FROM tasks 
+      WHERE status IN ('pending', 'in_progress') 
+      ORDER BY 
+        CASE WHEN status = 'in_progress' THEN 1 ELSE 2 END,
+        CASE priority WHEN 'high' THEN 3 WHEN 'medium' THEN 2 ELSE 1 END DESC,
+        updated_at DESC
+      LIMIT 10
+    `).all();
+
+    // Calculate similarity scores
+    const suggestions = [];
+    for (const task of candidates) {
+      const titleSim = calculateSimilarity(taskDescription.toLowerCase(), (task.title || '').toLowerCase());
+      const descSim = calculateSimilarity(taskDescription.toLowerCase(), (task.description || '').toLowerCase());
+      const combinedScore = (titleSim * 0.6) + (descSim * 0.4);
+      
+      // Boost score for in-progress tasks
+      let finalScore = combinedScore;
+      if (task.status === 'in_progress') {
+        finalScore *= 1.2;
+      }
+      
+      if (finalScore > 0.1) { // Only suggest if there's some relevance
+        suggestions.push({
+          task_id: task.task_id,
+          title: task.title,
+          status: task.status,
+          priority: task.priority,
+          similarity_score: Math.round(finalScore * 1000) / 1000,
+          reason: `Similar content (${Math.round(finalScore * 100)}% match)`
+        });
+      }
+    }
+    
+    // Sort by score and return top 3
+    suggestions.sort((a, b) => b.similarity_score - a.similarity_score);
+    return suggestions.slice(0, 3);
+    
+  } catch (error) {
+    console.error('Error getting smart parent suggestions:', error);
+    return [];
+  }
+}
+
+// Simple text similarity function (Jaccard similarity)
+function calculateSimilarity(text1: string, text2: string): number {
+  const words1 = new Set(text1.split(/\s+/).filter(w => w.length > 2));
+  const words2 = new Set(text2.split(/\s+/).filter(w => w.length > 2));
+  
+  if (words1.size === 0 || words2.size === 0) return 0;
+  
+  const intersection = new Set([...words1].filter(w => words2.has(w)));
+  const union = new Set([...words1, ...words2]);
+  
+  return intersection.size / union.size;
 }
 
 console.log('✅ Task creation tools registered successfully');
