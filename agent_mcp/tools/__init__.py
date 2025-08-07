@@ -31,6 +31,9 @@ from . import rag_tools
 from . import utility_tools
 from . import agent_communication_tools
 
+# Import and register TMUX Bible enhanced orchestration tools
+from . import tmux_orchestration_tools
+
 # After all imports, the tool registry in tools.registry should be populated.
 # We can optionally add a log here to confirm, or check the registry's state.
 from .registry import tool_schemas, tool_implementations

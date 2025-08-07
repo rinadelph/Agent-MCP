@@ -254,8 +254,60 @@ TASK_PLACEMENT_RAG_TIMEOUT: int = int(
     os.getenv("TASK_PLACEMENT_RAG_TIMEOUT", "5")
 )  # seconds
 
+# --- TMUX Bible Configuration ---
+# Based on critical lessons learned from multi-agent orchestration
+# These settings enforce the rules and protocols documented in tmux-bible.md
+
+# Git discipline constants (mandatory for all agents)
+TMUX_GIT_COMMIT_INTERVAL: int = 1800  # 30 minutes in seconds - never exceed this
+TMUX_MAX_WORK_WITHOUT_COMMIT: int = 3600  # 1 hour absolute maximum
+TMUX_AUTO_COMMIT_ENABLED: bool = True  # Enable automatic commit reminders
+
+# Communication protocol timing
+TMUX_CLAUDE_STARTUP_DELAY: int = 5  # seconds to wait for Claude to start
+TMUX_MESSAGE_SEND_DELAY: float = 0.5  # delay between typing and Enter key
+TMUX_STATUS_CHECK_INTERVAL: int = 300  # 5 minutes for regular agent checks
+TMUX_COMPLIANCE_CHECK_INTERVAL: int = 120  # 2 minutes for non-compliant agents
+
+# Agent limits and cleanup (enforce resource discipline)
+TMUX_MAX_ACTIVE_AGENTS: int = 10  # Hard limit from TMUX Bible - prevents resource exhaustion
+TMUX_AGENT_IDLE_TIMEOUT: int = 3600  # 1 hour - kill idle agents to free resources
+TMUX_AUTO_CLEANUP_ENABLED: bool = True  # Enable automatic cleanup of orphaned sessions
+
+# Budget discipline settings (critical for credit conservation)
+TMUX_CREDIT_CONSERVATION_MODE: bool = os.environ.get("TMUX_CREDIT_CONSERVATION", "true").lower() == "true"
+TMUX_BATCH_MESSAGES_ENABLED: bool = True  # Batch instructions to reduce API calls
+TMUX_PM_AUTONOMY_TARGET: float = 0.8  # PM should handle 80% of issues independently
+
+# Compliance enforcement (strike system from TMUX Bible)
+TMUX_STRIKE_SYSTEM_ENABLED: bool = True
+TMUX_MAX_STRIKES_PER_AGENT: int = 3  # Three strikes and agent is replaced
+TMUX_COMPLIANCE_THRESHOLD: float = 0.7  # Minimum compliance score to avoid strikes
+
+# Window naming conventions (auto-rename feature)
+TMUX_AUTO_RENAME_WINDOWS: bool = True  # Automatically suggest descriptive window names
+TMUX_WINDOW_NAMING_CONVENTIONS: Dict[str, str] = {
+    'claude_agent': 'Claude-{role}',
+    'dev_server': '{framework}-{purpose}',
+    'shell': '{project}-Shell',
+    'service': '{service}-Server',
+    'temp_agent': 'TEMP-{purpose}'
+}
+
+# Emergency protocols (escalation and recovery)
+TMUX_EMERGENCY_STOP_ENABLED: bool = True  # Enable Escape key emergency stop
+TMUX_AUTO_RECOVERY_ENABLED: bool = True  # Attempt to recover from agent failures
+TMUX_ESCALATION_TIMEOUT: int = 300  # 5 minutes before escalating to orchestrator
+
+# Monitoring and alerting
+TMUX_MONITORING_ENABLED: bool = True  # Enable comprehensive agent monitoring
+TMUX_ALERT_ON_COMPLIANCE_ISSUES: bool = True  # Alert when compliance drops
+TMUX_PERFORMANCE_MONITORING: bool = True  # Monitor response times and task completion
+
 # Log that configuration is loaded (optional)
-logger.info("Core configuration loaded (with colorful logging setup).")
+logger.info("Core configuration loaded (with colorful logging setup and TMUX Bible integration).")
+logger.info(f"TMUX Bible features: Git discipline={TMUX_AUTO_COMMIT_ENABLED}, "
+           f"Max agents={TMUX_MAX_ACTIVE_AGENTS}, Credit conservation={TMUX_CREDIT_CONSERVATION_MODE}")
 # Example of how other modules will use this logger:
 # from mcp_server_src.core.config import logger
 # logger.info("This is a log message from another module.")
