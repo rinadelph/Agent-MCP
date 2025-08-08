@@ -32,7 +32,8 @@ git clone https://github.com/rinadelph/Agent-MCP.git
 cd Agent-MCP
 
 # Setup environment
-cp .env.example .env
+cp .env.example .env 
+
 # Edit .env and add your OpenAI API key
 
 # Install dependencies

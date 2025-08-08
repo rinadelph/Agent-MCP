@@ -1,0 +1,95 @@
+{
+  "mcpServers": {
+    "_development_tools": "High-frequency local development",
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/mnt/d"]
+    },
+    "git": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-git", "--repository", "/mnt/d/Tmux-Orchestrator"]
+    },
+    "memory": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"]
+    },
+    
+    "_ai_frameworks": "AI and ML orchestration",
+    "praisonai": {
+      "url": "https://gitmcp.io/MervinPraison/PraisonAI"
+    },
+    "langchain": {
+      "url": "https://gitmcp.io/langchain-ai/langchain"
+    },
+    "autogen": {
+      "url": "https://gitmcp.io/microsoft/autogen"
+    },
+    "zen-mcp-server": {
+      "url": "https://gitmcp.io/BeehiveInnovations/zen-mcp-server"
+    },
+    
+    "_ml_libraries": "Core ML and data science",
+    "best-of-ml-python": {
+      "url": "https://gitmcp.io/lukasmasuch/best-of-ml-python"
+    },
+    "scikit-learn": {
+      "url": "https://gitmcp.io/scikit-learn/scikit-learn"
+    },
+    "pandas": {
+      "url": "https://gitmcp.io/pandas-dev/pandas"
+    },
+    "numpy": {
+      "url": "https://gitmcp.io/numpy/numpy"
+    },
+    
+    "_deep_learning": "Neural networks and transformers",
+    "huggingface-transformers": {
+      "url": "https://gitmcp.io/huggingface/transformers"
+    },
+    "tensorflow": {
+      "url": "https://gitmcp.io/tensorflow/tensorflow"
+    },
+    "pytorch": {
+      "url": "https://gitmcp.io/pytorch/pytorch"
+    },
+    
+    "_backend_web": "API and web development",
+    "fastapi": {
+      "url": "https://gitmcp.io/tiangolo/fastapi"
+    },
+    "streamlit": {
+      "url": "https://gitmcp.io/streamlit/streamlit"
+    },
+    "sqlalchemy": {
+      "url": "https://gitmcp.io/sqlalchemy/sqlalchemy"
+    },
+    
+    "_data_tools": "Database and external data access",
+    "postgres": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://localhost:5432/efab_db"]
+    },
+    "sqlite": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sqlite", "--db-path", "/mnt/d/Tmux-Orchestrator/database.db"]
+    },
+    "fetch": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-fetch"]
+    },
+    "browser": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-puppeteer"]
+    },
+    
+    "_orchestrator_specific": "Tmux orchestrator management",
+    "tmux-orchestrator": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/mnt/d/Tmux-Orchestrator"]
+    },
+    "efab-ai": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/mnt/d/efab.ai-765646"]
+    }
+  }
+}

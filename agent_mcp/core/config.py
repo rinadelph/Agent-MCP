@@ -311,6 +311,19 @@ class TaskPlacementConfig:
 
 
 @dataclass
+class MCPConfig:
+    """MCP orchestration configuration settings."""
+    enabled: bool = True
+    config_file: Optional[str] = "/mnt/c/Users/psytz/TMUX Final/Agent-MCP/mcp_config.json"
+    guide_file: Optional[str] = "/mnt/c/Users/psytz/TMUX Final/Agent-MCP/MCP_TEAM_GUIDE.md"
+    auto_activate_servers: List[str] = field(default_factory=lambda: [
+        "filesystem", "git", "memory", "postgres", "sqlite"
+    ])
+    performance_tracking: bool = True
+    team_role_enforcement: bool = True
+
+
+@dataclass
 class SystemConfig:
     """System-wide configuration settings."""
     environment: EnvironmentType = EnvironmentType.DEVELOPMENT
@@ -354,6 +367,7 @@ class ConfigurationManager:
         self.server = ServerConfig()
         self.tmux = TMUXConfig()
         self.task_placement = TaskPlacementConfig()
+        self.mcp = MCPConfig()
         self.system = SystemConfig()
         
         self._loaded = False
@@ -462,6 +476,17 @@ class ConfigurationManager:
         self.task_placement.allow_rag_override = os.getenv("ALLOW_RAG_OVERRIDE", "true").lower() == "true"
         self.task_placement.rag_timeout = int(os.getenv("TASK_PLACEMENT_RAG_TIMEOUT", self.task_placement.rag_timeout))
         
+        # MCP configuration
+        self.mcp.enabled = os.getenv("MCP_ENABLED", "true").lower() == "true"
+        mcp_config_file = os.getenv("MCP_CONFIG_FILE")
+        if mcp_config_file:
+            self.mcp.config_file = mcp_config_file
+        mcp_guide_file = os.getenv("MCP_GUIDE_FILE")
+        if mcp_guide_file:
+            self.mcp.guide_file = mcp_guide_file
+        self.mcp.performance_tracking = os.getenv("MCP_PERFORMANCE_TRACKING", "true").lower() == "true"
+        self.mcp.team_role_enforcement = os.getenv("MCP_TEAM_ROLE_ENFORCEMENT", "true").lower() == "true"
+        
         # System configuration
         env_str = os.getenv("ENVIRONMENT", "development").lower()
         try:
@@ -503,6 +528,7 @@ class ConfigurationManager:
             self._update_dataclass_from_dict(self.server, config_data.get('server', {}))
             self._update_dataclass_from_dict(self.tmux, config_data.get('tmux', {}))
             self._update_dataclass_from_dict(self.task_placement, config_data.get('task_placement', {}))
+            self._update_dataclass_from_dict(self.mcp, config_data.get('mcp', {}))
             self._update_dataclass_from_dict(self.system, config_data.get('system', {}))
             
         except Exception as e:
@@ -663,6 +689,7 @@ class ConfigurationManager:
             'server': dataclass_to_dict(self.server),
             'tmux': dataclass_to_dict(self.tmux),
             'task_placement': dataclass_to_dict(self.task_placement),
+            'mcp': dataclass_to_dict(self.mcp),
             'system': dataclass_to_dict(self.system)
         }
     
@@ -708,6 +735,29 @@ class ConfigError(Exception):
 # Global configuration manager instance
 config_manager = ConfigurationManager()
 
+# Initialize MCP orchestrator if enabled
+mcp_orchestrator = None
+
+def setup_mcp_orchestrator():
+    """Initialize the MCP orchestrator if enabled."""
+    global mcp_orchestrator
+    if config_manager.mcp.enabled:
+        from agent_mcp.core.mcp_orchestrator import initialize_orchestrator
+        from pathlib import Path
+        
+        config_file = Path(config_manager.mcp.config_file) if config_manager.mcp.config_file else None
+        guide_file = Path(config_manager.mcp.guide_file) if config_manager.mcp.guide_file else None
+        
+        mcp_orchestrator = initialize_orchestrator(config_file, guide_file)
+        
+        # Auto-activate configured servers
+        for server_name in config_manager.mcp.auto_activate_servers:
+            mcp_orchestrator.activate_server(server_name)
+        
+        logger.info(f"MCP Orchestrator initialized with {len(mcp_orchestrator.config.servers)} servers")
+        return mcp_orchestrator
+    return None
+
 def setup_logging():
     """Configures global logging for the application."""
     config_manager._setup_logging()
@@ -720,6 +770,12 @@ def enable_console_logging():
 # Initialize logging when this module is imported
 setup_logging()
 logger = logging.getLogger("mcp_server")
+
+# Initialize MCP orchestrator after logging is set up
+try:
+    setup_mcp_orchestrator()
+except Exception as e:
+    logger.warning(f"Failed to initialize MCP orchestrator: {e}")
 
 # Project directory helpers
 def get_project_dir() -> Path:
