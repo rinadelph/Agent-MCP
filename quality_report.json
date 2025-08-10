@@ -1,0 +1,59 @@
+{
+  "analysis": {
+    "timestamp": "2025-08-08T19:11:16.482651",
+    "file_stats": {
+      "total_lines": 5177,
+      "total_functions": 109,
+      "total_classes": 4,
+      "imports": 50
+    },
+    "large_functions": [
+      {
+        "name": "comprehensive_dashboard",
+        "size": 764,
+        "start_line": 4034,
+        "status": "CRITICAL"
+      },
+      {
+        "name": "handle_emergency_procurement",
+        "size": 231,
+        "start_line": 3006,
+        "status": "CRITICAL"
+      },
+      {
+        "name": "get_advanced_inventory_optimization",
+        "size": 205,
+        "start_line": 3239,
+        "status": "CRITICAL"
+      },
+      {
+        "name": "calculate_supplier_risk_score",
+        "size": 175,
+        "start_line": 2733,
+        "status": "WARNING"
+      },
+      {
+        "name": "get_6_phase_planning_results",
+        "size": 136,
+        "start_line": 1791,
+        "status": "WARNING"
+      }
+    ],
+    "quality_issues": [
+      "92 lines exceed 120 characters",
+      "2 bare except clauses found"
+    ],
+    "implementation_status": {
+      "critical_yarns_added": "3/5",
+      "emergency_dashboard": true,
+      "ml_training": true,
+      "yarn_calculator": false
+    },
+    "quality_score": 48
+  },
+  "file_modified": false,
+  "last_modified": null,
+  "agent_activity": {
+    "train_": true
+  }
+}

@@ -21,6 +21,7 @@ from ..features.rag.indexing import run_rag_indexing_periodically
 from ..features.claude_session_monitor import run_claude_session_monitoring
 from ..utils.signal_utils import register_signal_handlers  # For graceful shutdown
 from ..db.write_queue import get_write_queue
+from ..features.textile_data_pipeline import initialize_textile_pipeline
 
 
 # This function encapsulates the logic originally in main() before server run.
@@ -299,8 +300,19 @@ async def application_startup(
 
 
 async def start_background_tasks(task_group: anyio.abc.TaskGroup):
-    """Starts long-running background tasks like the RAG indexer."""
+    """Starts long-running background tasks like the RAG indexer and textile pipeline."""
     logger.info("Starting background tasks...")
+    
+    # Initialize textile data pipeline
+    try:
+        textile_pipeline_success = await initialize_textile_pipeline()
+        if textile_pipeline_success:
+            logger.info("Textile data pipeline initialized and started successfully.")
+        else:
+            logger.warning("Textile data pipeline initialization failed.")
+    except Exception as e:
+        logger.error(f"Error initializing textile data pipeline: {e}")
+    
     # Start RAG Indexer (Original main.py: 2625-2627)
     # The interval can be made configurable if needed.
     rag_interval = int(os.environ.get("MCP_RAG_INDEX_INTERVAL_SECONDS", "300"))
@@ -325,6 +337,14 @@ async def application_shutdown():
     """Handles graceful shutdown of application resources and tasks."""
     logger.info("MCP Server application shutting down...")
     g.server_running = False  # Ensure flag is set for all components
+    
+    # Shutdown textile data pipeline
+    try:
+        from ..features.textile_data_pipeline import shutdown_textile_pipeline
+        await shutdown_textile_pipeline()
+        logger.info("Textile data pipeline shut down gracefully.")
+    except Exception as e:
+        logger.error(f"Error shutting down textile data pipeline: {e}")
 
     # Cancel background tasks
     if g.rag_index_task_scope and not g.rag_index_task_scope.cancel_called:

@@ -82,6 +82,22 @@ rag_index_task_scope: Optional[anyio.abc.CancelScope] = None
 # Handle for the Claude Code session monitoring background task
 claude_session_task_scope: Optional[anyio.abc.CancelScope] = None
 
+# --- Celery Task Queue State ---
+# Celery app instance for background task processing
+celery_app_instance: Optional[Any] = None
+
+# Celery worker process tracking
+celery_workers: Dict[str, Dict[str, Any]] = {}  # worker_id -> worker_info
+
+# Task status tracking
+active_celery_tasks: Dict[str, Dict[str, Any]] = {}  # task_id -> task_info
+
+# Task failure tracking
+failed_celery_tasks: Dict[str, Dict[str, Any]] = {}  # task_id -> failure_info
+
+# Celery Beat scheduler status
+celery_beat_running: bool = False
+
 # Note: The original `main.py` also had `openai_client = None` at line 185.
 # I've named it `openai_client_instance` here to avoid confusion with the module name
 # if we later have `import openai_client from ...`.

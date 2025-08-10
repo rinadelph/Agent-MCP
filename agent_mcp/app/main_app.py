@@ -21,6 +21,7 @@ from ..core import globals as g # For g.connections (if still used for SSE track
 from .routes import routes as http_routes # Import defined HTTP routes
 from .server_lifecycle import application_startup, application_shutdown, start_background_tasks
 from ..tools.registry import list_available_tools, dispatch_tool_call
+from ..core.celery_config import celery_app, create_celery_app
 
 # --- MCP Server Setup (mimicking original main.py:2055) ---
 mcp_app_instance = MCPLowLevelServer("mcp-server") # Name from original main.py:2055
@@ -93,6 +94,21 @@ def create_app(project_dir: str, admin_token_cli: Optional[str] = None) -> Starl
     """
     # Define lifecycle events
     async def on_app_startup():
+        # Initialize Celery app and store reference in globals
+        try:
+            celery_instance = create_celery_app()
+            g.celery_app_instance = celery_instance
+            logger.info("Celery app initialized successfully")
+            
+            # Initialize task scheduler
+            from ..tasks.scheduler import textile_scheduler
+            logger.info("Textile ERP scheduler initialized")
+            
+        except Exception as e:
+            logger.error(f"Error initializing Celery: {e}")
+            # Continue without Celery for now
+            g.celery_app_instance = None
+        
         # Call the centralized application startup logic
         await application_startup(project_dir_path_str=project_dir, admin_token_param=admin_token_cli)
         # Start background tasks within a task group managed by Uvicorn/Hypercorn or AnyIO runner
@@ -102,6 +118,27 @@ def create_app(project_dir: str, admin_token_cli: Optional[str] = None) -> Starl
         logger.info("Starlette app startup complete. Background tasks should be started by the server runner.")
 
     async def on_app_shutdown():
+        # Cleanup Celery resources
+        try:
+            if g.celery_app_instance:
+                # Cancel any pending tasks
+                active_tasks = list(g.active_celery_tasks.keys())
+                for task_id in active_tasks:
+                    try:
+                        g.celery_app_instance.control.revoke(task_id, terminate=True)
+                    except Exception as e:
+                        logger.warning(f"Error cancelling Celery task {task_id}: {e}")
+                
+                # Clear task tracking
+                g.active_celery_tasks.clear()
+                g.failed_celery_tasks.clear()
+                g.celery_workers.clear()
+                g.celery_beat_running = False
+                
+                logger.info("Celery cleanup completed")
+        except Exception as e:
+            logger.error(f"Error during Celery cleanup: {e}")
+        
         # Call the centralized application shutdown logic
         await application_shutdown()
         logger.info("Starlette app shutdown complete.")

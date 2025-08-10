@@ -6,7 +6,8 @@ import {
   Users, 
   CheckSquare,
   Brain,
-  BookOpen
+  BookOpen,
+  Package
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -16,7 +17,7 @@ import { useDashboard, useSidebar } from "@/lib/store"
 interface NavItem {
   title: string
   icon: React.ComponentType<{ className?: string }>
-  view: 'overview' | 'agents' | 'tasks' | 'memories' | 'prompts'
+  view: 'overview' | 'agents' | 'tasks' | 'memories' | 'prompts' | 'supply-chain'
   description?: string
   badge?: string
 }
@@ -51,6 +52,12 @@ const navigationItems: NavItem[] = [
     icon: BookOpen,
     view: "prompts",
     description: "Standardized prompts and workflows"
+  },
+  {
+    title: "Supply Chain",
+    icon: Package,
+    view: "supply-chain",
+    description: "Supply chain metrics and KPIs"
   }
 ]
 

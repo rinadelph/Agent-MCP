@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Beverly ERP - Data Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1 { color: #2c3e50; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .data-box { 
+            background: #f8f9fa; 
+            padding: 15px; 
+            margin: 10px 0; 
+            border-radius: 5px;
+            border: 1px solid #dee2e6;
+        }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { padding: 8px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background: #007bff; color: white; }
+        button { 
+            background: #007bff; 
+            color: white; 
+            padding: 10px 20px; 
+            border: none; 
+            border-radius: 5px; 
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #0056b3; }
+    </style>
+</head>
+<body>
+    <h1>Beverly Knits ERP - Data Loading Test</h1>
+    
+    <div id="status" class="status">Checking server connection...</div>
+    
+    <div>
+        <button onclick="testConnection()">Test Connection</button>
+        <button onclick="loadYarnData()">Load Yarn Data</button>
+        <button onclick="loadSalesData()">Load Sales Data</button>
+        <button onclick="testCORS()">Test CORS</button>
+    </div>
+    
+    <div id="results"></div>
+    
+    <script>
+        const API_BASE = 'http://127.0.0.1:5003';
+        
+        async function testConnection() {
+            const statusDiv = document.getElementById('status');
+            const resultsDiv = document.getElementById('results');
+            
+            try {
+                statusDiv.innerHTML = 'Testing connection...';
+                statusDiv.className = 'status';
+                
+                const response = await fetch(`${API_BASE}/api/status`);
+                const data = await response.json();
+                
+                statusDiv.innerHTML = '✅ Connection successful!';
+                statusDiv.className = 'status success';
+                
+                resultsDiv.innerHTML = `
+                    <div class="data-box">
+                        <h3>Server Status:</h3>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    </div>
+                `;
+            } catch (error) {
+                statusDiv.innerHTML = `❌ Connection failed: ${error.message}`;
+                statusDiv.className = 'status error';
+                resultsDiv.innerHTML = `
+                    <div class="data-box">
+                        <p>Error details: ${error.toString()}</p>
+                        <p>Make sure the server is running on ${API_BASE}</p>
+                    </div>
+                `;
+            }
+        }
+        
+        async function loadYarnData() {
+            const statusDiv = document.getElementById('status');
+            const resultsDiv = document.getElementById('results');
+            
+            try {
+                statusDiv.innerHTML = 'Loading yarn data...';
+                const response = await fetch(`${API_BASE}/api/yarn`);
+                const data = await response.json();
+                
+                statusDiv.innerHTML = `✅ Loaded ${data.length} yarn records`;
+                statusDiv.className = 'status success';
+                
+                let tableHTML = '<div class="data-box"><h3>Yarn Inventory:</h3><table>';
+                tableHTML += '<tr><th>Desc#</th><th>Description</th><th>Supplier</th><th>Balance</th><th>Cost/Pound</th></tr>';
+                
+                data.slice(0, 10).forEach(item => {
+                    tableHTML += `<tr>
+                        <td>${item['Desc#'] || 'N/A'}</td>
+                        <td>${item['Description'] || 'N/A'}</td>
+                        <td>${item['Supplier'] || 'N/A'}</td>
+                        <td>${item['Planning Balance'] || 0}</td>
+                        <td>$${item['Cost/Pound'] || 0}</td>
+                    </tr>`;
+                });
+                
+                tableHTML += '</table><p>Showing first 10 of ' + data.length + ' records</p></div>';
+                resultsDiv.innerHTML = tableHTML;
+            } catch (error) {
+                statusDiv.innerHTML = `❌ Failed to load yarn data: ${error.message}`;
+                statusDiv.className = 'status error';
+            }
+        }
+        
+        async function loadSalesData() {
+            const statusDiv = document.getElementById('status');
+            const resultsDiv = document.getElementById('results');
+            
+            try {
+                statusDiv.innerHTML = 'Loading sales data...';
+                const response = await fetch(`${API_BASE}/api/sales`);
+                const data = await response.json();
+                
+                statusDiv.innerHTML = `✅ Loaded ${data.length} sales records`;
+                statusDiv.className = 'status success';
+                
+                let tableHTML = '<div class="data-box"><h3>Sales Data:</h3><table>';
+                tableHTML += '<tr><th>Document</th><th>Customer</th><th>Style</th><th>Qty Shipped</th><th>Unit Price</th></tr>';
+                
+                data.slice(0, 10).forEach(item => {
+                    tableHTML += `<tr>
+                        <td>${item['Document'] || 'N/A'}</td>
+                        <td>${item['Customer'] || 'N/A'}</td>
+                        <td>${item['Style'] || 'N/A'}</td>
+                        <td>${item['Qty Shipped'] || 0}</td>
+                        <td>$${item['Unit Price'] || 0}</td>
+                    </tr>`;
+                });
+                
+                tableHTML += '</table><p>Showing first 10 of ' + data.length + ' records</p></div>';
+                resultsDiv.innerHTML = tableHTML;
+            } catch (error) {
+                statusDiv.innerHTML = `❌ Failed to load sales data: ${error.message}`;
+                statusDiv.className = 'status error';
+            }
+        }
+        
+        async function testCORS() {
+            const statusDiv = document.getElementById('status');
+            const resultsDiv = document.getElementById('results');
+            
+            try {
+                statusDiv.innerHTML = 'Testing CORS...';
+                const response = await fetch(`${API_BASE}/api/test`);
+                const data = await response.json();
+                
+                // Check for CORS headers
+                const headers = {};
+                for (let [key, value] of response.headers.entries()) {
+                    headers[key] = value;
+                }
+                
+                statusDiv.innerHTML = '✅ CORS is working!';
+                statusDiv.className = 'status success';
+                
+                resultsDiv.innerHTML = `
+                    <div class="data-box">
+                        <h3>CORS Test Result:</h3>
+                        <p>Response: ${JSON.stringify(data)}</p>
+                        <p>Status: ${response.status}</p>
+                        <p>Headers: ${JSON.stringify(headers, null, 2)}</p>
+                    </div>
+                `;
+            } catch (error) {
+                statusDiv.innerHTML = `❌ CORS test failed: ${error.message}`;
+                statusDiv.className = 'status error';
+            }
+        }
+        
+        // Test connection on load
+        window.onload = testConnection;
+    </script>
+</body>
+</html>

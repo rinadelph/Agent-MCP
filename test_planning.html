@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>6-Phase Planning Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .btn { padding: 10px 20px; margin: 10px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; }
+        .execute { background: #27ae60; color: white; }
+        .refresh { background: #3498db; color: white; }
+        .status { padding: 15px; background: #ecf0f1; border-radius: 5px; margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <h1>6-Phase Planning Engine Test Page</h1>
+    
+    <div>
+        <button class="btn execute" onclick="executePlanning()">
+            ▶️ Execute Planning Cycle
+        </button>
+        <button class="btn refresh" onclick="checkStatus()">
+            🔄 Check Status
+        </button>
+    </div>
+    
+    <div class="status" id="status">
+        Click Execute to start the planning cycle
+    </div>
+    
+    <div id="results"></div>
+    
+    <script>
+        function executePlanning() {
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerHTML = '⏳ Executing 6-Phase Planning...';
+            
+            fetch('http://127.0.0.1:5003/api/execute-planning', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'}
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    statusDiv.innerHTML = '✅ Planning Complete!';
+                    
+                    let resultsHtml = '<h2>Results:</h2><ul>';
+                    if (data.phases) {
+                        data.phases.forEach(phase => {
+                            resultsHtml += `<li>Phase ${phase.phase}: ${phase.name} - ${phase.status}</li>`;
+                        });
+                    }
+                    resultsHtml += '</ul>';
+                    
+                    if (data.final_output) {
+                        resultsHtml += `<p>Purchase Orders: ${data.final_output.purchase_orders.length}</p>`;
+                        resultsHtml += `<p>Total Value: $${data.final_output.total_value}</p>`;
+                    }
+                    
+                    document.getElementById('results').innerHTML = resultsHtml;
+                } else {
+                    statusDiv.innerHTML = `❌ Error: ${data.error}`;
+                }
+            })
+            .catch(error => {
+                statusDiv.innerHTML = `❌ Error: ${error.message}`;
+            });
+        }
+        
+        function checkStatus() {
+            fetch('http://127.0.0.1:5003/api/planning-phases')
+            .then(response => response.json())
+            .then(data => {
+                let html = '<h2>Current Status:</h2><ul>';
+                data.phases.forEach(phase => {
+                    html += `<li>Phase ${phase.phase}: ${phase.status}</li>`;
+                });
+                html += '</ul>';
+                document.getElementById('results').innerHTML = html;
+            });
+        }
+    </script>
+</body>
+</html>

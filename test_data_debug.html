@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Beverly ERP - Data Debug</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        h1 { color: #2c3e50; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .status { padding: 15px; margin: 10px 0; border-radius: 5px; font-weight: bold; }
+        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .warning { background: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }
+        .info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        .data-box { 
+            background: white; 
+            padding: 20px; 
+            margin: 15px 0; 
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        button { 
+            background: #007bff; 
+            color: white; 
+            padding: 12px 24px; 
+            border: none; 
+            border-radius: 5px; 
+            cursor: pointer;
+            font-size: 16px;
+            transition: background 0.3s;
+        }
+        button:hover { background: #0056b3; }
+        button:disabled { 
+            background: #6c757d; 
+            cursor: not-allowed;
+        }
+        table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin-top: 15px; 
+            background: white;
+        }
+        th, td { 
+            padding: 12px; 
+            text-align: left; 
+            border-bottom: 1px solid #e0e0e0; 
+        }
+        th { 
+            background: #f8f9fa; 
+            font-weight: 600;
+            color: #495057;
+            border-bottom: 2px solid #dee2e6;
+        }
+        tr:hover { background: #f8f9fa; }
+        .debug-info {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            margin: 10px 0;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .loading { text-align: center; padding: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏭 Beverly Knits ERP - Data Debug Tool</h1>
+        
+        <div id="status" class="status info">Initializing...</div>
+        
+        <div class="button-group">
+            <button onclick="testAll()">🔄 Run All Tests</button>
+            <button onclick="testConnection()">🔌 Test Connection</button>
+            <button onclick="loadYarnData()">🧶 Load Yarn Data</button>
+            <button onclick="loadSalesData()">📊 Load Sales Data</button>
+            <button onclick="testCORS()">🌐 Test CORS</button>
+            <button onclick="clearResults()">🗑️ Clear Results</button>
+        </div>
+        
+        <div id="results"></div>
+    </div>
+    
+    <script>
+        // Try multiple API endpoints
+        const API_BASES = [
+            'http://127.0.0.1:5003',
+            'http://localhost:5003',
+            'http://0.0.0.0:5003'
+        ];
+        
+        let currentAPI = API_BASES[0];
+        
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            console.log(`[${timestamp}] ${message}`);
+            
+            const resultsDiv = document.getElementById('results');
+            const logEntry = document.createElement('div');
+            logEntry.className = `debug-info`;
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            resultsDiv.insertBefore(logEntry, resultsDiv.firstChild);
+        }
+        
+        async function findWorkingAPI() {
+            log('🔍 Searching for working API endpoint...');
+            
+            for (const base of API_BASES) {
+                try {
+                    log(`Testing ${base}...`);
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 3000);
+                    
+                    const response = await fetch(`${base}/api/status`, {
+                        signal: controller.signal,
+                        mode: 'cors',
+                        credentials: 'omit'
+                    });
+                    
+                    clearTimeout(timeoutId);
+                    
+                    if (response.ok) {
+                        currentAPI = base;
+                        log(`✅ Found working API at ${base}`, 'success');
+                        return base;
+                    }
+                } catch (error) {
+                    log(`❌ ${base} failed: ${error.message}`, 'error');
+                }
+            }
+            
+            throw new Error('No working API endpoint found');
+        }
+        
+        async function testConnection() {
+            const statusDiv = document.getElementById('status');
+            const resultsDiv = document.getElementById('results');
+            
+            try {
+                statusDiv.innerHTML = '🔄 Testing connection...';
+                statusDiv.className = 'status warning';
+                
+                const api = await findWorkingAPI();
+                
+                const response = await fetch(`${api}/api/status`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                
+                statusDiv.innerHTML = `✅ Connected to ${api}`;
+                statusDiv.className = 'status success';
+                
+                const html = `
+                    <div class="data-box">
+                        <h3>📡 Server Status:</h3>
+                        <div class="debug-info">
+Status: ${data.status}
+CORS: ${data.cors}
+Port: ${data.port}
+Yarn Records: ${data.yarn_records}
+Sales Records: ${data.sales_records}
+API Endpoint: ${api}
+                        </div>
+                    </div>
+                `;
+                
+                resultsDiv.innerHTML = html + resultsDiv.innerHTML;
+                log('Connection test successful', 'success');
+                
+            } catch (error) {
+                statusDiv.innerHTML = `❌ Connection failed: ${error.message}`;
+                statusDiv.className = 'status error';
+                
+                const html = `
+                    <div class="data-box">
+                        <h3>🚨 Connection Error:</h3>
+                        <div class="debug-info">
+Error: ${error.toString()}
+Stack: ${error.stack}
+
+Troubleshooting:
+1. Check if server is running: python3 beverly_emergency_start.py
+2. Check firewall settings
+3. Try opening http://localhost:5003 directly
+4. Check browser console for CORS errors
+                        </div>
+                    </div>
+                `;
+                
+                resultsDiv.innerHTML = html + resultsDiv.innerHTML;
+                log(`Connection test failed: ${error.message}`, 'error');
+            }
+        }
+        
+        async function loadYarnData() {
+            const statusDiv = document.getElementById('status');
+            const resultsDiv = document.getElementById('results');
+            
+            try {
+                statusDiv.innerHTML = '🔄 Loading yarn data...';
+                statusDiv.className = 'status warning';
+                
+                log(`Fetching yarn data from ${currentAPI}/api/yarn`);
+                
+                const response = await fetch(`${currentAPI}/api/yarn`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                
+                statusDiv.innerHTML = `✅ Loaded ${data.length} yarn records`;
+                statusDiv.className = 'status success';
+                
+                let tableHTML = '<div class="data-box"><h3>🧶 Yarn Inventory:</h3>';
+                
+                if (data.length === 0) {
+                    tableHTML += '<p>No yarn data available</p>';
+                } else {
+                    tableHTML += '<table>';
+                    tableHTML += '<tr><th>Desc#</th><th>Description</th><th>Supplier</th><th>Balance</th><th>Cost/Pound</th></tr>';
+                    
+                    data.slice(0, 10).forEach((item, index) => {
+                        tableHTML += `<tr>
+                            <td>${item['Desc#'] || 'N/A'}</td>
+                            <td>${item['Description'] || 'N/A'}</td>
+                            <td>${item['Supplier'] || 'N/A'}</td>
+                            <td>${parseFloat(item['Planning Balance'] || 0).toFixed(2)}</td>
+                            <td>$${parseFloat(item['Cost/Pound'] || 0).toFixed(2)}</td>
+                        </tr>`;
+                    });
+                    
+                    tableHTML += '</table>';
+                    tableHTML += `<p><strong>Showing first 10 of ${data.length} records</strong></p>`;
+                }
+                
+                tableHTML += '</div>';
+                resultsDiv.innerHTML = tableHTML + resultsDiv.innerHTML;
+                
+                log(`Yarn data loaded: ${data.length} records`, 'success');
+                
+            } catch (error) {
+                statusDiv.innerHTML = `❌ Failed to load yarn data: ${error.message}`;
+                statusDiv.className = 'status error';
+                log(`Yarn data load failed: ${error.message}`, 'error');
+            }
+        }
+        
+        async function loadSalesData() {
+            const statusDiv = document.getElementById('status');
+            const resultsDiv = document.getElementById('results');
+            
+            try {
+                statusDiv.innerHTML = '🔄 Loading sales data...';
+                statusDiv.className = 'status warning';
+                
+                log(`Fetching sales data from ${currentAPI}/api/sales`);
+                
+                const response = await fetch(`${currentAPI}/api/sales`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                
+                statusDiv.innerHTML = `✅ Loaded ${data.length} sales records`;
+                statusDiv.className = 'status success';
+                
+                let tableHTML = '<div class="data-box"><h3>📊 Sales Data:</h3>';
+                
+                if (data.length === 0) {
+                    tableHTML += '<p>No sales data available</p>';
+                } else {
+                    tableHTML += '<table>';
+                    tableHTML += '<tr><th>Document</th><th>Customer</th><th>Style</th><th>Qty Shipped</th><th>Unit Price</th></tr>';
+                    
+                    data.slice(0, 10).forEach((item, index) => {
+                        tableHTML += `<tr>
+                            <td>${item['Document'] || 'N/A'}</td>
+                            <td>${item['Customer'] || 'N/A'}</td>
+                            <td>${item['Style'] || 'N/A'}</td>
+                            <td>${parseFloat(item['Qty Shipped'] || 0).toFixed(0)}</td>
+                            <td>$${parseFloat(item['Unit Price'] || 0).toFixed(2)}</td>
+                        </tr>`;
+                    });
+                    
+                    tableHTML += '</table>';
+                    tableHTML += `<p><strong>Showing first 10 of ${data.length} records</strong></p>`;
+                }
+                
+                tableHTML += '</div>';
+                resultsDiv.innerHTML = tableHTML + resultsDiv.innerHTML;
+                
+                log(`Sales data loaded: ${data.length} records`, 'success');
+                
+            } catch (error) {
+                statusDiv.innerHTML = `❌ Failed to load sales data: ${error.message}`;
+                statusDiv.className = 'status error';
+                log(`Sales data load failed: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testCORS() {
+            const statusDiv = document.getElementById('status');
+            const resultsDiv = document.getElementById('results');
+            
+            try {
+                statusDiv.innerHTML = '🔄 Testing CORS...';
+                statusDiv.className = 'status warning';
+                
+                log(`Testing CORS at ${currentAPI}/api/test`);
+                
+                const response = await fetch(`${currentAPI}/api/test`, {
+                    mode: 'cors',
+                    credentials: 'omit',
+                    headers: {
+                        'Accept': 'application/json',
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                
+                // Check for CORS headers
+                const headers = {};
+                for (let [key, value] of response.headers.entries()) {
+                    headers[key] = value;
+                }
+                
+                statusDiv.innerHTML = '✅ CORS is working!';
+                statusDiv.className = 'status success';
+                
+                const html = `
+                    <div class="data-box">
+                        <h3>🌐 CORS Test Result:</h3>
+                        <div class="debug-info">
+Response: ${JSON.stringify(data, null, 2)}
+Status: ${response.status}
+Headers:
+${Object.entries(headers).map(([k, v]) => `  ${k}: ${v}`).join('\n')}
+                        </div>
+                    </div>
+                `;
+                
+                resultsDiv.innerHTML = html + resultsDiv.innerHTML;
+                log('CORS test successful', 'success');
+                
+            } catch (error) {
+                statusDiv.innerHTML = `❌ CORS test failed: ${error.message}`;
+                statusDiv.className = 'status error';
+                log(`CORS test failed: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testAll() {
+            log('🚀 Running all tests...', 'info');
+            await testConnection();
+            await new Promise(resolve => setTimeout(resolve, 500));
+            await loadYarnData();
+            await new Promise(resolve => setTimeout(resolve, 500));
+            await loadSalesData();
+            await new Promise(resolve => setTimeout(resolve, 500));
+            await testCORS();
+            log('✅ All tests complete', 'success');
+        }
+        
+        function clearResults() {
+            document.getElementById('results').innerHTML = '';
+            document.getElementById('status').innerHTML = '🔄 Results cleared';
+            document.getElementById('status').className = 'status info';
+        }
+        
+        // Auto-test connection on load
+        window.onload = async () => {
+            await testConnection();
+        };
+    </script>
+</body>
+</html>

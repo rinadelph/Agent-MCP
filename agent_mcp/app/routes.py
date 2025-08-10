@@ -21,7 +21,8 @@ from ..db.actions.agent_actions_db import log_agent_action_to_db
 
 from ..features.dashboard.api import (
     fetch_graph_data_logic,
-    fetch_task_tree_data_logic
+    fetch_task_tree_data_logic,
+    fetch_supply_chain_data_logic
 )
 from ..features.dashboard.styles import get_node_style
 
@@ -770,3 +771,421 @@ routes.extend([
 
 # Add the sample data route
 routes.append(Route('/api/create-sample-memories', endpoint=create_sample_memories_route, name="create_sample_memories", methods=['POST', 'OPTIONS']))
+
+# --- Celery Task Queue Monitoring Endpoints ---
+
+async def celery_status_api_route(request: Request) -> JSONResponse:
+    """Get Celery system status and worker information."""
+    if request.method == 'OPTIONS':
+        return await handle_options(request)
+    
+    try:
+        # Check if Celery is initialized
+        if not g.celery_app_instance:
+            return JSONResponse({
+                "celery_initialized": False,
+                "error": "Celery not initialized"
+            }, status_code=503)
+        
+        # Get worker information
+        worker_stats = {}
+        try:
+            inspect = g.celery_app_instance.control.inspect()
+            worker_stats = {
+                "active": inspect.active() or {},
+                "scheduled": inspect.scheduled() or {},
+                "reserved": inspect.reserved() or {},
+                "stats": inspect.stats() or {},
+                "registered": inspect.registered() or {}
+            }
+        except Exception as e:
+            logger.warning(f"Could not get worker stats: {e}")
+        
+        # Get queue information from scheduler
+        try:
+            from ..tasks.scheduler import get_scheduler_status
+            scheduler_stats = get_scheduler_status()
+        except Exception as e:
+            logger.warning(f"Could not get scheduler stats: {e}")
+            scheduler_stats = {}
+        
+        return JSONResponse({
+            "celery_initialized": True,
+            "worker_stats": worker_stats,
+            "scheduler_stats": scheduler_stats,
+            "active_tasks": len(g.active_celery_tasks),
+            "failed_tasks": len(g.failed_celery_tasks),
+            "workers": g.celery_workers,
+            "beat_running": g.celery_beat_running,
+            "timestamp": datetime.datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting Celery status: {e}", exc_info=True)
+        return JSONResponse({"error": f"Failed to get Celery status: {str(e)}"}, status_code=500)
+
+
+async def celery_tasks_api_route(request: Request) -> JSONResponse:
+    """Get information about running and completed Celery tasks."""
+    if request.method == 'OPTIONS':
+        return await handle_options(request)
+    
+    try:
+        if not g.celery_app_instance:
+            return JSONResponse({
+                "error": "Celery not initialized"
+            }, status_code=503)
+        
+        # Get task information from database
+        conn = None
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            # Get recent Celery tasks from database (if we're storing them)
+            cursor.execute("""
+                SELECT task_id, task_name, status, created_at, updated_at, result, error_message
+                FROM celery_task_log 
+                ORDER BY created_at DESC 
+                LIMIT 100
+            """)
+            db_tasks = [dict(row) for row in cursor.fetchall()]
+            
+        except sqlite3.OperationalError:
+            # Table doesn't exist yet
+            db_tasks = []
+        except Exception as e:
+            logger.warning(f"Could not get tasks from database: {e}")
+            db_tasks = []
+        finally:
+            if conn:
+                conn.close()
+        
+        # Combine with in-memory task tracking
+        all_tasks = {
+            "active_tasks": dict(g.active_celery_tasks),
+            "failed_tasks": dict(g.failed_celery_tasks),
+            "db_tasks": db_tasks,
+            "timestamp": datetime.datetime.now().isoformat()
+        }
+        
+        return JSONResponse(all_tasks)
+        
+    except Exception as e:
+        logger.error(f"Error getting Celery tasks: {e}", exc_info=True)
+        return JSONResponse({"error": f"Failed to get Celery tasks: {str(e)}"}, status_code=500)
+
+
+async def schedule_task_api_route(request: Request) -> JSONResponse:
+    """API endpoint to schedule a new Celery task."""
+    if request.method == 'OPTIONS':
+        return await handle_options(request)
+    
+    if request.method != 'POST':
+        return JSONResponse({"error": "Method not allowed"}, status_code=405)
+    
+    try:
+        data = await get_sanitized_json_body(request)
+        admin_token = data.get('token')
+        task_name = data.get('task_name')
+        task_args = data.get('args', [])
+        task_kwargs = data.get('kwargs', {})
+        priority = data.get('priority', 'normal')
+        queue = data.get('queue', 'default')
+        
+        if not verify_token(admin_token, required_role='admin'):
+            return JSONResponse({"error": "Invalid admin token"}, status_code=403)
+        
+        if not task_name:
+            return JSONResponse({"error": "task_name is required"}, status_code=400)
+        
+        if not g.celery_app_instance:
+            return JSONResponse({"error": "Celery not initialized"}, status_code=503)
+        
+        # Schedule the task
+        try:
+            celery_task = g.celery_app_instance.send_task(
+                task_name,
+                args=task_args,
+                kwargs=task_kwargs,
+                queue=queue,
+                retry=True,
+                retry_policy={
+                    'max_retries': 3,
+                    'interval_start': 60,
+                    'interval_step': 60,
+                    'interval_max': 600
+                }
+            )
+            
+            # Track the task
+            g.active_celery_tasks[celery_task.id] = {
+                "task_name": task_name,
+                "args": task_args,
+                "kwargs": task_kwargs,
+                "queue": queue,
+                "priority": priority,
+                "scheduled_at": datetime.datetime.now().isoformat(),
+                "status": "pending"
+            }
+            
+            return JSONResponse({
+                "success": True,
+                "task_id": celery_task.id,
+                "task_name": task_name,
+                "queue": queue,
+                "message": f"Task '{task_name}' scheduled successfully"
+            })
+            
+        except Exception as e:
+            logger.error(f"Error scheduling task: {e}")
+            return JSONResponse({
+                "error": f"Failed to schedule task: {str(e)}"
+            }, status_code=500)
+        
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception as e:
+        logger.error(f"Error in schedule_task_api_route: {e}", exc_info=True)
+        return JSONResponse({"error": f"Failed to schedule task: {str(e)}"}, status_code=500)
+
+
+async def cancel_task_api_route(request: Request) -> JSONResponse:
+    """API endpoint to cancel a Celery task."""
+    if request.method == 'OPTIONS':
+        return await handle_options(request)
+    
+    if request.method != 'POST':
+        return JSONResponse({"error": "Method not allowed"}, status_code=405)
+    
+    try:
+        data = await get_sanitized_json_body(request)
+        admin_token = data.get('token')
+        task_id = data.get('task_id')
+        terminate = data.get('terminate', False)
+        
+        if not verify_token(admin_token, required_role='admin'):
+            return JSONResponse({"error": "Invalid admin token"}, status_code=403)
+        
+        if not task_id:
+            return JSONResponse({"error": "task_id is required"}, status_code=400)
+        
+        if not g.celery_app_instance:
+            return JSONResponse({"error": "Celery not initialized"}, status_code=503)
+        
+        try:
+            # Cancel/revoke the task
+            g.celery_app_instance.control.revoke(task_id, terminate=terminate)
+            
+            # Update task tracking
+            if task_id in g.active_celery_tasks:
+                g.active_celery_tasks[task_id]["status"] = "revoked"
+                g.active_celery_tasks[task_id]["cancelled_at"] = datetime.datetime.now().isoformat()
+            
+            return JSONResponse({
+                "success": True,
+                "task_id": task_id,
+                "terminated": terminate,
+                "message": f"Task {task_id} {'terminated' if terminate else 'cancelled'} successfully"
+            })
+            
+        except Exception as e:
+            logger.error(f"Error cancelling task: {e}")
+            return JSONResponse({
+                "error": f"Failed to cancel task: {str(e)}"
+            }, status_code=500)
+        
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception as e:
+        logger.error(f"Error in cancel_task_api_route: {e}", exc_info=True)
+        return JSONResponse({"error": f"Failed to cancel task: {str(e)}"}, status_code=500)
+
+
+async def scheduled_tasks_api_route(request: Request) -> JSONResponse:
+    """Get information about scheduled tasks."""
+    if request.method == 'OPTIONS':
+        return await handle_options(request)
+    
+    try:
+        from ..tasks.scheduler import list_all_scheduled_tasks
+        scheduled_tasks = list_all_scheduled_tasks()
+        
+        return JSONResponse({
+            "scheduled_tasks": scheduled_tasks,
+            "total_count": len(scheduled_tasks),
+            "timestamp": datetime.datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting scheduled tasks: {e}", exc_info=True)
+        return JSONResponse({"error": f"Failed to get scheduled tasks: {str(e)}"}, status_code=500)
+
+
+async def textile_erp_status_api_route(request: Request) -> JSONResponse:
+    """Get textile ERP system status including sensor data, production, etc."""
+    if request.method == 'OPTIONS':
+        return await handle_options(request)
+    
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get system overview
+        status_data = {
+            "timestamp": datetime.datetime.now().isoformat(),
+            "celery_initialized": g.celery_app_instance is not None,
+            "system_health": "healthy"
+        }
+        
+        # Check if textile ERP tables exist and get basic stats
+        try:
+            # Production orders
+            cursor.execute("SELECT COUNT(*) as total, COUNT(CASE WHEN status = 'active' THEN 1 END) as active FROM production_orders")
+            production_stats = dict(cursor.fetchone())
+            status_data["production_orders"] = production_stats
+            
+            # Machines
+            cursor.execute("SELECT COUNT(*) as total, COUNT(CASE WHEN status = 'running' THEN 1 END) as running FROM machines")
+            machine_stats = dict(cursor.fetchone())
+            status_data["machines"] = machine_stats
+            
+            # Recent sensor data
+            cursor.execute("SELECT COUNT(*) as count FROM sensor_readings WHERE timestamp >= datetime('now', '-1 hour')")
+            sensor_count = cursor.fetchone()["count"]
+            status_data["recent_sensor_readings"] = sensor_count
+            
+            # Quality alerts in last 24 hours
+            cursor.execute("SELECT COUNT(*) as count FROM quality_alerts WHERE created_at >= datetime('now', '-1 day')")
+            alert_count = cursor.fetchone()["count"]
+            status_data["recent_quality_alerts"] = alert_count
+            
+            # Maintenance tasks
+            cursor.execute("SELECT COUNT(*) as pending, COUNT(CASE WHEN status = 'in_progress' THEN 1 END) as in_progress FROM maintenance_orders WHERE status IN ('pending', 'in_progress')")
+            maintenance_stats = dict(cursor.fetchone())
+            status_data["maintenance"] = maintenance_stats
+            
+        except sqlite3.OperationalError as e:
+            # Tables don't exist yet
+            status_data["textile_erp_tables"] = "not_created"
+            status_data["note"] = "Textile ERP tables not yet initialized"
+        
+        # Get recent Celery task statistics for textile ERP tasks
+        try:
+            from ..tasks.scheduler import get_scheduler_status
+            scheduler_stats = get_scheduler_status()
+            status_data["scheduler"] = scheduler_stats
+        except Exception as e:
+            logger.warning(f"Could not get scheduler stats: {e}")
+        
+        return JSONResponse(status_data)
+        
+    except Exception as e:
+        logger.error(f"Error getting textile ERP status: {e}", exc_info=True)
+        return JSONResponse({"error": f"Failed to get textile ERP status: {str(e)}"}, status_code=500)
+    finally:
+        if conn:
+            conn.close()
+
+
+async def worker_management_api_route(request: Request) -> JSONResponse:
+    """API endpoint for managing Celery workers."""
+    if request.method == 'OPTIONS':
+        return await handle_options(request)
+    
+    if request.method != 'POST':
+        return JSONResponse({"error": "Method not allowed"}, status_code=405)
+    
+    try:
+        data = await get_sanitized_json_body(request)
+        admin_token = data.get('token')
+        action = data.get('action')  # 'start', 'stop', 'restart', 'status'
+        worker_type = data.get('worker_type', 'all')
+        
+        if not verify_token(admin_token, required_role='admin'):
+            return JSONResponse({"error": "Invalid admin token"}, status_code=403)
+        
+        if not action:
+            return JSONResponse({"error": "action is required"}, status_code=400)
+        
+        if not g.celery_app_instance:
+            return JSONResponse({"error": "Celery not initialized"}, status_code=503)
+        
+        # This is a simplified worker management endpoint
+        # In production, you'd integrate with your process manager (supervisor, systemd, etc.)
+        
+        result = {
+            "action": action,
+            "worker_type": worker_type,
+            "timestamp": datetime.datetime.now().isoformat()
+        }
+        
+        if action == 'status':
+            try:
+                inspect = g.celery_app_instance.control.inspect()
+                result["workers"] = {
+                    "active": inspect.active() or {},
+                    "stats": inspect.stats() or {},
+                    "ping": inspect.ping() or {}
+                }
+                result["success"] = True
+            except Exception as e:
+                result["error"] = f"Failed to get worker status: {str(e)}"
+                result["success"] = False
+        
+        elif action in ['start', 'stop', 'restart']:
+            # In a real implementation, this would interact with process management
+            result["message"] = f"Worker management action '{action}' for '{worker_type}' would be executed here"
+            result["success"] = True
+            result["note"] = "Worker management requires external process manager integration"
+        
+        else:
+            return JSONResponse({"error": f"Unknown action: {action}"}, status_code=400)
+        
+        return JSONResponse(result)
+        
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception as e:
+        logger.error(f"Error in worker_management_api_route: {e}", exc_info=True)
+        return JSONResponse({"error": f"Failed to manage workers: {str(e)}"}, status_code=500)
+
+
+# Add Celery monitoring routes
+celery_routes = [
+    Route('/api/celery/status', endpoint=celery_status_api_route, name="celery_status_api", methods=['GET', 'OPTIONS']),
+    Route('/api/celery/tasks', endpoint=celery_tasks_api_route, name="celery_tasks_api", methods=['GET', 'OPTIONS']),
+    Route('/api/celery/schedule-task', endpoint=schedule_task_api_route, name="schedule_task_api", methods=['POST', 'OPTIONS']),
+    Route('/api/celery/cancel-task', endpoint=cancel_task_api_route, name="cancel_task_api", methods=['POST', 'OPTIONS']),
+    Route('/api/celery/scheduled-tasks', endpoint=scheduled_tasks_api_route, name="scheduled_tasks_api", methods=['GET', 'OPTIONS']),
+    Route('/api/celery/workers', endpoint=worker_management_api_route, name="worker_management_api", methods=['POST', 'OPTIONS']),
+    Route('/api/textile-erp/status', endpoint=textile_erp_status_api_route, name="textile_erp_status_api", methods=['GET', 'OPTIONS']),
+]
+
+# Supply Chain API Route
+async def supply_chain_data_api_route(request: Request) -> JSONResponse:
+    """API endpoint for supply chain metrics and KPIs"""
+    if request.method == 'OPTIONS':
+        return await handle_options(request)
+    
+    try:
+        data = await fetch_supply_chain_data_logic()
+        return JSONResponse(
+            data,
+            headers={
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type'
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error serving supply chain data: {e}", exc_info=True)
+        return JSONResponse({'error': str(e)}, status_code=500)
+
+routes.extend(celery_routes)
+
+# Add supply chain route
+routes.append(
+    Route('/api/supply-chain-data', endpoint=supply_chain_data_api_route, name="supply_chain_data_api", methods=['GET', 'OPTIONS'])
+)

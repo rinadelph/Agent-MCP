@@ -137,6 +137,9 @@ def init_database() -> None:
     This function should be called once at application startup.
     """
     logger.info("Initializing database schema...")
+    
+    # Initialize textile ERP schema after core schema
+    from .textile_erp_schema import initialize_textile_erp_schema
 
     # Perform the VSS loadability check if it hasn't been done yet.
     # This ensures the check_vss_loadability sets the global flags correctly
@@ -407,6 +410,17 @@ def init_database() -> None:
 
         conn.commit()
         logger.info("Database schema initialized successfully.")
+        
+        # Initialize textile ERP schema
+        try:
+            textile_success = initialize_textile_erp_schema()
+            if textile_success:
+                logger.info("Textile ERP schema initialized successfully.")
+            else:
+                logger.warning("Textile ERP schema initialization failed, but core system will continue.")
+        except Exception as e:
+            logger.error(f"Error initializing textile ERP schema: {e}")
+            logger.warning("Continuing with core Agent-MCP functionality only.")
 
     except sqlite3.Error as e:
         logger.error(

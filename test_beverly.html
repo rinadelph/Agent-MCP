@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Beverly Test</title>
+</head>
+<body>
+    <h1>Beverly ERP Test Page</h1>
+    <p>Open the browser console (F12) to see the results</p>
+    
+    <div id="results"></div>
+    
+    <script>
+        const endpoints = [
+            '/api/comprehensive-kpis',
+            '/api/planning-phases',
+            '/api/ml-forecasting',
+            '/api/advanced-optimization',
+            '/api/execute-planning',
+            '/api/yarn',
+            '/api/sales'
+        ];
+        
+        async function testAll() {
+            const results = document.getElementById('results');
+            results.innerHTML = '<h2>Testing all endpoints...</h2>';
+            
+            for (const endpoint of endpoints) {
+                try {
+                    console.log(`Testing ${endpoint}...`);
+                    const response = await fetch(`http://localhost:5003${endpoint}`);
+                    const data = await response.json();
+                    
+                    console.log(`✅ ${endpoint}:`, response.status, data);
+                    results.innerHTML += `<p style="color: green">✅ ${endpoint}: OK (${response.status})</p>`;
+                } catch (error) {
+                    console.error(`❌ ${endpoint}:`, error);
+                    results.innerHTML += `<p style="color: red">❌ ${endpoint}: ${error.message}</p>`;
+                }
+            }
+            
+            results.innerHTML += '<h2>Test complete - check console for details</h2>';
+        }
+        
+        testAll();
+    </script>
+</body>
+</html>

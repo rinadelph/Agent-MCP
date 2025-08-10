@@ -1,0 +1,44 @@
+{
+  "timestamp": "2025-08-08T16:27:50.698857",
+  "file": "/mnt/c/Users/psytz/TMUX Final/Agent-MCP/beverly_comprehensive_erp.py",
+  "metrics": {
+    "total_lines": 3667,
+    "blank_lines": 483,
+    "comment_lines": 281,
+    "functions": 48,
+    "classes": 1,
+    "complexity": 0
+  },
+  "issues": {
+    "critical": [
+      "Function 'comprehensive_dashboard' is extremely long (765 lines)",
+      "Function 'get_ml_forecasting_insights' is extremely long (221 lines)",
+      "Function 'calculate_dynamic_eoq' is extremely long (208 lines)",
+      "Function 'handle_emergency_procurement' is extremely long (201 lines)",
+      "Function 'get_advanced_inventory_optimization' is extremely long (206 lines)",
+      "Function 'identify_excess_inventory' is extremely long (214 lines)"
+    ],
+    "major": [
+      "Function 'comprehensive_dashboard' is too long (765 lines)",
+      "Function 'get_6_phase_planning_results' is too long (137 lines)",
+      "Function 'get_ml_forecasting_insights' is too long (221 lines)",
+      "Function 'calculate_dynamic_eoq' is too long (208 lines)",
+      "Function 'calculate_supplier_risk_score' is too long (176 lines)",
+      "Function 'handle_emergency_procurement' is too long (201 lines)",
+      "Function 'get_advanced_inventory_optimization' is too long (206 lines)",
+      "Function 'detect_stockout_risk' is too long (121 lines)",
+      "Function 'calculate_reorder_points' is too long (147 lines)",
+      "Function 'identify_excess_inventory' is too long (214 lines)",
+      "Duplicate function definitions: {'get_executive_insights'}",
+      "Found 7 bare except clauses",
+      "Found 1 except:pass anti-patterns",
+      "DataFrame operations in loops detected (14)"
+    ],
+    "minor": [
+      "Many exceptions without logging (12)",
+      "Many long lines (76 > 120 chars)"
+    ],
+    "info": []
+  },
+  "score": 0
+}

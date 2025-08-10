@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Beverly Data Check</title>
+    <meta charset="UTF-8">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+        }
+        .status-box {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        .success { border-left-color: #28a745; background: #d4edda; }
+        .error { border-left-color: #dc3545; background: #f8d7da; }
+        .warning { border-left-color: #ffc107; background: #fff3cd; }
+        .data-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .data-card {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+        }
+        .data-card h3 {
+            margin-top: 0;
+            color: #495057;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th, td {
+            padding: 8px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background: #667eea;
+            color: white;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        button:hover {
+            background: #5a67d8;
+        }
+        .log {
+            background: #2d3748;
+            color: #68d391;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 20px;
+        }
+        .stat-box {
+            display: inline-block;
+            background: white;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .stat-box .number {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+        }
+        .stat-box .label {
+            font-size: 12px;
+            color: #6c757d;
+            text-transform: uppercase;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏭 Beverly Knits ERP - Live Data Monitor</h1>
+        
+        <div class="status-box" id="main-status">
+            <strong>System Status:</strong> Initializing...
+        </div>
+        
+        <div style="text-align: center; margin: 20px 0;">
+            <button onclick="refreshAll()">🔄 Refresh All Data</button>
+            <button onclick="clearLog()">🗑️ Clear Log</button>
+            <button onclick="downloadData()">💾 Download Data</button>
+        </div>
+        
+        <div style="text-align: center; margin: 20px 0;" id="stats">
+            <div class="stat-box">
+                <div class="number" id="yarn-count">0</div>
+                <div class="label">Yarn Items</div>
+            </div>
+            <div class="stat-box">
+                <div class="number" id="sales-count">0</div>
+                <div class="label">Sales Records</div>
+            </div>
+            <div class="stat-box">
+                <div class="number" id="response-time">0ms</div>
+                <div class="label">Response Time</div>
+            </div>
+        </div>
+        
+        <div class="data-grid">
+            <div class="data-card">
+                <h3>🧶 Yarn Inventory</h3>
+                <div id="yarn-content">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        Loading...
+                    </div>
+                </div>
+            </div>
+            
+            <div class="data-card">
+                <h3>📊 Sales Data</h3>
+                <div id="sales-content">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        Loading...
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="log" id="log">
+            <div>System log initialized...</div>
+        </div>
+    </div>
+    
+    <script>
+        const API_URL = 'http://localhost:5003';
+        let logEntries = [];
+        
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const entry = `[${timestamp}] ${type.toUpperCase()}: ${message}`;
+            logEntries.push(entry);
+            
+            const logDiv = document.getElementById('log');
+            logDiv.innerHTML = logEntries.slice(-50).join('<br>');
+            logDiv.scrollTop = logDiv.scrollHeight;
+            
+            console.log(entry);
+        }
+        
+        function clearLog() {
+            logEntries = ['Log cleared...'];
+            document.getElementById('log').innerHTML = logEntries[0];
+        }
+        
+        async function checkServer() {
+            const startTime = Date.now();
+            try {
+                log('Checking server connection...', 'info');
+                const response = await fetch(`${API_URL}/api/status`, {
+                    cache: 'no-cache'
+                });
+                
+                const responseTime = Date.now() - startTime;
+                document.getElementById('response-time').textContent = `${responseTime}ms`;
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('main-status').className = 'status-box success';
+                    document.getElementById('main-status').innerHTML = `
+                        <strong>✅ System Status:</strong> Operational<br>
+                        <strong>Server:</strong> ${API_URL}<br>
+                        <strong>CORS:</strong> ${data.cors}<br>
+                        <strong>Data Available:</strong> ${data.yarn_records} yarn, ${data.sales_records} sales
+                    `;
+                    log(`Server connected - ${data.yarn_records} yarn, ${data.sales_records} sales records`, 'success');
+                    return true;
+                } else {
+                    throw new Error(`Server returned ${response.status}`);
+                }
+            } catch (error) {
+                document.getElementById('main-status').className = 'status-box error';
+                document.getElementById('main-status').innerHTML = `
+                    <strong>❌ System Status:</strong> Connection Failed<br>
+                    <strong>Error:</strong> ${error.message}<br>
+                    <strong>Action:</strong> Check if server is running on port 5003
+                `;
+                log(`Connection failed: ${error.message}`, 'error');
+                return false;
+            }
+        }
+        
+        async function loadYarnData() {
+            try {
+                log('Loading yarn data...', 'info');
+                const response = await fetch(`${API_URL}/api/yarn`, {
+                    cache: 'no-cache'
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('yarn-count').textContent = data.length;
+                    
+                    if (data.length > 0) {
+                        let html = '<table>';
+                        html += '<tr><th>Desc#</th><th>Description</th><th>Balance</th></tr>';
+                        
+                        data.slice(0, 5).forEach(item => {
+                            html += `<tr>
+                                <td>${item['Desc#'] || 'N/A'}</td>
+                                <td>${(item['Description'] || 'N/A').substring(0, 25)}</td>
+                                <td>${parseFloat(item['Planning Balance'] || 0).toFixed(2)}</td>
+                            </tr>`;
+                        });
+                        
+                        html += '</table>';
+                        html += `<p><small>Showing 5 of ${data.length} records</small></p>`;
+                        
+                        document.getElementById('yarn-content').innerHTML = html;
+                        log(`Loaded ${data.length} yarn records`, 'success');
+                    } else {
+                        document.getElementById('yarn-content').innerHTML = '<p>No yarn data available</p>';
+                        log('No yarn data available', 'warning');
+                    }
+                } else {
+                    throw new Error(`Failed to load yarn data: ${response.status}`);
+                }
+            } catch (error) {
+                document.getElementById('yarn-content').innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+                log(`Yarn data error: ${error.message}`, 'error');
+            }
+        }
+        
+        async function loadSalesData() {
+            try {
+                log('Loading sales data...', 'info');
+                const response = await fetch(`${API_URL}/api/sales`, {
+                    cache: 'no-cache'
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('sales-count').textContent = data.length;
+                    
+                    if (data.length > 0) {
+                        let html = '<table>';
+                        html += '<tr><th>Document</th><th>Customer</th><th>Qty</th></tr>';
+                        
+                        data.slice(0, 5).forEach(item => {
+                            html += `<tr>
+                                <td>${item['Document'] || 'N/A'}</td>
+                                <td>${(item['Customer'] || 'N/A').substring(0, 20)}</td>
+                                <td>${item['Qty Shipped'] || 0}</td>
+                            </tr>`;
+                        });
+                        
+                        html += '</table>';
+                        html += `<p><small>Showing 5 of ${data.length} records</small></p>`;
+                        
+                        document.getElementById('sales-content').innerHTML = html;
+                        log(`Loaded ${data.length} sales records`, 'success');
+                    } else {
+                        document.getElementById('sales-content').innerHTML = '<p>No sales data available</p>';
+                        log('No sales data available', 'warning');
+                    }
+                } else {
+                    throw new Error(`Failed to load sales data: ${response.status}`);
+                }
+            } catch (error) {
+                document.getElementById('sales-content').innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+                log(`Sales data error: ${error.message}`, 'error');
+            }
+        }
+        
+        async function refreshAll() {
+            log('Refreshing all data...', 'info');
+            const serverOk = await checkServer();
+            if (serverOk) {
+                await Promise.all([
+                    loadYarnData(),
+                    loadSalesData()
+                ]);
+                log('All data refreshed', 'success');
+            }
+        }
+        
+        async function downloadData() {
+            try {
+                log('Downloading data...', 'info');
+                
+                const [yarnRes, salesRes] = await Promise.all([
+                    fetch(`${API_URL}/api/yarn`),
+                    fetch(`${API_URL}/api/sales`)
+                ]);
+                
+                const [yarnData, salesData] = await Promise.all([
+                    yarnRes.json(),
+                    salesRes.json()
+                ]);
+                
+                const exportData = {
+                    timestamp: new Date().toISOString(),
+                    yarn: yarnData,
+                    sales: salesData
+                };
+                
+                const blob = new Blob([JSON.stringify(exportData, null, 2)], {type: 'application/json'});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `beverly_data_${Date.now()}.json`;
+                a.click();
+                
+                log('Data downloaded successfully', 'success');
+            } catch (error) {
+                log(`Download failed: ${error.message}`, 'error');
+            }
+        }
+        
+        // Auto-refresh every 30 seconds
+        setInterval(refreshAll, 30000);
+        
+        // Initial load
+        window.onload = () => {
+            log('Page loaded, initializing...', 'info');
+            refreshAll();
+        };
+    </script>
+</body>
+</html>

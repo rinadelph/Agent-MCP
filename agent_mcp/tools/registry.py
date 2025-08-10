@@ -7,6 +7,10 @@ from ..utils.json_utils import sanitize_json_input, get_sanitized_json_body
 # Import the central logger
 from ..core.config import logger
 
+# Import ERP data integration tools
+from .erp_data_import import import_erp_file, batch_import_erp_directory, get_import_status
+from .erp_data_export import export_erp_data, export_predefined_report, batch_export_reports, get_available_reports
+
 # Tool implementations will be imported here once they are created.
 # For now, we'll define placeholders for the functions they will call.
 # These will be replaced by actual imports from other tool modules.
@@ -224,3 +228,404 @@ async def dispatch_tool_call(
 # The actual tool schemas and implementations will be populated by calls to `register_tool`
 # from each of the specific tool modules (e.g., admin_tools.py, task_tools.py, etc.)
 # when those modules are imported by the application (e.g., in mcp_server_src/tools/__init__.py).
+
+
+# --- ERP Data Integration Tool Implementations ---
+
+async def import_erp_file_impl(arguments: Dict[str, Any]) -> List[mcp_types.TextContent]:
+    """MCP tool implementation for importing ERP data files."""
+    try:
+        file_path = arguments.get("file_path")
+        file_type = arguments.get("file_type")
+        config = arguments.get("config", {})
+        
+        if not file_path:
+            return [mcp_types.TextContent(type="text", text="Error: file_path is required")]
+        
+        # Call the import function
+        result = import_erp_file(file_path, file_type, config)
+        
+        if result['success']:
+            response = f"✅ ERP File Import Successful\n\n"
+            response += f"Import ID: {result['import_id']}\n"
+            response += f"File: {result['file_path']}\n"
+            response += f"Type: {result['file_type']}\n"
+            response += f"Records Imported: {result['imported_records']}/{result['total_records']}\n"
+            response += f"Processing Time: {result['processing_time_seconds']:.2f}s\n"
+            
+            if result['skipped_records'] > 0:
+                response += f"Skipped Records: {result['skipped_records']}\n"
+            
+            if result['errors']:
+                response += f"\nErrors ({len(result['errors'])}):\n"
+                for error in result['errors'][:3]:  # Show first 3 errors
+                    response += f"  - {error}\n"
+                if len(result['errors']) > 3:
+                    response += f"  ... and {len(result['errors']) - 3} more\n"
+        else:
+            response = f"❌ ERP File Import Failed\n\n"
+            response += f"Error: {result.get('error', 'Unknown error')}\n"
+            
+        return [mcp_types.TextContent(type="text", text=response)]
+        
+    except Exception as e:
+        logger.error(f"Error in import_erp_file_impl: {e}")
+        return [mcp_types.TextContent(type="text", text=f"Internal error: {str(e)}")]
+
+
+async def batch_import_erp_directory_impl(arguments: Dict[str, Any]) -> List[mcp_types.TextContent]:
+    """MCP tool implementation for batch importing ERP directory."""
+    try:
+        directory_path = arguments.get("directory_path")
+        file_pattern = arguments.get("file_pattern", "*")
+        config = arguments.get("config", {})
+        
+        if not directory_path:
+            return [mcp_types.TextContent(type="text", text="Error: directory_path is required")]
+        
+        # Call the batch import function
+        result = batch_import_erp_directory(directory_path, file_pattern, config)
+        
+        if result['success']:
+            response = f"✅ ERP Batch Import Successful\n\n"
+            response += f"Total Files: {result['total_files']}\n"
+            response += f"Successful Files: {result['successful_files']}\n"
+            response += f"Failed Files: {result['failed_files']}\n"
+            response += f"Total Records Imported: {result['imported_records']}\n"
+            
+            if result['processing_summary']:
+                response += f"\nFile Processing Summary:\n"
+                for file_path, summary in result['processing_summary'].items():
+                    filename = file_path.split('/')[-1]
+                    status = "✅" if summary['success'] else "❌"
+                    response += f"  {status} {filename}: {summary['imported']} records"
+                    if summary['errors'] > 0:
+                        response += f" ({summary['errors']} errors)"
+                    response += "\n"
+        else:
+            response = f"❌ ERP Batch Import Failed\n\n"
+            response += f"Error: {result.get('error', 'Unknown error')}\n"
+            
+        return [mcp_types.TextContent(type="text", text=response)]
+        
+    except Exception as e:
+        logger.error(f"Error in batch_import_erp_directory_impl: {e}")
+        return [mcp_types.TextContent(type="text", text=f"Internal error: {str(e)}")]
+
+
+async def export_erp_data_impl(arguments: Dict[str, Any]) -> List[mcp_types.TextContent]:
+    """MCP tool implementation for exporting ERP data."""
+    try:
+        query = arguments.get("query")
+        output_path = arguments.get("output_path")
+        format = arguments.get("format", "csv")
+        config = arguments.get("config", {})
+        parameters = arguments.get("parameters", [])
+        
+        if not query or not output_path:
+            return [mcp_types.TextContent(type="text", text="Error: query and output_path are required")]
+        
+        # Call the export function
+        result = export_erp_data(query, output_path, format, config, parameters)
+        
+        if result['success']:
+            response = f"✅ ERP Data Export Successful\n\n"
+            response += f"Export ID: {result['export_id']}\n"
+            response += f"File: {result['file_path']}\n"
+            response += f"Format: {result['format']}\n"
+            response += f"Records Exported: {result['total_rows']}\n"
+            response += f"File Size: {result['file_size_bytes']:,} bytes\n"
+            response += f"Processing Time: {result['processing_time_seconds']:.2f}s\n"
+            
+            if result['warnings']:
+                response += f"\nWarnings:\n"
+                for warning in result['warnings'][:3]:
+                    response += f"  - {warning}\n"
+        else:
+            response = f"❌ ERP Data Export Failed\n\n"
+            response += f"Error: {result.get('error', 'Unknown error')}\n"
+            
+        return [mcp_types.TextContent(type="text", text=response)]
+        
+    except Exception as e:
+        logger.error(f"Error in export_erp_data_impl: {e}")
+        return [mcp_types.TextContent(type="text", text=f"Internal error: {str(e)}")]
+
+
+async def export_predefined_report_impl(arguments: Dict[str, Any]) -> List[mcp_types.TextContent]:
+    """MCP tool implementation for exporting predefined reports."""
+    try:
+        report_name = arguments.get("report_name")
+        output_path = arguments.get("output_path")
+        format = arguments.get("format", "csv")
+        config = arguments.get("config", {})
+        parameters = arguments.get("parameters", {})
+        
+        if not report_name or not output_path:
+            return [mcp_types.TextContent(type="text", text="Error: report_name and output_path are required")]
+        
+        # Call the export function
+        result = export_predefined_report(report_name, output_path, format, config, parameters)
+        
+        if result['success']:
+            response = f"✅ ERP Report Export Successful\n\n"
+            response += f"Report: {report_name}\n"
+            response += f"Export ID: {result['export_id']}\n"
+            response += f"File: {result['file_path']}\n"
+            response += f"Format: {result['format']}\n"
+            response += f"Records Exported: {result['total_rows']}\n"
+            response += f"File Size: {result['file_size_bytes']:,} bytes\n"
+            response += f"Processing Time: {result['processing_time_seconds']:.2f}s\n"
+        else:
+            response = f"❌ ERP Report Export Failed\n\n"
+            response += f"Error: {result.get('error', 'Unknown error')}\n"
+            
+            if 'available_reports' in result:
+                response += f"\nAvailable Reports:\n"
+                for report in result['available_reports']:
+                    response += f"  - {report}\n"
+            
+        return [mcp_types.TextContent(type="text", text=response)]
+        
+    except Exception as e:
+        logger.error(f"Error in export_predefined_report_impl: {e}")
+        return [mcp_types.TextContent(type="text", text=f"Internal error: {str(e)}")]
+
+
+async def get_available_reports_impl(arguments: Dict[str, Any]) -> List[mcp_types.TextContent]:
+    """MCP tool implementation for getting available reports."""
+    try:
+        result = get_available_reports()
+        
+        if result['success']:
+            response = f"📊 Available ERP Reports ({result['total_reports']})\n\n"
+            
+            for report_name, info in result['reports'].items():
+                response += f"**{report_name}**\n"
+                response += f"  Description: {info['description']}\n"
+                response += f"  Query Preview: {info['query_preview']}\n\n"
+        else:
+            response = f"❌ Failed to get available reports\n\n"
+            response += f"Error: {result.get('error', 'Unknown error')}\n"
+            
+        return [mcp_types.TextContent(type="text", text=response)]
+        
+    except Exception as e:
+        logger.error(f"Error in get_available_reports_impl: {e}")
+        return [mcp_types.TextContent(type="text", text=f"Internal error: {str(e)}")]
+
+
+async def get_import_status_impl(arguments: Dict[str, Any]) -> List[mcp_types.TextContent]:
+    """MCP tool implementation for getting import status."""
+    try:
+        import_id = arguments.get("import_id")
+        
+        result = get_import_status(import_id)
+        
+        if result['success']:
+            if import_id:
+                response = f"📊 Import Status: {import_id}\n\n"
+                response += f"Status: {result.get('status', 'Unknown')}\n"
+                response += f"Message: {result.get('message', 'No additional information')}\n"
+            else:
+                response = f"📊 Database Statistics\n\n"
+                stats = result.get('database_statistics', {})
+                
+                for table_name, count in stats.items():
+                    response += f"{table_name}: {count}\n"
+                
+                response += f"\nTimestamp: {result.get('timestamp', 'Unknown')}\n"
+        else:
+            response = f"❌ Failed to get import status\n\n"
+            response += f"Error: {result.get('error', 'Unknown error')}\n"
+            
+        return [mcp_types.TextContent(type="text", text=response)]
+        
+    except Exception as e:
+        logger.error(f"Error in get_import_status_impl: {e}")
+        return [mcp_types.TextContent(type="text", text=f"Internal error: {str(e)}")]
+
+
+# --- ERP Tool Registration ---
+
+def register_erp_tools():
+    """Register all ERP data integration tools."""
+    
+    # Import ERP File Tool
+    register_tool(
+        name="import_erp_file",
+        description="Import data from a single ERP file (CSV, Excel) with HTML cleaning and validation",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "file_path": {
+                    "type": "string",
+                    "description": "Path to the ERP data file to import"
+                },
+                "file_type": {
+                    "type": "string",
+                    "description": "Optional file type override (inventory, sales_orders, yarn_demand, etc.)",
+                    "enum": ["inventory", "sales_orders", "yarn_demand", "yarn_report", "auto"]
+                },
+                "config": {
+                    "type": "object",
+                    "description": "Import configuration options",
+                    "properties": {
+                        "batch_size": {"type": "integer", "default": 1000},
+                        "duplicate_strategy": {"type": "string", "enum": ["skip", "update", "error"], "default": "skip"},
+                        "validation_level": {"type": "string", "enum": ["minimal", "standard", "strict"], "default": "standard"},
+                        "continue_on_error": {"type": "boolean", "default": False}
+                    }
+                }
+            },
+            "required": ["file_path"]
+        },
+        implementation=import_erp_file_impl
+    )
+    
+    # Batch Import Directory Tool
+    register_tool(
+        name="batch_import_erp_directory",
+        description="Import all ERP files from a directory with parallel processing",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "directory_path": {
+                    "type": "string",
+                    "description": "Path to directory containing ERP data files"
+                },
+                "file_pattern": {
+                    "type": "string",
+                    "description": "Glob pattern for file matching (default: '*')",
+                    "default": "*"
+                },
+                "config": {
+                    "type": "object",
+                    "description": "Import configuration options",
+                    "properties": {
+                        "batch_size": {"type": "integer", "default": 1000},
+                        "max_workers": {"type": "integer", "default": 4},
+                        "duplicate_strategy": {"type": "string", "enum": ["skip", "update", "error"], "default": "skip"},
+                        "continue_on_error": {"type": "boolean", "default": True}
+                    }
+                }
+            },
+            "required": ["directory_path"]
+        },
+        implementation=batch_import_erp_directory_impl
+    )
+    
+    # Export ERP Data Tool
+    register_tool(
+        name="export_erp_data",
+        description="Export ERP data using custom SQL query to various formats (CSV, Excel, JSON, PDF)",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "SQL query to execute for data export"
+                },
+                "output_path": {
+                    "type": "string",
+                    "description": "Output file path for exported data"
+                },
+                "format": {
+                    "type": "string",
+                    "description": "Export format",
+                    "enum": ["csv", "excel", "xlsx", "json", "pdf"],
+                    "default": "csv"
+                },
+                "config": {
+                    "type": "object",
+                    "description": "Export configuration options",
+                    "properties": {
+                        "include_headers": {"type": "boolean", "default": True},
+                        "max_rows": {"type": "integer", "description": "Maximum rows to export"},
+                        "compression": {"type": "string", "enum": ["zip", "gzip"], "description": "File compression"},
+                        "include_metadata": {"type": "boolean", "default": True}
+                    }
+                },
+                "parameters": {
+                    "type": "array",
+                    "description": "Query parameters for parameterized queries",
+                    "items": {"type": "string"}
+                }
+            },
+            "required": ["query", "output_path"]
+        },
+        implementation=export_erp_data_impl
+    )
+    
+    # Export Predefined Report Tool
+    register_tool(
+        name="export_predefined_report",
+        description="Export predefined ERP reports (inventory_summary, sales_orders_active, etc.)",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "report_name": {
+                    "type": "string",
+                    "description": "Name of predefined report",
+                    "enum": [
+                        "inventory_summary", "sales_orders_active", "production_orders_current",
+                        "quality_metrics_weekly", "supplier_performance", "machine_utilization"
+                    ]
+                },
+                "output_path": {
+                    "type": "string",
+                    "description": "Output file path for exported report"
+                },
+                "format": {
+                    "type": "string",
+                    "description": "Export format",
+                    "enum": ["csv", "excel", "xlsx", "json", "pdf"],
+                    "default": "csv"
+                },
+                "config": {
+                    "type": "object",
+                    "description": "Export configuration options"
+                },
+                "parameters": {
+                    "type": "object",
+                    "description": "Report parameters as key-value pairs"
+                }
+            },
+            "required": ["report_name", "output_path"]
+        },
+        implementation=export_predefined_report_impl
+    )
+    
+    # Get Available Reports Tool
+    register_tool(
+        name="get_available_reports",
+        description="Get list of available predefined ERP reports with descriptions",
+        input_schema={
+            "type": "object",
+            "properties": {},
+            "additionalProperties": False
+        },
+        implementation=get_available_reports_impl
+    )
+    
+    # Get Import Status Tool
+    register_tool(
+        name="get_import_status",
+        description="Get import operation status or database statistics",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "import_id": {
+                    "type": "string",
+                    "description": "Optional import ID to check status (omit for general database stats)"
+                }
+            }
+        },
+        implementation=get_import_status_impl
+    )
+    
+    logger.info("Registered 6 ERP data integration tools")
+
+
+# Auto-register ERP tools when module is imported
+register_erp_tools()

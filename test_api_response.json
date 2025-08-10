@@ -1,0 +1,61 @@
+{
+  "kpis": {
+    "total_sales_records": 5151,
+    "total_yarn_items": 1197,
+    "total_f01_inventory": 10653,
+    "total_bom_entries": 55160,
+    "f01_total_yards": "541,291",
+    "f01_total_lbs": "460,548",
+    "data_quality": "Good"
+  },
+  "data_status": {
+    "sales": {
+      "loaded": true,
+      "records": 5151,
+      "columns": [
+        "Document",
+        "Invoice Date",
+        "Customer",
+        "Style",
+        "Qty Shipped"
+      ]
+    },
+    "yarn": {
+      "loaded": true,
+      "records": 1197,
+      "columns": [
+        "Desc#",
+        "Supplier",
+        "Description",
+        "Color",
+        "Beginning Balance"
+      ],
+      "has_cost_column": true
+    },
+    "f01_inventory": {
+      "loaded": true,
+      "records": 10653,
+      "columns": [
+        "Style #",
+        "Order #",
+        "Customer",
+        "Roll #",
+        "Vendor Roll #"
+      ],
+      "total_yards": "541,291",
+      "total_lbs": "460,548"
+    },
+    "bom": {
+      "loaded": true,
+      "records": 55160,
+      "columns": [
+        "Style_id",
+        "Yarn_ID",
+        "BOM_Percent",
+        "unit"
+      ]
+    }
+  },
+  "cors_enabled": true,
+  "status": "operational"
+}

@@ -1,1 +1,28 @@
-{}
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"./agent_mcp/hooks/file-lock-manager.js\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|Read|Glob|Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"./agent_mcp/hooks/activity-broadcaster.js\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}

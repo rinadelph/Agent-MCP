@@ -1,0 +1,4 @@
+F01 Inventory Analysis Summary
+Generated: 2025-08-08 16:50:23.700361
+Total SKUs: 10653
+Total Units: 460,548

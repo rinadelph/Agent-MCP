@@ -1,0 +1,320 @@
+name: Manufacturing ERP CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
+
+env:
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '18'
+  DATABASE_URL: 'sqlite:///test.db'
+
+jobs:
+  # Code Quality Checks
+  code-quality:
+    name: Code Quality Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Cache pip packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff black isort mypy pylint
+          pip install -r requirements.txt
+      
+      - name: Run Black formatter check
+        run: black --check .
+      
+      - name: Run isort import checker
+        run: isort --check-only .
+      
+      - name: Run Ruff linter
+        run: ruff check .
+      
+      - name: Run MyPy type checker
+        run: mypy agent_mcp --ignore-missing-imports
+      
+      - name: Check for security vulnerabilities
+        run: |
+          pip install bandit safety
+          bandit -r agent_mcp -ll
+          safety check
+
+  # Python Tests
+  python-tests:
+    name: Python Unit Tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.9', '3.10', '3.11']
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-cov pytest-asyncio pytest-mock
+          pip install -r requirements.txt
+      
+      - name: Run unit tests with coverage
+        run: |
+          pytest tests/ \
+            --cov=agent_mcp \
+            --cov-report=xml \
+            --cov-report=html \
+            --cov-report=term-missing \
+            -v
+      
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+
+  # Integration Tests
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [python-tests]
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-integration
+      
+      - name: Setup test database
+        run: |
+          python -c "from agent_mcp.db.textile_erp_schema import TextileERPSchema; schema = TextileERPSchema(); schema.init_textile_erp_tables()"
+      
+      - name: Run integration tests
+        run: |
+          pytest tests/integration/ -v --tb=short
+      
+      - name: Test API endpoints
+        run: |
+          # Start FastAPI server in background
+          uvicorn fastapi_endpoints:app --host 0.0.0.0 --port 8000 &
+          sleep 5
+          
+          # Test health endpoint
+          curl -f http://localhost:8000/api/health
+          
+          # Test ready endpoint
+          curl -f http://localhost:8000/api/ready
+          
+          # Kill server
+          pkill -f uvicorn
+
+  # Dashboard Tests
+  dashboard-tests:
+    name: Dashboard Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: agent_mcp/dashboard/package-lock.json
+      
+      - name: Install dependencies
+        working-directory: agent_mcp/dashboard
+        run: npm ci
+      
+      - name: Run linter
+        working-directory: agent_mcp/dashboard
+        run: npm run lint
+      
+      - name: Run tests
+        working-directory: agent_mcp/dashboard
+        run: npm test -- --coverage --watchAll=false
+      
+      - name: Build dashboard
+        working-directory: agent_mcp/dashboard
+        run: npm run build
+
+  # Performance Tests
+  performance-tests:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    needs: [python-tests]
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install locust pytest-benchmark
+      
+      - name: Run performance benchmarks
+        run: |
+          pytest tests/performance/ --benchmark-only --benchmark-autosave
+      
+      - name: Load testing with Locust
+        run: |
+          # Start server
+          uvicorn fastapi_endpoints:app --host 0.0.0.0 --port 8000 &
+          sleep 5
+          
+          # Run load test
+          locust -f tests/performance/locustfile.py \
+            --headless \
+            --users 100 \
+            --spawn-rate 10 \
+            --run-time 60s \
+            --host http://localhost:8000
+          
+          # Kill server
+          pkill -f uvicorn
+
+  # Database Migration Tests
+  database-tests:
+    name: Database Migration Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Test database schema creation
+        run: |
+          python -c "
+          import sqlite3
+          conn = sqlite3.connect(':memory:')
+          with open('database_schema.sql', 'r') as f:
+              conn.executescript(f.read())
+          # Verify tables exist
+          cursor = conn.cursor()
+          cursor.execute(\"SELECT name FROM sqlite_master WHERE type='table'\")
+          tables = cursor.fetchall()
+          required_tables = ['forecast_results', 'shortage_alerts', 'forecast_history', 'alert_history']
+          for table in required_tables:
+              assert (table,) in tables, f'Table {table} not found'
+          print('All tables created successfully')
+          "
+      
+      - name: Test database migrations
+        run: |
+          python -m agent_mcp.db.migrations.migration_manager
+
+  # Docker Build
+  docker-build:
+    name: Docker Build & Push
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [code-quality, python-tests, integration-tests, dashboard-tests]
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/manufacturing-erp:latest
+            ${{ secrets.DOCKER_USERNAME }}/manufacturing-erp:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Deploy to Staging
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [docker-build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: staging
+    
+    steps:
+      - name: Deploy to staging server
+        run: |
+          echo "Deploying to staging environment..."
+          # Add deployment commands here
+          # e.g., SSH to server, pull new image, restart services
+
+  # Notification
+  notify:
+    name: Send Notifications
+    runs-on: ubuntu-latest
+    needs: [code-quality, python-tests, integration-tests, dashboard-tests]
+    if: always()
+    
+    steps:
+      - name: Send Slack notification
+        if: github.event_name == 'push'
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: |
+            CI/CD Pipeline ${{ job.status == 'success' && 'succeeded' || 'failed' }}
+            Repository: ${{ github.repository }}
+            Branch: ${{ github.ref }}
+            Commit: ${{ github.sha }}
+            Author: ${{ github.actor }}
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}

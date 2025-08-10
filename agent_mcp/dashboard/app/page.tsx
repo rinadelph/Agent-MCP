@@ -8,6 +8,7 @@ import { TasksDashboard } from "@/components/dashboard/tasks-dashboard"
 import { MemoriesDashboard } from "@/components/dashboard/memories-dashboard"
 import { PromptBookDashboard } from "@/components/dashboard/prompt-book-dashboard"
 import { SystemDashboard } from "@/components/dashboard/system-dashboard"
+import { SupplyChainDashboard } from "@/components/dashboard/supply-chain-dashboard"
 import { useDashboard } from "@/lib/store"
 
 export default function HomePage() {
@@ -27,6 +28,8 @@ export default function HomePage() {
         return <PromptBookDashboard />
       case 'system':
         return <SystemDashboard />
+      case 'supply-chain':
+        return <SupplyChainDashboard />
       default:
         return <OverviewDashboard />
     }

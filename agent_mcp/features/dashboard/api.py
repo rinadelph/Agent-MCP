@@ -365,5 +365,141 @@ async def fetch_task_tree_data_logic() -> Dict[str, List[Dict[str, Any]]]:
         if conn:
             conn.close()
 
+# Supply Chain API Logic
+async def fetch_supply_chain_data_logic() -> Dict[str, Any]:
+    """
+    Fetches supply chain KPIs and metrics data.
+    This can be extended to pull from actual ERP systems or databases.
+    
+    Returns:
+        A dictionary with supply chain metrics and KPIs.
+        Raises Exception on critical error.
+    """
+    try:
+        # In a real implementation, this would connect to:
+        # - ERP systems (SAP, Oracle, etc.)
+        # - WMS (Warehouse Management Systems)
+        # - TMS (Transportation Management Systems)
+        # - Supplier portals and APIs
+        # - IoT devices for real-time tracking
+        
+        # For now, return structured supply chain data
+        # This matches the TypeScript interface in the frontend
+        return {
+            "timestamp": "2025-01-08T12:00:00Z",
+            "kpis": [
+                {
+                    "id": "otif",
+                    "category": "Delivery",
+                    "name": "OTIF Rate",
+                    "value": 94.5,
+                    "target": 95.0,
+                    "unit": "%",
+                    "trend": "up",
+                    "status": "warning",
+                    "description": "On-Time, In-Full delivery performance"
+                },
+                {
+                    "id": "inventory_turnover",
+                    "category": "Inventory", 
+                    "name": "Inventory Turnover",
+                    "value": 8.2,
+                    "target": 10.0,
+                    "unit": "turns/year",
+                    "trend": "up",
+                    "status": "good",
+                    "description": "How efficiently inventory is managed"
+                },
+                {
+                    "id": "forecast_accuracy",
+                    "category": "Planning",
+                    "name": "Forecast Accuracy", 
+                    "value": 87.3,
+                    "target": 90.0,
+                    "unit": "%",
+                    "trend": "stable",
+                    "status": "warning",
+                    "description": "Accuracy of demand forecasting"
+                },
+                {
+                    "id": "perfect_order",
+                    "category": "Quality",
+                    "name": "Perfect Order Rate",
+                    "value": 92.1,
+                    "target": 95.0,
+                    "unit": "%", 
+                    "trend": "down",
+                    "status": "warning",
+                    "description": "Orders delivered without errors"
+                },
+                {
+                    "id": "supply_chain_cost",
+                    "category": "Financial",
+                    "name": "Total SC Cost",
+                    "value": 12.8,
+                    "target": 12.0,
+                    "unit": "% of sales",
+                    "trend": "down",
+                    "status": "good",
+                    "description": "Total supply chain cost as % of sales"
+                },
+                {
+                    "id": "cash_cycle",
+                    "category": "Financial",
+                    "name": "Cash-to-Cash Cycle",
+                    "value": 45,
+                    "target": 40,
+                    "unit": "days",
+                    "trend": "down", 
+                    "status": "good",
+                    "description": "Time from cash outflow to cash inflow"
+                },
+                {
+                    "id": "resilience",
+                    "category": "Risk",
+                    "name": "Resilience Index",
+                    "value": 78.5,
+                    "target": 85.0,
+                    "unit": "score",
+                    "trend": "up",
+                    "status": "warning",
+                    "description": "Supply chain resilience and recovery capability"
+                },
+                {
+                    "id": "esg_score", 
+                    "category": "Sustainability",
+                    "name": "ESG Score",
+                    "value": 82.3,
+                    "target": 85.0,
+                    "unit": "score",
+                    "trend": "up",
+                    "status": "good",
+                    "description": "Environmental, Social, and Governance compliance"
+                }
+            ],
+            "otifRate": 94.5,
+            "inventoryTurnover": 8.2,
+            "forecastAccuracy": 87.3,
+            "perfectOrderRate": 92.1,
+            "totalSupplyChainCost": 12.8,
+            "cashToCashCycle": 45,
+            "resilienceIndex": 78.5,
+            "esgScore": 82.3,
+            "leadTimes": {
+                "procurement": 12,
+                "manufacturing": 18,
+                "delivery": 5
+            },
+            "supplierPerformance": {
+                "onTimeDelivery": 91.2,
+                "qualityScore": 95.8,
+                "complianceRate": 89.4
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching supply chain data: {e}", exc_info=True)
+        raise
+
 # The Starlette JSONResponse wrappers that were in main.py (graph_data_endpoint, task_tree_data_endpoint)
 # will now be defined in `mcp_server_src/app/routes.py`. Those wrappers will call these `_logic` functions.

@@ -26,6 +26,11 @@ GITHUB_REPO = "rinadelph/Agent-MCP"
 AUTHOR = "Luis Alejandro Rincon"
 GITHUB_URL = "https://github.com/rinadelph"
 
+# Console and embedding settings
+CONSOLE_LOGGING_ENABLED = False
+SIMPLE_EMBEDDING_DIMENSION = 768
+SIMPLE_EMBEDDING_MODEL = "text-embedding-3-small"
+
 # --- TUI Colors (ANSI Escape Codes) ---
 class TUIColors:
     HEADER = "\033[95m"  # Light Magenta
@@ -806,6 +811,46 @@ def validate_startup_environment() -> None:
 
 # Initialize environment validation
 validate_startup_environment()
+
+# Export agent colors for backward compatibility
+AGENT_COLORS = config_manager.agent.colors
+
+# Export task placement settings for backward compatibility
+ENABLE_TASK_PLACEMENT_RAG = config_manager.task_placement.enable_rag
+ALLOW_RAG_OVERRIDE = config_manager.task_placement.allow_rag_override
+
+# Export OpenAI settings for backward compatibility
+EMBEDDING_MODEL = config_manager.openai.embedding_model
+EMBEDDING_DIMENSION = config_manager.openai.embedding_dimension
+CHAT_MODEL = config_manager.openai.chat_model
+
+# Export task analysis settings for backward compatibility
+TASK_ANALYSIS_MODEL = config_manager.openai.chat_model  # Use the same chat model for task analysis
+TASK_ANALYSIS_MAX_TOKENS = 1000  # Default max tokens for task analysis
+
+# Export embedding settings for backward compatibility
+MAX_EMBEDDING_BATCH_SIZE = 100  # Default batch size for embedding operations
+ADVANCED_EMBEDDINGS = True  # Enable advanced embedding mode by default
+
+# Export RAG settings for backward compatibility
+MAX_CONTEXT_TOKENS = config_manager.rag.max_context_tokens
+CHUNK_SIZE = config_manager.rag.chunk_size
+OVERLAP_SIZE = config_manager.rag.overlap_size
+MAX_RESULTS = config_manager.rag.max_results
+SIMILARITY_THRESHOLD = config_manager.rag.similarity_threshold
+
+# Export OpenAI API key for backward compatibility
+OPENAI_API_KEY_ENV = config_manager.openai.api_key
+
+# Export utility functions for backward compatibility
+def get_project_dir() -> str:
+    """Get the project directory from configuration."""
+    return config_manager.system.project_dir or os.getcwd()
+
+def get_db_path() -> Path:
+    """Get the database path from configuration."""
+    from pathlib import Path
+    return Path(config_manager.database.file_name)
 
 # Log that configuration is loaded
 logger.info("Core configuration loaded with comprehensive management system.")

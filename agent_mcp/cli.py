@@ -61,9 +61,9 @@ load_dotenv()
 # Ensure core.config (and thus logging) is initialized early.
 from .core.config import (
     logger,
-    CONSOLE_LOGGING_ENABLED,
     enable_console_logging,
 )  # Logger is initialized in config.py
+CONSOLE_LOGGING_ENABLED = False  # Default value
 from .core import globals as g  # For g.server_running and other globals
 
 # Import app creation and lifecycle functions
@@ -271,9 +271,8 @@ def main_cli(
 
     # Determine if the TUI should be active
     # TUI is active if console logging is disabled AND --no-tui is NOT passed AND not in debug mode
-    from .core.config import (
-        CONSOLE_LOGGING_ENABLED as current_console_logging,
-    )  # Get updated value
+    # Get current console logging state
+    current_console_logging = CONSOLE_LOGGING_ENABLED
 
     tui_active = not current_console_logging and not no_tui and not debug
 
@@ -525,18 +524,23 @@ def main_cli(
                     # Show standard startup messages only if TUI is not active
                     if not tui_active:
                         # Show AGENT MCP banner
-                        from .tui.colors import get_responsive_agent_mcp_banner
-
-                        print()
-                        print(get_responsive_agent_mcp_banner())
-                        print()
-                        print(f"🚀 MCP Server running on port {port}")
-                        print(f"📁 Project: {project_dir}")
+                        try:
+                            from .tui.colors import get_responsive_agent_mcp_banner
+                            print()
+                            print(get_responsive_agent_mcp_banner())
+                            print()
+                        except UnicodeEncodeError:
+                            print()
+                            print("AGENT-MCP SERVER")
+                            print("================")
+                            print()
+                        print(f"MCP Server running on port {port}")
+                        print(f"Project: {project_dir}")
 
                         # Display admin token from database
                         admin_token = get_admin_token_from_db(project_dir)
                         if admin_token:
-                            print(f"🔑 Admin Token: {admin_token}")
+                            print(f"Admin Token: {admin_token}")
 
                         print()
                         print("Next steps:")
@@ -545,7 +549,7 @@ def main_cli(
                             if project_dir != "."
                             else "agent_mcp/dashboard"
                         )
-                        print(f"1. Open new terminal → cd {dashboard_path}")
+                        print(f"1. Open new terminal -> cd {dashboard_path}")
                         print("2. Run: npm run dev")
                         print("3. Open: http://localhost:3847")
                         print()
@@ -610,11 +614,16 @@ def main_cli(
                     # Show standard startup messages only if TUI is not active
                     if not tui_active:
                         # Show AGENT MCP banner
-                        from .tui.colors import get_responsive_agent_mcp_banner
-
-                        print()
-                        print(get_responsive_agent_mcp_banner())
-                        print()
+                        try:
+                            from .tui.colors import get_responsive_agent_mcp_banner
+                            print()
+                            print(get_responsive_agent_mcp_banner())
+                            print()
+                        except UnicodeEncodeError:
+                            print()
+                            print("AGENT-MCP SERVER")
+                            print("================")
+                            print()
                         print("🚀 MCP Server running (stdio transport)")
                         print("Server is ready for AI assistant connections.")
 

@@ -25,6 +25,7 @@ class MCPServerCategory(Enum):
     ORCHESTRATOR_SPECIFIC = "_orchestrator_specific"
 
 
+
 @dataclass
 class MCPServerConfig:
     """Configuration for a single MCP server."""

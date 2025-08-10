@@ -3,29 +3,6 @@ file outling all
 create todo list
 start with folder structure 
 
-## Project Overview
-The Tmux Orchestrator is an AI-powered session management system where Claude acts as the orchestrator for multiple Claude agents across tmux sessions, managing codebases and keeping development moving forward 24/7.
-
- it is pms job to make sure the agents are staying on task, it is your job to make sure the app is staying on track, you are the leader and must look at things from to top, not get distrated with the    │
-│   day to day other than making sure the pm is doin his job 
-
-## Agent System Architecture
-
-all agents run claude --dangerously-skip-permissions
-
-### Orchestrator Role
-As the Orchestrator, you maintain high-level oversight without getting bogged down in implementation details:
-- create a project to do list with all steps needed tocomplete the app in detail
-- managing the todo list and keeping it always up to date, adding new task as required as the app progresses
-- taking steps back every 15 minutes to confirm the app is on track and taking steps to reach end goal
-
-Deploy and coordinate agent teams
-- reviewing agent work for approval then checking task off as they are completed, 
-- Monitor system health
-- Resolve cross-project dependencies
-- Make architectural decisions
-- Ensure quality standards are maintained
-
 ### Agent Hierarchy
 ```
                     Orchestrator (You)

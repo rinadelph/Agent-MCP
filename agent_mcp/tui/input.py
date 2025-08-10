@@ -116,7 +116,19 @@ def get_key_windows() -> Tuple[Optional[Key], Optional[str]]:
     Returns tuple of (special_key, character).
     """
     if msvcrt is None:
-        raise NotImplementedError("Windows keyboard input requires msvcrt module")
+        # Fallback to basic input when msvcrt is not available
+        import logging
+        logging.warning("Windows keyboard input unavailable - msvcrt module not found. Using fallback input.")
+        
+        try:
+            # Use basic input as fallback
+            char = input()
+            if not char:
+                return (Key.ENTER, '\n')
+            return (None, char[0])
+        except Exception as e:
+            logging.error(f"Fallback input failed: {e}")
+            return (None, '')
     
     key = msvcrt.getch()
     

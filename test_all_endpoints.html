@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Beverly ERP - API Test Dashboard</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 30px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .test-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+        .test-card {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            border-left: 4px solid #667eea;
+            transition: transform 0.2s;
+        }
+        .test-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        .endpoint {
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            color: #495057;
+            margin: 10px 0;
+        }
+        .status {
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            display: inline-block;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .pending { background: #fff3cd; color: #856404; }
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        button:hover { background: #5a67d8; }
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            background: white;
+            border-radius: 5px;
+            font-size: 12px;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        .stats {
+            display: flex;
+            gap: 20px;
+            margin: 20px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+        .stat {
+            flex: 1;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 36px;
+            font-weight: bold;
+            color: #667eea;
+        }
+        .stat-label {
+            color: #6c757d;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔬 Beverly ERP API Test Dashboard</h1>
+        
+        <div class="stats">
+            <div class="stat">
+                <div class="stat-value" id="total-tests">0</div>
+                <div class="stat-label">Total Tests</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="passed-tests">0</div>
+                <div class="stat-label">Passed</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="failed-tests">0</div>
+                <div class="stat-label">Failed</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="success-rate">0%</div>
+                <div class="stat-label">Success Rate</div>
+            </div>
+        </div>
+        
+        <div style="text-align: center; margin: 20px 0;">
+            <button onclick="testAll()">🚀 Run All Tests</button>
+            <button onclick="clearResults()">🗑️ Clear Results</button>
+        </div>
+        
+        <div class="test-grid" id="test-grid"></div>
+    </div>
+    
+    <script>
+        const API_BASE = 'http://localhost:5003';
+        
+        const endpoints = [
+            { name: 'KPIs', path: '/api/comprehensive-kpis', method: 'GET' },
+            { name: 'Planning Phases', path: '/api/planning-phases', method: 'GET' },
+            { name: 'ML Forecasting', path: '/api/ml-forecasting', method: 'GET' },
+            { name: 'Advanced Optimization', path: '/api/advanced-optimization', method: 'GET' },
+            { name: 'Execute Planning', path: '/api/execute-planning', method: 'POST' },
+            { name: 'Yarn Data', path: '/api/yarn', method: 'GET' },
+            { name: 'Sales Data', path: '/api/sales', method: 'GET' },
+            { name: 'Emergency Shortage', path: '/api/emergency-shortage', method: 'GET' },
+            { name: 'Supplier Intelligence', path: '/api/supplier-intelligence', method: 'GET' },
+            { name: 'Production Pipeline', path: '/api/production-pipeline', method: 'GET' },
+            { name: 'Executive Insights', path: '/api/executive-insights', method: 'GET' },
+            { name: 'Dynamic EOQ', path: '/api/dynamic-eoq', method: 'GET' },
+            { name: 'Supplier Risk', path: '/api/supplier-risk-scoring', method: 'GET' },
+            { name: 'Emergency Procurement', path: '/api/emergency-procurement', method: 'GET' }
+        ];
+        
+        let testResults = { total: 0, passed: 0, failed: 0 };
+        
+        function initializeTests() {
+            const grid = document.getElementById('test-grid');
+            grid.innerHTML = '';
+            
+            endpoints.forEach((endpoint, index) => {
+                const card = document.createElement('div');
+                card.className = 'test-card';
+                card.id = `test-${index}`;
+                card.innerHTML = `
+                    <h3>${endpoint.name}</h3>
+                    <div class="endpoint">${endpoint.method} ${endpoint.path}</div>
+                    <div class="status pending" id="status-${index}">Pending</div>
+                    <div class="result" id="result-${index}" style="display: none;"></div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+        
+        async function testEndpoint(endpoint, index) {
+            const statusEl = document.getElementById(`status-${index}`);
+            const resultEl = document.getElementById(`result-${index}`);
+            
+            statusEl.className = 'status pending';
+            statusEl.textContent = 'Testing...';
+            
+            try {
+                const options = {
+                    method: endpoint.method,
+                    headers: { 'Content-Type': 'application/json' }
+                };
+                
+                const startTime = Date.now();
+                const response = await fetch(API_BASE + endpoint.path, options);
+                const responseTime = Date.now() - startTime;
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    statusEl.className = 'status success';
+                    statusEl.textContent = `✅ OK (${responseTime}ms)`;
+                    resultEl.style.display = 'block';
+                    resultEl.innerHTML = `<pre>${JSON.stringify(data, null, 2).substring(0, 200)}...</pre>`;
+                    testResults.passed++;
+                } else {
+                    statusEl.className = 'status error';
+                    statusEl.textContent = `❌ Error ${response.status}`;
+                    resultEl.style.display = 'block';
+                    resultEl.innerHTML = `<pre>Error: ${JSON.stringify(data, null, 2)}</pre>`;
+                    testResults.failed++;
+                }
+            } catch (error) {
+                statusEl.className = 'status error';
+                statusEl.textContent = '❌ Network Error';
+                resultEl.style.display = 'block';
+                resultEl.innerHTML = `<pre>Error: ${error.message}</pre>`;
+                testResults.failed++;
+            }
+            
+            updateStats();
+        }
+        
+        async function testAll() {
+            testResults = { total: endpoints.length, passed: 0, failed: 0 };
+            updateStats();
+            
+            for (let i = 0; i < endpoints.length; i++) {
+                await testEndpoint(endpoints[i], i);
+                await new Promise(resolve => setTimeout(resolve, 100)); // Small delay between tests
+            }
+        }
+        
+        function updateStats() {
+            document.getElementById('total-tests').textContent = testResults.total;
+            document.getElementById('passed-tests').textContent = testResults.passed;
+            document.getElementById('failed-tests').textContent = testResults.failed;
+            
+            const rate = testResults.total > 0 
+                ? Math.round((testResults.passed / testResults.total) * 100) 
+                : 0;
+            document.getElementById('success-rate').textContent = rate + '%';
+        }
+        
+        function clearResults() {
+            initializeTests();
+            testResults = { total: 0, passed: 0, failed: 0 };
+            updateStats();
+        }
+        
+        // Initialize on load
+        window.onload = () => {
+            initializeTests();
+            updateStats();
+        };
+    </script>
+</body>
+</html>
