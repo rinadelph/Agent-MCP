@@ -214,7 +214,7 @@ export async function launchTestingAgentForCompletedTask(
       setTimeout(() => {
         try {
           // First command: type the prompt (without Enter)
-          execSync(`tmux send-keys -t "${sessionName}" "${prompt.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { timeout: 10000 });
+          execSync(`tmux send-keys -t "${sessionName}" "${prompt.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, { timeout: 10000 });
           console.log(`✅ Typed prompt to testing agent ${testingAgentId}`);
           
           // Second command: press Enter to send the prompt
