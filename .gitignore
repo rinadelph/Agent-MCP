@@ -368,3 +368,9 @@ agent_mcp/static/
 
 # Claude specific files
 **/.claude/settings.local.json
+
+# Conversation directories (sensitive data)
+conversations/
+**/conversations/
+session-*/
+**/session-*/
