@@ -80,6 +80,236 @@ uv run -m agent_mcp.cli --project-dir /path/to/your/project
 cd agent_mcp/dashboard && npm install && npm run dev
 ```
 
+## MCP Integration Guide
+
+### What is MCP?
+
+The **Model Context Protocol (MCP)** is an open standard that enables AI assistants to securely connect to external data sources and tools. Agent-MCP leverages MCP to provide seamless integration with various development tools and services.
+
+### Running Agent-MCP as an MCP Server
+
+Agent-MCP can function as an MCP server, exposing its multi-agent capabilities to MCP-compatible clients like Claude Desktop, Cline, and other AI coding assistants.
+
+#### Quick MCP Setup
+
+```bash
+# 1. Install Agent-MCP
+pip install -e .
+
+# 2. Start the MCP server
+python -m agent_mcp.mcp_server --port 8000
+
+# 3. Configure your MCP client to connect to:
+# HTTP: http://localhost:8000/mcp
+# WebSocket: ws://localhost:8000/mcp/ws
+```
+
+#### MCP Server Configuration
+
+Create an MCP configuration file (`mcp_config.json`):
+
+```json
+{
+  "server": {
+    "name": "agent-mcp",
+    "version": "1.0.0"
+  },
+  "tools": [
+    {
+      "name": "create_agent",
+      "description": "Create a new specialized AI agent"
+    },
+    {
+      "name": "assign_task", 
+      "description": "Assign tasks to specific agents"
+    },
+    {
+      "name": "query_project_context",
+      "description": "Query the shared knowledge graph"
+    },
+    {
+      "name": "manage_agent_communication",
+      "description": "Handle inter-agent messaging"
+    }
+  ],
+  "resources": [
+    {
+      "name": "agent_status",
+      "description": "Real-time agent status and activity"
+    },
+    {
+      "name": "project_memory",
+      "description": "Persistent project knowledge graph"
+    }
+  ]
+}
+```
+
+#### Using Agent-MCP with Claude Desktop
+
+1. **Add to Claude Desktop Config**:
+   
+   Open `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or equivalent:
+   
+   ```json
+   {
+     "mcpServers": {
+       "agent-mcp": {
+         "command": "python",
+         "args": ["-m", "agent_mcp.mcp_server"],
+         "env": {
+           "OPENAI_API_KEY": "your-openai-api-key"
+         }
+       }
+     }
+   }
+   ```
+
+2. **Restart Claude Desktop** to load the MCP server
+
+3. **Verify Connection**: Claude should show "🔌 agent-mcp" in the conversation
+
+#### MCP Tools Available
+
+Once connected, you can use these MCP tools directly in Claude:
+
+**Agent Management**
+- `create_agent` - Spawn specialized agents (backend, frontend, testing, etc.)
+- `list_agents` - View all active agents and their status
+- `terminate_agent` - Safely shut down agents
+
+**Task Orchestration**  
+- `assign_task` - Delegate work to specific agents
+- `view_tasks` - Monitor task progress and dependencies
+- `update_task_status` - Track completion and blockers
+
+**Knowledge Management**
+- `ask_project_rag` - Query the persistent knowledge graph
+- `update_project_context` - Add architectural decisions and patterns
+- `view_project_context` - Access stored project information
+
+**Communication**
+- `send_agent_message` - Direct messaging between agents
+- `broadcast_message` - Send updates to all agents
+- `request_assistance` - Escalate complex issues
+
+#### Advanced MCP Configuration
+
+**Custom Transport Options**:
+```bash
+# HTTP with custom port
+python -m agent_mcp.mcp_server --transport http --port 8080
+
+# WebSocket with authentication
+python -m agent_mcp.mcp_server --transport ws --auth-token your-secret-token
+
+# Unix socket (Linux/macOS)
+python -m agent_mcp.mcp_server --transport unix --socket-path /tmp/agent-mcp.sock
+```
+
+**Environment Variables**:
+```bash
+export AGENT_MCP_HOST=0.0.0.0          # Server host
+export AGENT_MCP_PORT=8000              # Server port  
+export AGENT_MCP_LOG_LEVEL=INFO         # Logging level
+export AGENT_MCP_PROJECT_DIR=/your/project  # Default project directory
+export AGENT_MCP_MAX_AGENTS=10          # Maximum concurrent agents
+```
+
+### MCP Client Examples
+
+#### Python Client
+```python
+import asyncio
+from mcp import Client
+
+async def main():
+    async with Client("http://localhost:8000/mcp") as client:
+        # Create a backend agent
+        result = await client.call_tool("create_agent", {
+            "role": "backend",
+            "specialization": "API development"
+        })
+        
+        # Assign a task
+        await client.call_tool("assign_task", {
+            "agent_id": result["agent_id"],
+            "task": "Implement user authentication endpoints"
+        })
+        
+        # Query project context
+        context = await client.call_tool("ask_project_rag", {
+            "query": "What's our current database schema?"
+        })
+        print(context)
+
+asyncio.run(main())
+```
+
+#### JavaScript Client
+```javascript
+import { MCPClient } from '@modelcontextprotocol/client';
+
+const client = new MCPClient('http://localhost:8000/mcp');
+
+async function createAgent() {
+  await client.connect();
+  
+  const agent = await client.callTool('create_agent', {
+    role: 'frontend',
+    specialization: 'React components'
+  });
+  
+  console.log('Created agent:', agent.agent_id);
+  
+  await client.disconnect();
+}
+
+createAgent().catch(console.error);
+```
+
+### Troubleshooting MCP Connection
+
+**Connection Issues**:
+```bash
+# Check if MCP server is running
+curl http://localhost:8000/mcp/health
+
+# Verify WebSocket connection
+wscat -c ws://localhost:8000/mcp/ws
+
+# Check server logs
+python -m agent_mcp.mcp_server --log-level DEBUG
+```
+
+**Common Issues**:
+- **Port conflicts**: Change port with `--port` flag
+- **Permission errors**: Ensure OpenAI API key is set
+- **Client timeout**: Increase timeout in client configuration
+- **Agent limit reached**: Check active agent count with `list_agents`
+
+### Integration Examples
+
+**VS Code with MCP**:
+Use the MCP extension to integrate Agent-MCP directly into your editor workflow.
+
+**Terminal Usage**:
+```bash
+# Quick task assignment via curl
+curl -X POST http://localhost:8000/mcp/tools/assign_task \
+  -H "Content-Type: application/json" \
+  -d '{"task": "Add error handling to API endpoints", "agent_role": "backend"}'
+```
+
+**CI/CD Integration**:
+```yaml
+# GitHub Actions example
+- name: Run Agent-MCP Code Review
+  run: |
+    python -m agent_mcp.mcp_server --daemon
+    curl -X POST localhost:8000/mcp/tools/assign_task \
+      -d '{"task": "Review PR for security issues", "agent_role": "security"}'
+```
 
 ## How It Works: Breaking Complexity into Simple Steps
 
