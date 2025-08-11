@@ -460,7 +460,7 @@ ${message}
       
     } catch (error) {
       // Fallback: just send without mode checking using two separate commands
-      const escapedMessage = formattedMessage.replace(/"/g, '\\"');
+      const escapedMessage = formattedMessage.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
       await execAsync(`tmux send-keys -t "${sessionName}" "${escapedMessage}"`);
       await execAsync(`tmux send-keys -t "${sessionName}" Enter`);
     }
