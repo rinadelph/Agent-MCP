@@ -49,9 +49,12 @@ for parent_level in range(3):  # Go up to 3 levels
         # Manually set the environment variables
         for key, value in env_vars.items():
             os.environ[key] = value
-        print(
-            f"Set OPENAI_API_KEY in environ: {os.environ.get('OPENAI_API_KEY', 'NOT FOUND')[:10]}..."
-        )
+        # Check if API key was set (without logging the actual key)
+        api_key = os.environ.get('OPENAI_API_KEY')
+        if api_key:
+            print("OPENAI_API_KEY successfully loaded from environment")
+        else:
+            print("OPENAI_API_KEY not found in environment")
         break
 
 # Also try normal load_dotenv in case
