@@ -367,7 +367,10 @@ bundle-analysis.json
 agent_mcp/static/
 
 # Claude specific files
-**/.claude/settings.local.json
+.claude/
+**/.claude/
+.claude/**
+**/.claude/**
 
 # Conversation directories (sensitive data)
 conversations/
