@@ -51,8 +51,9 @@ export async function detectAdminSessionByToken(adminToken: string): Promise<str
         // Capture the session output and count admin token occurrences
         const { stdout: sessionOutput } = await execAsync(`tmux capture-pane -t "${name}" -p`);
         
-        // Count occurrences of the admin token
-        const tokenMatches = sessionOutput.match(new RegExp(adminToken, 'g'));
+        // Count occurrences of the admin token (escape regex special characters)
+        const escapedToken = adminToken.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const tokenMatches = sessionOutput.match(new RegExp(escapedToken, 'g'));
         const tokenCount = tokenMatches ? tokenMatches.length : 0;
         
         // Calculate score based on token usage and session status
