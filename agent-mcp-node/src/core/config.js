@@ -3,7 +3,7 @@
 import { join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
 // Version information
-export const VERSION = "1.0.0";
+export const VERSION = "4.0";
 export const GITHUB_REPO = "rinadelph/Agent-MCP";
 export const AUTHOR = "Luis Alejandro Rincon";
 export const GITHUB_URL = "https://github.com/rinadelph";

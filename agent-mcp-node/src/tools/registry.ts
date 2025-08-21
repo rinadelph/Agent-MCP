@@ -146,7 +146,7 @@ class ToolRegistry {
   private async trackAdminSession(args: Record<string, any>): Promise<void> {
     try {
       // Check if this call uses an admin token
-      const adminToken = args.admin_token || args.token;
+      const adminToken = args.token;
       
       if (adminToken && verifyToken(adminToken, 'admin')) {
         // Detect the admin session by looking for token usage in tmux sessions

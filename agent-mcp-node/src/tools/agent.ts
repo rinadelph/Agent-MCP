@@ -89,13 +89,13 @@ registerTool(
     agent_id: z.string().describe('Unique identifier for the agent'),
     capabilities: z.array(z.string()).optional().describe('List of agent capabilities'),
     task_ids: z.array(z.string()).optional().describe('List of task IDs to assign to the agent (required - must have at least one task)'),
-    admin_token: z.string().describe('Admin authentication token (required)')
+    token: z.string().describe('Admin authentication token (required)')
   }),
   async (args, context) => {
-    const { agent_id, capabilities = [], task_ids = [], admin_token } = args;
+    const { agent_id, capabilities = [], task_ids = [], token } = args;
     
     // Verify admin authentication - REQUIRED
-    if (!admin_token || !verifyToken(admin_token, 'admin')) {
+    if (!token || !verifyToken(token, 'admin')) {
       return {
         content: [{
           type: 'text' as const,
@@ -262,7 +262,7 @@ registerTool(
       if (await isTmuxAvailable()) {
         try {
           // Create sanitized session name
-          const tmuxSessionName = generateAgentSessionName(agent_id, admin_token);
+          const tmuxSessionName = generateAgentSessionName(agent_id, token);
           
           // Create the tmux session (without immediate command, no environment variables)
           if (await createTmuxSession(tmuxSessionName, workingDir, undefined, undefined)) {
@@ -445,7 +445,7 @@ registerTool(
   'view_status',
   'View the status of all agents, connections, and the MCP server',
   z.object({
-    admin_token: z.string().optional().describe('Admin authentication token (optional - uses session context)')
+    token: z.string().optional().describe('Admin authentication token (optional - uses session context)')
   }),
   async (args, context) => {
     // For MCP usage, default to admin access for system status
@@ -546,13 +546,13 @@ registerTool(
   'Admin-only tool to terminate an active agent with the given ID. Requires valid admin token.',
   z.object({
     agent_id: z.string().describe('Unique identifier for the agent to terminate'),
-    admin_token: z.string().describe('Admin authentication token (required)')
+    token: z.string().describe('Admin authentication token (required)')
   }),
   async (args, context) => {
-    const { agent_id, admin_token } = args;
+    const { agent_id, token } = args;
     
     // Verify admin authentication - REQUIRED
-    if (!admin_token || !verifyToken(admin_token, 'admin')) {
+    if (!token || !verifyToken(token, 'admin')) {
       return {
         content: [{
           type: 'text' as const,
@@ -782,7 +782,7 @@ registerTool(
   'relaunch_agent',
   'Relaunch an existing terminated/completed/failed/cancelled agent by reusing its tmux session. Sends /clear to reset and sends a new prompt.',
   z.object({
-    admin_token: z.string().describe('Admin authentication token'),
+    token: z.string().describe('Admin authentication token'),
     agent_id: z.string().describe('ID of the agent to relaunch'),
     generate_new_token: z.boolean().optional().default(false).describe('Generate a new token for the relaunched agent'),
     custom_prompt: z.string().optional().describe('Custom prompt to send instead of template prompt'),
@@ -790,10 +790,10 @@ registerTool(
   }),
   async (args, context) => {
     try {
-      const { admin_token, agent_id, generate_new_token = false, custom_prompt, prompt_template = 'worker_with_rag' } = args;
+      const { token, agent_id, generate_new_token = false, custom_prompt, prompt_template = 'worker_with_rag' } = args;
 
       // Admin authentication
-      if (!verifyToken(admin_token, 'admin')) {
+      if (!verifyToken(token, 'admin')) {
         return {
           content: [{ type: 'text' as const, text: 'Unauthorized: Admin token required' }],
           isError: true
@@ -966,17 +966,17 @@ registerTool(
   'audit_agent_sessions',
   'Intelligently audit agent tmux sessions. Analyzes activity patterns, task status, and recommends actions rather than auto-fixing.',
   z.object({
-    admin_token: z.string().describe('Admin authentication token'),
+    token: z.string().describe('Admin authentication token'),
     auto_cleanup_dead: z.boolean().optional().default(true).describe('Auto cleanup clearly dead sessions'),
     stale_threshold_minutes: z.number().optional().default(10).describe('Minutes of inactivity before considering stale'),
     kill_stale_sessions: z.boolean().optional().default(false).describe('Automatically kill stale sessions')
   }),
   async (args, context) => {
     try {
-      const { admin_token, auto_cleanup_dead = true, stale_threshold_minutes = 10, kill_stale_sessions = false } = args;
+      const { token, auto_cleanup_dead = true, stale_threshold_minutes = 10, kill_stale_sessions = false } = args;
 
       // Admin authentication
-      if (!verifyToken(admin_token, 'admin')) {
+      if (!verifyToken(token, 'admin')) {
         return {
           content: [{ type: 'text' as const, text: 'Unauthorized: Admin token required' }],
           isError: true
@@ -984,7 +984,7 @@ registerTool(
       }
 
       const db = getDbConnection();
-      const adminTokenSuffix = admin_token.slice(-4).toLowerCase();
+      const adminTokenSuffix = token.slice(-4).toLowerCase();
       
       // Get all agents from database
       const agents = db.prepare('SELECT agent_id, status, token FROM agents').all() as any[];
@@ -1132,16 +1132,16 @@ registerTool(
   'smart_audit_agents',
   'Intelligently audit agents with activity analysis, task status checking, and smart recommendations for cleanup.',
   z.object({
-    admin_token: z.string().describe('Admin authentication token'),
+    token: z.string().describe('Admin authentication token'),
     stale_threshold_minutes: z.number().optional().default(10).describe('Minutes of inactivity before considering stale'),
     auto_kill_stale: z.boolean().optional().default(false).describe('Automatically kill sessions with no activity')
   }),
   async (args, context) => {
     try {
-      const { admin_token, stale_threshold_minutes = 10, auto_kill_stale = false } = args;
+      const { token, stale_threshold_minutes = 10, auto_kill_stale = false } = args;
 
       // Admin authentication
-      if (!verifyToken(admin_token, 'admin')) {
+      if (!verifyToken(token, 'admin')) {
         return {
           content: [{ type: 'text' as const, text: 'Unauthorized: Admin token required' }],
           isError: true
@@ -1149,7 +1149,7 @@ registerTool(
       }
 
       const db = getDbConnection();
-      const adminTokenSuffix = admin_token.slice(-4).toLowerCase();
+      const adminTokenSuffix = token.slice(-4).toLowerCase();
       const staleThresholdMs = stale_threshold_minutes * 60 * 1000;
       const now = new Date();
       

@@ -356,6 +356,58 @@ export function initDatabase(): void {
       ON file_status (status, locked_at DESC)
     `);
     
+    // MCP Session Persistence Table for connection recovery
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS mcp_session_persistence (
+        mcp_session_id TEXT PRIMARY KEY,
+        transport_state TEXT NOT NULL,     -- JSON serialized transport state
+        agent_context TEXT,                -- JSON serialized agent context
+        conversation_state TEXT,           -- JSON serialized conversation history
+        created_at TEXT NOT NULL,
+        last_heartbeat TEXT NOT NULL,
+        disconnected_at TEXT,              -- When connection dropped
+        recovery_attempts INTEGER DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'active', -- 'active', 'disconnected', 'recovered', 'expired'
+        grace_period_expires TEXT,         -- When recovery window closes
+        working_directory TEXT,
+        metadata TEXT                      -- Additional recovery metadata
+      )
+    `);
+    
+    // Indexes for mcp_session_persistence
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_mcp_sessions_status_heartbeat 
+      ON mcp_session_persistence (status, last_heartbeat DESC)
+    `);
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_mcp_sessions_recovery 
+      ON mcp_session_persistence (status, grace_period_expires)
+    `);
+    
+    // Agent Session State Table for preserving long-running context
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS agent_session_state (
+        agent_id TEXT,
+        mcp_session_id TEXT,
+        state_key TEXT,
+        state_value TEXT NOT NULL,         -- JSON serialized state data
+        last_updated TEXT NOT NULL,
+        expires_at TEXT,                   -- Optional expiration
+        PRIMARY KEY (agent_id, mcp_session_id, state_key),
+        FOREIGN KEY (mcp_session_id) REFERENCES mcp_session_persistence(mcp_session_id)
+      )
+    `);
+    
+    // Indexes for agent_session_state
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_agent_session_state_session 
+      ON agent_session_state (mcp_session_id, last_updated DESC)
+    `);
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_agent_session_state_expiry 
+      ON agent_session_state (expires_at)
+    `);
+    
     console.log("✅ Core tables created successfully");
     
     // RAG Embeddings Virtual Table (using sqlite-vec)
@@ -409,7 +461,7 @@ export function getDatabaseStats(): Record<string, number> {
   const tables = [
     'agents', 'tasks', 'agent_actions', 'admin_config', 'project_context', 
     'file_metadata', 'rag_chunks', 'rag_meta', 'agent_messages', 
-    'claude_code_sessions', 'file_status'
+    'claude_code_sessions', 'file_status', 'mcp_session_persistence', 'agent_session_state'
   ];
   
   for (const table of tables) {
