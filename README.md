@@ -56,6 +56,8 @@ Monitor every agent's status, assigned tasks, and recent activity. The system au
 
 ## Quick Start
 
+### Python Implementation (Recommended)
+
 ```bash
 # Clone and setup
 git clone https://github.com/rinadelph/Agent-MCP.git
@@ -71,13 +73,39 @@ nvm use  # Uses the version specified in .nvmrc
 
 # Configure environment
 cp .env.example .env  # Add your OpenAI API key
-uv venv && uv pip install -e .
+uv venv
+uv install
 
 # Start the server
-uv run -m agent_mcp.cli --project-dir /path/to/your/project
+uv run -m agent_mcp.cli --port 8080 --project-dir path-to-directory
 
 # Launch dashboard (recommended for full experience)
 cd agent_mcp/dashboard && npm install && npm run dev
+```
+
+### Node.js/TypeScript Implementation (Alternative)
+
+```bash
+# Clone and setup
+git clone https://github.com/rinadelph/Agent-MCP.git
+cd Agent-MCP/agent-mcp-node
+
+# Install dependencies
+npm install
+
+# Configure environment
+cp .env.example .env  # Add your OpenAI API key
+
+# Start the server
+npm run server
+
+# Or use the built version
+npm run build
+npm start
+
+# Or install globally
+npm install -g agent-mcp-node
+agent-mcp --port 8080 --project-dir path-to-directory
 ```
 
 ## MCP Integration Guide
@@ -94,10 +122,11 @@ Agent-MCP can function as an MCP server, exposing its multi-agent capabilities t
 
 ```bash
 # 1. Install Agent-MCP
-pip install -e .
+uv venv
+uv install
 
 # 2. Start the MCP server
-python -m agent_mcp.mcp_server --port 8000
+uv run -m agent_mcp.cli --port 8080
 
 # 3. Configure your MCP client to connect to:
 # HTTP: http://localhost:8000/mcp
@@ -155,8 +184,8 @@ Create an MCP configuration file (`mcp_config.json`):
    {
      "mcpServers": {
        "agent-mcp": {
-         "command": "python",
-         "args": ["-m", "agent_mcp.mcp_server"],
+         "command": "uv",
+         "args": ["run", "-m", "agent_mcp.cli", "--port", "8080"],
          "env": {
            "OPENAI_API_KEY": "your-openai-api-key"
          }
@@ -198,13 +227,13 @@ Once connected, you can use these MCP tools directly in Claude:
 **Custom Transport Options**:
 ```bash
 # HTTP with custom port
-python -m agent_mcp.mcp_server --transport http --port 8080
+uv run -m agent_mcp.cli --port 8080
 
 # WebSocket with authentication
-python -m agent_mcp.mcp_server --transport ws --auth-token your-secret-token
+uv run -m agent_mcp.cli --port 8080 --auth-token your-secret-token
 
 # Unix socket (Linux/macOS)
-python -m agent_mcp.mcp_server --transport unix --socket-path /tmp/agent-mcp.sock
+uv run -m agent_mcp.cli --port 8080
 ```
 
 **Environment Variables**:
@@ -279,7 +308,7 @@ curl http://localhost:8000/mcp/health
 wscat -c ws://localhost:8000/mcp/ws
 
 # Check server logs
-python -m agent_mcp.mcp_server --log-level DEBUG
+uv run -m agent_mcp.cli --port 8080 --log-level DEBUG
 ```
 
 **Common Issues**:
@@ -306,7 +335,7 @@ curl -X POST http://localhost:8000/mcp/tools/assign_task \
 # GitHub Actions example
 - name: Run Agent-MCP Code Review
   run: |
-    python -m agent_mcp.mcp_server --daemon
+    uv run -m agent_mcp.cli --port 8080 --daemon
     curl -X POST localhost:8000/mcp/tools/assign_task \
       -d '{"task": "Review PR for security issues", "agent_role": "security"}'
 ```
