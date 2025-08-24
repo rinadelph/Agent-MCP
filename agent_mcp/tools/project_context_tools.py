@@ -1189,10 +1189,16 @@ def register_project_context_tools():
                     "description": "The exact key for the context entry (e.g., 'api.service_x.url').",
                 },
                 "context_value": {
-                    "type": "object",
                     "description": "The JSON-serializable value to set (e.g., string, number, list, dict).",
-                    "additionalProperties": True,
-                },  # Allow any valid JSON as value
+                    "anyOf": [
+                        {"type": "string"},
+                        {"type": "number"},
+                        {"type": "boolean"},
+                        {"type": "null"},
+                        {"type": "object", "additionalProperties": True},
+                        {"type": "array"}
+                    ]
+                },
                 "description": {
                     "type": "string",
                     "description": "Optional description of this context entry.",
@@ -1222,7 +1228,15 @@ def register_project_context_tools():
                                 "description": "The context key to update",
                             },
                             "context_value": {
-                                "description": "The new value (any JSON-serializable type)"
+                                "description": "The new value (any JSON-serializable type)",
+                                "anyOf": [
+                                    {"type": "string"},
+                                    {"type": "number"},
+                                    {"type": "boolean"},
+                                    {"type": "null"},
+                                    {"type": "object"},
+                                    {"type": "array"}
+                                ]
                             },
                             "description": {
                                 "type": "string",
