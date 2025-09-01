@@ -1,5 +1,37 @@
 # CHANGELOG - Agent-MCP Node.js
 
+## [4.20.0] - 2025-09-01
+
+### 🚀 Major Testing System Overhaul - Comprehensive Audit Access
+
+#### 🔍 Testing Task System
+- **NEW**: Comprehensive testing tasks that give testing agents full visibility into original agent work
+- Testing agents now receive dedicated testing tasks containing:
+  - All subtasks created by the original agent
+  - Context entries modified during work
+  - Files changed with notes
+  - Complete agent action logs
+  - Detailed work history and audit trail
+
+#### 🛠️ Implementation Details
+- Added `src/tools/testingTasks.ts` with:
+  - `createTestingTask`: Creates comprehensive testing tasks with full audit information
+  - `getAuditReport`: Generates detailed reports of agent work
+- Modified `src/utils/testingAgent.ts` to:
+  - Create testing tasks before launching testing agents
+  - Pass testing task ID to testing agents for full access
+  - Include audit summary in agent initialization
+- Updated `src/utils/promptTemplates.ts`:
+  - Testing agents now reference their testing task for audit data
+  - Clear instructions on accessing subtasks, context, and file changes
+  - Improved response protocol for pass/fail scenarios
+
+#### 🎯 Benefits
+- Testing agents can now properly audit all work done by original agents
+- Full transparency into implementation changes
+- Better validation through comprehensive access to work history
+- Eliminates blind spots in testing coverage
+
 ## [4.0.1] - 2025-09-01
 
 ### 🎨 Major Resource System Overhaul - Visual Enhancement & Security

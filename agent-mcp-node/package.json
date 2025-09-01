@@ -1,6 +1,6 @@
 {
   "name": "agent-mcp-node",
-  "version": "4.0.0",
+  "version": "4.20.0",
   "description": "Agent-MCP TypeScript/Node.js implementation with backwards compatibility",
   "main": "build/index.js",
   "type": "module",
