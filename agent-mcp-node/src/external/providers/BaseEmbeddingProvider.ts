@@ -50,6 +50,11 @@ export abstract class BaseEmbeddingProvider implements EmbeddingProvider {
   protected abstract isLocalProvider(): boolean;
   
   /**
+   * Check if the provider is available for use (override in subclass)
+   */
+  abstract isAvailable(): Promise<boolean>;
+  
+  /**
    * Internal method to generate embeddings (implement in subclass)
    */
   protected abstract generateEmbeddingsInternal(texts: string[]): Promise<number[][]>;

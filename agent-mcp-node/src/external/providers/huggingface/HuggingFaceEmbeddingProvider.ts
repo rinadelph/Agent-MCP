@@ -36,9 +36,10 @@ export class HuggingFaceEmbeddingProvider extends BaseEmbeddingProvider {
     if (PROVIDER_CONFIG.HUGGINGFACE_USE_LOCAL) {
       // Check if Transformers.js is available
       try {
-        await import('@xenova/transformers');
-        return true;
-      } catch {
+        // Check if Transformers.js module can be resolved
+        const transformersModule = await import('@xenova/transformers' as string);
+        return !!transformersModule;
+      } catch (error) {
         console.warn('Transformers.js not installed. Run: npm install @xenova/transformers');
         return false;
       }

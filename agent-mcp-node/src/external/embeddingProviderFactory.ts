@@ -335,7 +335,7 @@ export async function testProvider(type: string): Promise<boolean> {
     const testText = 'This is a test embedding';
     const embeddings = await provider.generateEmbeddings([testText]);
     
-    if (embeddings.length > 0 && embeddings[0].length === provider.getDimensions()) {
+    if (embeddings.length > 0 && embeddings[0]?.length === provider.getDimensions()) {
       console.log(`✅ ${provider.getName()} provider test successful`);
       return true;
     }

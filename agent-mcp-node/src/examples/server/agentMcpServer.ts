@@ -27,15 +27,16 @@ import {
   recoverSession,
   getActiveSessions 
 } from "../../utils/sessionPersistence.js";
-import "../../tools/basic.js"; // Register basic tools
-import "../../tools/agent.js"; // Register agent management tools  
-import "../../tools/agentCommunication.js"; // Register agent communication tools
-import "../../tools/assistanceRequest.js"; // Register intelligent assistance request
-import "../../tools/tasks/index.js"; // Register task management tools
-import "../../tools/rag.js"; // Register RAG tools
-import "../../tools/file_management.js"; // Register file management tools
-import "../../tools/project_context.js"; // Register project context tools
-import "../../tools/sessionState.js"; // Register session state management tools
+// Tool imports will be loaded conditionally based on configuration
+import { 
+  ToolCategories, 
+  loadToolConfig, 
+  saveToolConfig, 
+  PREDEFINED_MODES, 
+  applyEnvironmentOverrides,
+  validateToolConfig 
+} from "../../core/toolConfig.js";
+import { initializeRuntimeConfigManager, getRuntimeConfigManager } from "../../core/runtimeConfig.js";
 // Resources will be handled directly in server setup
 import { MCP_DEBUG, VERSION, TUIColors, AUTHOR, GITHUB_URL } from "../../core/config.js";
 
@@ -48,6 +49,31 @@ program
   .option('-p, --port <number>', 'port to run the server on', '3001')
   .option('-h, --host <host>', 'host to bind the server to', '0.0.0.0')
   .option('--project-dir <path>', 'project directory to operate in', process.cwd())
+  .option('--config-mode', 'launch interactive configuration TUI (same as default)')
+  .option('--mode <mode>', 'use predefined mode (full, memoryRag, minimal, development, background)')
+  .option('--no-tui', 'skip TUI and use saved/default configuration')
+  .addHelpText('after', `
+Tool Configuration Modes:
+  full         All tools enabled - complete agent orchestration (33+ tools)
+  memoryRag    Memory + RAG only - lightweight mode (15 tools)
+  minimal      Basic tools only - health checks (1 tool)  
+  development  Development tools without agent orchestration (varies)
+  background   Background agents with memory/RAG - no hierarchical tasks (varies)
+
+Examples:
+  npm run server                                  # Launch configuration TUI (default)
+  npm run server --mode memoryRag                 # Use Memory + RAG mode directly
+  npm run server --mode minimal --no-tui          # Minimal mode, skip TUI
+  npm run server --no-tui                         # Use saved configuration, skip TUI
+
+Environment Variables:
+  AGENT_MCP_SKIP_TUI=true                         # Always skip TUI
+  AGENT_MCP_ENABLE_RAG=false                      # Override RAG setting
+  AGENT_MCP_ENABLE_AGENTS=false                   # Override agent management
+  CI=true                                         # Automatically skip TUI in CI
+
+Configuration is saved to .agent/tool-config.json for persistence.
+`)
   .parse();
 
 const options = program.opts();
@@ -65,6 +91,62 @@ if (options.projectDir !== process.cwd()) {
     console.error(error);
     process.exit(1);
   }
+}
+
+// Handle tool configuration
+let toolConfig: ToolCategories;
+
+// Handle configuration mode
+if (options.configMode || options.interactive) {
+  // Both --config-mode and --interactive now use the same pre-launch TUI
+  const { launchPreConfigurationTUI } = await import("../../tui/prelaunch.js");
+  const tuiResult = await launchPreConfigurationTUI();
+  toolConfig = tuiResult.toolConfig;
+  
+  // Use port from TUI configuration if available
+  if (tuiResult.serverPort && tuiResult.serverPort !== parseInt(program.opts().port || '3001')) {
+    console.log(`${TUIColors.OKBLUE}🌐 Using TUI configured port: ${tuiResult.serverPort}${TUIColors.ENDC}`);
+    program.setOptionValue('port', tuiResult.serverPort.toString());
+  }
+} else if (options.mode) {
+  // Use predefined mode
+  const predefinedMode = PREDEFINED_MODES[options.mode as keyof typeof PREDEFINED_MODES];
+  if (!predefinedMode) {
+    console.error(`❌ Unknown mode: ${options.mode}`);
+    console.error(`Available modes: ${Object.keys(PREDEFINED_MODES).join(', ')}`);
+    process.exit(1);
+  }
+  toolConfig = predefinedMode.categories;
+  saveToolConfig(toolConfig, options.mode);
+  console.log(`📝 Using ${predefinedMode.name}: ${predefinedMode.description}`);
+} else {
+  // Default behavior: Show TUI unless explicitly skipped
+  if (!options.noTui && !process.env.CI && !process.env.AGENT_MCP_SKIP_TUI) {
+    // Launch pre-configuration TUI by default
+    const { launchPreConfigurationTUI } = await import("../../tui/prelaunch.js");
+    const tuiResult = await launchPreConfigurationTUI();
+    toolConfig = tuiResult.toolConfig;
+    
+    // Use port from TUI configuration if available
+    if (tuiResult.serverPort && tuiResult.serverPort !== parseInt(program.opts().port || '3001')) {
+      console.log(`${TUIColors.OKBLUE}🌐 Using TUI configured port: ${tuiResult.serverPort}${TUIColors.ENDC}`);
+      program.setOptionValue('port', tuiResult.serverPort.toString());
+    }
+  } else {
+    // Skip TUI - load existing configuration or use default
+    toolConfig = loadToolConfig();
+    console.log(`${TUIColors.DIM}🔄 Using saved configuration (use --config-mode to change)${TUIColors.ENDC}`);
+  }
+}
+
+// Apply environment variable overrides
+toolConfig = applyEnvironmentOverrides(toolConfig);
+
+// Validate configuration
+const validation = validateToolConfig(toolConfig);
+if (validation.warnings.length > 0 && MCP_DEBUG) {
+  console.log(`${TUIColors.WARNING}⚠️  Configuration warnings:${TUIColors.ENDC}`);
+  validation.warnings.forEach(warning => console.log(`   • ${warning}`));
 }
 
 // Display colorful ASCII art banner (matching Python version)
@@ -143,6 +225,88 @@ function displayBanner() {
 
 // Display the banner
 displayBanner();
+
+// Conditionally load tools based on configuration
+async function loadToolsConditionally(config: ToolCategories): Promise<void> {
+  console.log("🔧 Loading tools based on configuration...");
+  
+  const enabledCategories = Object.entries(config)
+    .filter(([_, enabled]) => enabled)
+    .map(([category, _]) => category);
+  
+  console.log(`📦 Enabled categories: ${TUIColors.OKGREEN}${enabledCategories.join(', ')}${TUIColors.ENDC}`);
+  
+  // Basic tools are always loaded
+  if (config.basic) {
+    await import("../../tools/basic.js");
+    await import("../../tools/tokenHelper.js");
+    if (MCP_DEBUG) console.log("✅ Basic tools loaded (including token helpers)");
+  }
+  
+  // RAG tools
+  if (config.rag) {
+    await import("../../tools/rag.js");
+    if (MCP_DEBUG) console.log("✅ RAG tools loaded");
+  }
+  
+  // Memory/Project context tools
+  if (config.memory) {
+    await import("../../tools/project_context.js");
+    if (MCP_DEBUG) console.log("✅ Memory/Project context tools loaded");
+  }
+  
+  // Agent management tools
+  if (config.agentManagement) {
+    await import("../../tools/agent.js");
+    if (MCP_DEBUG) console.log("✅ Agent management tools loaded");
+  }
+  
+  // Task management tools
+  if (config.taskManagement) {
+    await import("../../tools/tasks/index.js");
+    if (MCP_DEBUG) console.log("✅ Task management tools loaded");
+  }
+  
+  // File management tools
+  if (config.fileManagement) {
+    await import("../../tools/file_management.js");
+    if (MCP_DEBUG) console.log("✅ File management tools loaded");
+  }
+  
+  // Agent communication tools
+  if (config.agentCommunication) {
+    await import("../../tools/agentCommunication.js");
+    if (MCP_DEBUG) console.log("✅ Agent communication tools loaded");
+  }
+  
+  // Session state tools
+  if (config.sessionState) {
+    await import("../../tools/sessionState.js");
+    if (MCP_DEBUG) console.log("✅ Session state tools loaded");
+  }
+  
+  // Assistance request tools
+  if (config.assistanceRequest) {
+    await import("../../tools/assistanceRequest.js");
+    if (MCP_DEBUG) console.log("✅ Assistance request tools loaded");
+  }
+  
+  // Background agent tools
+  if (config.backgroundAgents) {
+    await import("../../tools/backgroundAgents.js");
+    if (MCP_DEBUG) console.log("✅ Background agent tools loaded");
+  }
+  
+  const loadedCount = enabledCategories.length;
+  const totalCount = Object.keys(config).length;
+  console.log(`✅ Loaded ${loadedCount}/${totalCount} tool categories`);
+}
+
+// Load tools based on configuration
+await loadToolsConditionally(toolConfig);
+
+// Initialize runtime configuration manager
+initializeRuntimeConfigManager(toolConfig);
 
 // Initialize database and check VSS on startup
 console.log("🚀 Starting Agent-MCP Node.js Server...");
@@ -281,13 +445,11 @@ const getServer = async () => {
         console.log(`📖 Reading agent resource: ${agentResource.uri}`);
       }
       
-      // Parse agent ID from URI
-      const match = agentResource.uri.match(/^agent:\/\/agent-mcp\/(.+)$/);
-      if (!match) {
+      // Parse agent ID from URI (format: agent://agent-id)
+      const agentId = agentResource.uri.replace('agent://', '');
+      if (!agentId) {
         throw new Error(`Invalid agent resource URI: ${agentResource.uri}`);
       }
-      
-      const agentId = match[1]!;
       const content = await getAgentResourceContent(agentId);
       
       if (!content) {
@@ -347,9 +509,100 @@ const getServer = async () => {
     });
   }
 
+  // Register MCP resources for tokens @ mentions
+  const { getTokenResources, getTokenResourceContent } = await import('../../resources/tokens.js');
+  
+  // Register each token as a dynamic resource
+  const tokenResources = await getTokenResources();
+  for (const tokenResource of tokenResources) {
+    server.resource(tokenResource.name, tokenResource.uri, {
+      description: tokenResource.description,
+      mimeType: tokenResource.mimeType
+    }, async () => {
+      if (MCP_DEBUG) {
+        console.log(`📖 Reading token resource: ${tokenResource.uri}`);
+      }
+      
+      const content = await getTokenResourceContent(tokenResource.uri);
+      
+      if (!content) {
+        throw new Error(`Token resource not found: ${tokenResource.uri}`);
+      }
+      
+      return {
+        contents: [{
+          uri: content.uri,
+          mimeType: content.mimeType,
+          text: content.text
+        }]
+      };
+    });
+  }
+
+  // Register Task resources for task management via @ mentions
+  const { getTaskResources, getTaskResourceContent } = await import('../../resources/tasks.js');
+  
+  const taskResources = await getTaskResources();
+  for (const taskResource of taskResources) {
+    server.resource(taskResource.name, taskResource.uri, {
+      description: taskResource.description,
+      mimeType: taskResource.mimeType
+    }, async () => {
+      if (MCP_DEBUG) {
+        console.log(`📋 Reading task resource: ${taskResource.uri}`);
+      }
+      
+      const content = await getTaskResourceContent(taskResource.uri);
+      
+      if (!content) {
+        throw new Error(`Task resource not found: ${taskResource.uri}`);
+      }
+      
+      return {
+        contents: [{
+          uri: content.uri,
+          mimeType: content.mimeType,
+          text: content.text
+        }]
+      };
+    });
+  }
+
+  // Register Create Agent resources for easy agent creation
+  const { getCreateAgentResources, getCreateAgentResourceContent } = await import('../../resources/createAgent.js');
+  
+  const createAgentResources = await getCreateAgentResources();
+  for (const createResource of createAgentResources) {
+    server.resource(createResource.name, createResource.uri, {
+      description: createResource.description,
+      mimeType: createResource.mimeType
+    }, async () => {
+      if (MCP_DEBUG) {
+        console.log(`🚀 Reading create agent resource: ${createResource.uri}`);
+      }
+      
+      const content = await getCreateAgentResourceContent(createResource.uri);
+      
+      if (!content) {
+        throw new Error(`Create agent template not found: ${createResource.uri}`);
+      }
+      
+      return {
+        contents: [{
+          uri: content.uri,
+          mimeType: content.mimeType,
+          text: content.text
+        }]
+      };
+    });
+  }
+
   console.log(`✅ Registered ${tools.length} tools`);
   console.log(`✅ Registered ${agents.length} agent resources`);
+  console.log(`📋 Registered ${taskResources.length} task resources`);
   console.log(`✅ Registered ${tmuxResources.length} tmux resources`);
+  console.log(`✅ Registered ${tokenResources.length} token resources`);
+  console.log(`🚀 Registered ${createAgentResources.length} create templates`);
   if (MCP_DEBUG) {
     console.log("🔧 Available tools:", tools.map(t => t.name).join(', '));
   }
@@ -544,12 +797,21 @@ app.get('/health', async (req, res) => {
   const transportCount = Object.keys(transports).length;
   const recoveredSessions = Object.values(transports).filter(t => t.isRecovered).length;
   
+  const { getConfigMode, getEnabledCategories } = await import("../../core/toolConfig.js");
+  const currentMode = getConfigMode(toolConfig);
+  const enabledCategories = getEnabledCategories(toolConfig);
+  
   res.json({
     status: 'healthy',
     server: 'agent-mcp-node',
     version: VERSION,
     port: PORT,
     timestamp: new Date().toISOString(),
+    configuration: {
+      mode: currentMode || 'custom',
+      enabled_categories: enabledCategories,
+      total_categories: Object.keys(toolConfig).length
+    },
     sessions: {
       active_transports: transportCount,
       persistent_sessions: activeSessions.length,
@@ -575,7 +837,19 @@ app.get('/stats', async (req, res) => {
     const transportCount = Object.keys(transports).length;
     const recoveredSessions = Object.values(transports).filter(t => t.isRecovered).length;
     
+    const { getConfigMode, getEnabledCategories, getDisabledCategories } = await import("../../core/toolConfig.js");
+    const currentMode = getConfigMode(toolConfig);
+    const enabledCategories = getEnabledCategories(toolConfig);
+    const disabledCategories = getDisabledCategories(toolConfig);
+    
     res.json({
+      configuration: {
+        mode: currentMode || 'custom',
+        enabled_categories: enabledCategories,
+        disabled_categories: disabledCategories,
+        total_categories: Object.keys(toolConfig).length,
+        details: toolConfig
+      },
       database: stats,
       sessions: {
         active_transports: transportCount,
@@ -583,10 +857,17 @@ app.get('/stats', async (req, res) => {
         recovered_sessions: recoveredSessions,
         session_details: activeSessions
       },
-      tools: toolRegistry.getTools().length,
-      vssSupported: vssAvailable,
-      uptime: Math.floor(process.uptime()),
-      memory: process.memoryUsage(),
+      tools: {
+        total_tools: toolRegistry.getTools().length,
+        tool_names: toolRegistry.getTools().map(t => t.name)
+      },
+      system: {
+        vssSupported: vssAvailable,
+        uptime: Math.floor(process.uptime()),
+        memory: process.memoryUsage(),
+        node_version: process.version,
+        platform: process.platform
+      },
       session_recovery: {
         enabled: true,
         grace_period_minutes: 10,
@@ -678,6 +959,70 @@ app.post('/sessions/:sessionId/recover', async (req, res) => {
   }
 });
 
+// Configuration management endpoints
+app.get('/config', async (req, res) => {
+  try {
+    const manager = getRuntimeConfigManager();
+    const config = manager.getCurrentConfig();
+    const { getConfigMode, getEnabledCategories, getDisabledCategories } = await import("../../core/toolConfig.js");
+    
+    res.json({
+      mode: getConfigMode(config) || 'custom',
+      categories: config,
+      enabled_categories: getEnabledCategories(config),
+      disabled_categories: getDisabledCategories(config),
+      estimated_tools: manager.getToolCount(),
+      actual_tools: toolRegistry.getTools().length
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to get configuration',
+      details: error instanceof Error ? error.message : String(error)
+    });
+  }
+});
+
+app.post('/config', async (req, res) => {
+  try {
+    const newConfig = req.body;
+    
+    // Validate the configuration structure
+    const requiredKeys = ['basic', 'rag', 'memory', 'agentManagement', 'taskManagement', 'fileManagement', 'agentCommunication', 'sessionState', 'assistanceRequest'];
+    const missingKeys = requiredKeys.filter(key => !(key in newConfig));
+    
+    if (missingKeys.length > 0) {
+      return res.status(400).json({
+        error: 'Invalid configuration',
+        details: `Missing required keys: ${missingKeys.join(', ')}`
+      });
+    }
+    
+    // Ensure basic is always enabled
+    newConfig.basic = true;
+    
+    const manager = getRuntimeConfigManager();
+    const result = await manager.updateConfiguration(newConfig);
+    
+    res.json({
+      success: result.success,
+      changes: result.changes,
+      errors: result.errors,
+      new_configuration: manager.getCurrentConfig()
+    });
+    
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to update configuration',
+      details: error instanceof Error ? error.message : String(error)
+    });
+  }
+});
+
+// Prepare configuration info for display
+const { getConfigMode, getEnabledCategories } = await import("../../core/toolConfig.js");
+const currentMode = getConfigMode(toolConfig);
+const enabledCategories = getEnabledCategories(toolConfig);
+
 // Start the server
 const httpServer = app.listen(PORT, HOST, () => {
   console.log("\n🎉 Agent-MCP Node.js Server is ready!");
@@ -687,7 +1032,10 @@ const httpServer = app.listen(PORT, HOST, () => {
   console.log(`❤️  Health Check: ${TUIColors.OKCYAN}http://${HOST}:${PORT}/health${TUIColors.ENDC}`);
   console.log(`📊 Statistics: ${TUIColors.OKCYAN}http://${HOST}:${PORT}/stats${TUIColors.ENDC}`);
   console.log(TUIColors.OKBLUE + "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" + TUIColors.ENDC);
+  
   console.log(`🔧 Available Tools: ${TUIColors.OKGREEN}${toolRegistry.getTools().length}${TUIColors.ENDC}`);
+  console.log(`⚙️  Configuration: ${currentMode && PREDEFINED_MODES[currentMode] ? TUIColors.OKGREEN + PREDEFINED_MODES[currentMode].name : TUIColors.WARNING + 'Custom'}${TUIColors.ENDC}`);
+  console.log(`📦 Tool Categories: ${TUIColors.OKCYAN}${enabledCategories.length}/${Object.keys(toolConfig).length} enabled${TUIColors.ENDC}`);
   console.log(`🗄️  Vector Search: ${vssAvailable ? TUIColors.OKGREEN + 'Enabled' : TUIColors.WARNING + 'Disabled'}${TUIColors.ENDC}`);
   console.log(`📝 Debug Mode: ${MCP_DEBUG ? TUIColors.OKGREEN + 'On' : TUIColors.DIM + 'Off'}${TUIColors.ENDC}`);
   console.log(TUIColors.OKBLUE + "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" + TUIColors.ENDC);

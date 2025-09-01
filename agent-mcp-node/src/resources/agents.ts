@@ -3,14 +3,10 @@
 
 import { getDbConnection } from '../db/connection.js';
 import { MCP_DEBUG } from '../core/config.js';
+import { createColoredResource, ColoredResource } from '../core/resourceColors.js';
 
-// Resource interfaces
-export interface AgentResource {
-  uri: string;
-  name: string;
-  description: string;
-  mimeType: string;
-}
+// Use the enhanced colored resource interface
+export interface AgentResource extends ColoredResource {}
 
 export interface AgentResourceContent {
   uri: string;
@@ -45,26 +41,47 @@ export async function getAgentResources(): Promise<AgentResource[]> {
     const agents = stmt.all();
     
     return agents.map((agent: any) => {
-      let statusDescription = '';
+      // Semantic status and color mapping
+      let color = 'blue';
+      let status = 'ready';
+      let description = 'agent';
       
       if (agent.current_task && agent.task_status === 'in_progress') {
-        const totalTasks = agent.completed_tasks + agent.active_tasks + agent.pending_tasks;
-        statusDescription = `🔄 working (${agent.completed_tasks + 1} of ${totalTasks})`;
+        color = 'yellow';
+        status = 'working';
+        description = `🔄 ${agent.task_title || 'working'}`;
       } else if (agent.completed_tasks > 0 && !agent.current_task) {
-        statusDescription = `✅ completed (${agent.completed_tasks} tasks)`;
+        color = 'green';
+        status = 'completed';
+        description = `✅ ${agent.completed_tasks} done`;
       } else if (agent.pending_tasks > 0) {
-        statusDescription = `📋 pending (${agent.pending_tasks} tasks)`;
+        color = 'cyan';
+        status = 'pending';
+        description = `📋 ${agent.pending_tasks} pending`;
       } else if (agent.status === 'active') {
-        statusDescription = '🟢 active';
-      } else {
-        statusDescription = '🔵 ready';
+        color = 'green';
+        status = 'active';
+        description = '🟢 ready';
       }
       
+      // Get ANSI color code for the name - using RGB orange for working agents
+      const ansiCode = color === 'yellow' ? '\x1b[1;38;2;255;165;0m' : // Bold orange for working
+                      color === 'green' ? '\x1b[1;92m' :   // Bold bright green for ready
+                      color === 'cyan' ? '\x1b[1;96m' :    // Bold bright cyan for pending
+                      color === 'blue' ? '\x1b[1;94m' : '\x1b[1;97m'; // Bold bright colors
+      
       return {
-        uri: `agent://agent-mcp/${agent.agent_id}`,
-        name: `@${agent.agent_id}`,
-        description: statusDescription,
-        mimeType: 'application/json'
+        uri: `agent://${agent.agent_id}`,
+        name: `${ansiCode}@${agent.agent_id}\x1b[0m`,
+        description: `${ansiCode}${description}\x1b[0m`,
+        mimeType: 'application/json',
+        annotations: {
+          color,
+          type: 'agent',
+          status,
+          priority: color === 'yellow' ? 'high' : 'normal',
+          category: 'automation'
+        }
       };
     });
   } catch (error) {
@@ -126,33 +143,33 @@ export async function getAgentResourceContent(agentId: string): Promise<AgentRes
     const tmuxSessionName = `${agent.agent_id}-148f`;
     
     const agentSummary = {
-      "🤖 Agent": `@${agent.agent_id}`,
-      "📊 Status": agent.status,
-      "🎯 Capabilities": agent.capabilities ? JSON.parse(agent.capabilities) : [],
-      "📁 Working Directory": agent.working_directory,
-      "🕒 Created": new Date(agent.created_at).toLocaleString(),
+      "\x1b[96m🤖 Agent\x1b[0m (cyan)": `@${agent.agent_id}`,
+      "\x1b[92m📊 Status\x1b[0m (green)": agent.status,
+      "\x1b[93m🎯 Capabilities\x1b[0m (yellow)": agent.capabilities ? JSON.parse(agent.capabilities) : [],
+      "\x1b[94m📁 Working Directory\x1b[0m (blue)": agent.working_directory,
+      "\x1b[95m🕒 Created\x1b[0m (magenta)": new Date(agent.created_at).toLocaleString(),
       "─────────────────": "─────────────────",
-      "🔧 TMUX SESSION": "─────────────────",
+      "\x1b[97m🔧 TMUX SESSION\x1b[0m (white)": "─────────────────",
       "Session Name": tmuxSessionName,
       "Connect Command": `tmux attach-session -t ${tmuxSessionName}`,
       "View Logs": `tmux capture-pane -t ${tmuxSessionName} -p`,
       "─────────────────1": "─────────────────",
-      "📋 CURRENT TASK": agent.current_task ? {
+      "\x1b[91m📋 CURRENT TASK\x1b[0m (red)": agent.current_task ? {
         "Task ID": agent.current_task,
-        "Title": agent.current_task_title,
+        "Title": agent.current_task_title ? `\x1b[93m${agent.current_task_title}\x1b[0m (yellow)` : "No title",
         "Status": agent.current_task_status,
         "Description": agent.current_task_description
       } : "No current task assigned",
       "─────────────────2": "─────────────────",
-      "📝 ALL TASKS": tasks.length > 0 ? tasks.map((task: any) => ({
+      "\x1b[94m📝 ALL TASKS\x1b[0m (blue)": tasks.length > 0 ? tasks.map((task: any) => ({
         "ID": task.task_id,
-        "Title": task.title,
+        "Title": `\x1b[92m${task.title}\x1b[0m (green)`,
         "Status": `${getStatusEmoji(task.status)} ${task.status}`,
         "Priority": task.priority,
         "Updated": new Date(task.updated_at).toLocaleString()
       })) : "No tasks assigned",
       "─────────────────3": "─────────────────",
-      "🕐 RECENT ACTIVITY": recentActions.length > 0 ? recentActions.map((action: any) => ({
+      "\x1b[95m🕐 RECENT ACTIVITY\x1b[0m (magenta)": recentActions.length > 0 ? recentActions.map((action: any) => ({
         "Action": action.action_type,
         "Time": new Date(action.timestamp).toLocaleString(),
         "Details": action.details || "No details"

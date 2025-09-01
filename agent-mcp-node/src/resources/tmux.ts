@@ -3,14 +3,10 @@
 
 import { execSync } from 'child_process';
 import { MCP_DEBUG } from '../core/config.js';
+import { createColoredResource, ColoredResource } from '../core/resourceColors.js';
 
-// Resource interfaces
-export interface TmuxResource {
-  uri: string;
-  name: string;
-  description: string;
-  mimeType: string;
-}
+// Use the enhanced colored resource interface
+export interface TmuxResource extends ColoredResource {}
 
 export interface TmuxResourceContent {
   uri: string;
@@ -23,7 +19,7 @@ interface TmuxSession {
   windows: number;
   attached: boolean;
   created: string;
-  lastActivity: string;
+  lastActivity: string; // Unix timestamp as string
   size: string;
 }
 
@@ -55,7 +51,7 @@ function getTmuxSessions(): TmuxSession[] {
         windows: parseInt(windows!),
         attached: attached === '1',
         created: new Date(parseInt(created!) * 1000).toLocaleString(),
-        lastActivity: new Date(parseInt(activity!) * 1000).toLocaleString(),
+        lastActivity: activity!,
         size: size!
       };
     });
@@ -101,25 +97,25 @@ function getTmuxSessionContent(sessionName: string): string | null {
     }
     
     return JSON.stringify({
-      "🖥️  Session": sessionName,
-      "📊 Status": attached === '1' ? '🟢 attached' : '🔴 detached',
-      "📏 Size": size,
-      "🪟 Windows": parseInt(windows!),
-      "🕒 Created": new Date(parseInt(created!) * 1000).toLocaleString(),
-      "⏰ Last Activity": new Date(parseInt(activity!) * 1000).toLocaleString(),
+      "\x1b[96m🖥️  Session\x1b[0m (cyan)": sessionName,
+      "\x1b[92m📊 Status\x1b[0m (green)": attached === '1' ? '🟢 attached' : '🔴 detached',
+      "\x1b[93m📏 Size\x1b[0m (yellow)": size,
+      "\x1b[94m🪟 Windows\x1b[0m (blue)": parseInt(windows!),
+      "\x1b[95m🕒 Created\x1b[0m (magenta)": new Date(parseInt(created!) * 1000).toLocaleString(),
+      "\x1b[91m⏰ Last Activity\x1b[0m (red)": new Date(parseInt(activity!) * 1000).toLocaleString(),
       "─────────────────": "─────────────────",
-      "🔧 COMMANDS": "─────────────────",
+      "\x1b[97m🔧 COMMANDS\x1b[0m (white)": "─────────────────",
       "Attach": `tmux attach-session -t "${sessionName}"`,
       "Kill Session": `tmux kill-session -t "${sessionName}"`,
       "New Window": `tmux new-window -t "${sessionName}"`,
       "List Windows": `tmux list-windows -t "${sessionName}"`,
       "Capture Logs": `tmux capture-pane -t "${sessionName}" -p`,
       "─────────────────1": "─────────────────", 
-      "🪟 WINDOWS": windowsOutput || 'No windows found',
+      "\x1b[94m🪟 WINDOWS\x1b[0m (blue)": windowsOutput || 'No windows found',
       "─────────────────2": "─────────────────",
-      "📄 PANES": panesList || 'No panes found',
+      "\x1b[95m📄 PANES\x1b[0m (magenta)": panesList || 'No panes found',
       "─────────────────3": "─────────────────",
-      "📝 RECENT OUTPUT (last 50 lines)": paneContent || 'No output captured'
+      "\x1b[92m📝 RECENT OUTPUT (last 50 lines)\x1b[0m (green)": paneContent || 'No output captured'
     }, null, 2);
     
   } catch (error) {
@@ -184,14 +180,14 @@ function getTmuxPaneContent(sessionName: string, windowIndex: number, paneIndex:
     }
     
     return JSON.stringify({
-      "🖼️  Pane": `${sessionName}:${windowIndex}.${paneIndex}`,
-      "📋 Title": title || `${sessionName}:${windowIndex}.${paneIndex}`,
-      "⚡ Command": command,
-      "🆔 PID": pid,
-      "📏 Size": size,
-      "📊 Status": active === '1' ? '🟢 active' : '⚪ inactive',
+      "\x1b[96m🖼️  Pane\x1b[0m (cyan)": `${sessionName}:${windowIndex}.${paneIndex}`,
+      "\x1b[93m📋 Title\x1b[0m (yellow)": `\x1b[96m${title || `${sessionName}:${windowIndex}.${paneIndex}`}\x1b[0m (cyan)`,
+      "\x1b[91m⚡ Command\x1b[0m (red)": command,
+      "\x1b[95m🆔 PID\x1b[0m (magenta)": pid,
+      "\x1b[94m📏 Size\x1b[0m (blue)": size,
+      "\x1b[92m📊 Status\x1b[0m (green)": active === '1' ? '🟢 active' : '⚪ inactive',
       "─────────────────": "─────────────────",
-      "🔧 COMMANDS": "─────────────────",
+      "\x1b[97m🔧 COMMANDS\x1b[0m (white)": "─────────────────",
       "Attach to Session": `tmux attach-session -t "${sessionName}"`,
       "Select Pane": `tmux select-pane -t "${target}"`,
       "Kill Pane": `tmux kill-pane -t "${target}"`,
@@ -200,7 +196,7 @@ function getTmuxPaneContent(sessionName: string, windowIndex: number, paneIndex:
       "Capture Full": `tmux capture-pane -t "${target}" -p`,
       "Send Keys": `tmux send-keys -t "${target}" "your-command" Enter`,
       "─────────────────1": "─────────────────",
-      "📝 PANE OUTPUT (last 100 lines)": paneContent || 'No output captured'
+      "\x1b[92m📝 PANE OUTPUT (last 100 lines)\x1b[0m (green)": paneContent || 'No output captured'
     }, null, 2);
     
   } catch (error) {
@@ -220,40 +216,44 @@ export async function getTmuxResources(): Promise<TmuxResource[]> {
     const panes = getAllTmuxPanes();
     const resources: TmuxResource[] = [];
     
-    // Add session resources
+    // Add session resources with what's running in them
     sessions.forEach(session => {
-      let statusDescription = '';
+      const isAttached = session.attached;
+      const color = isAttached ? 'green' : 'gray';
       
-      if (session.attached) {
-        statusDescription = `🟢 attached (${session.windows} windows)`;
-      } else {
-        statusDescription = `🔴 detached (${session.windows} windows)`;
-      }
+      // Color based on activity and attachment
+      const ansiCode = isAttached ? '\x1b[1;92m' : '\x1b[1;37m'; // Bold bright green for attached, white for detached
       
-      resources.push({
-        uri: `tmux://session/${session.name}`,
-        name: `@${session.name}`,
-        description: statusDescription,
-        mimeType: 'application/json'
-      });
-    });
-    
-    // Add pane resources
-    panes.forEach(pane => {
-      const paneTarget = `${pane.sessionName}:${pane.windowIndex}.${pane.paneIndex}`;
-      let statusDescription = '';
+      // Get the main command running in this session
+      const sessionPanes = panes.filter(p => p.sessionName === session.name);
+      const commands = [...new Set(sessionPanes.map(p => p.command))]; // Unique commands
+      const mainCommand = commands.length > 0 ? commands.slice(0, 2).join(', ') : 'shell';
       
-      if (pane.active) {
-        statusDescription = `🟢 ${pane.command} (active)`;
-      } else {
-        statusDescription = `⚪ ${pane.command}`;
-      }
+      // Calculate activity status
+      const lastActivity = new Date(parseInt(session.lastActivity) * 1000);
+      const minutesAgo = Math.floor((Date.now() - lastActivity.getTime()) / 60000);
+      const activityStr = minutesAgo < 1 ? 'active' : 
+                          minutesAgo < 5 ? `${minutesAgo}m` : 
+                          minutesAgo < 60 ? `idle ${minutesAgo}m` : 
+                          `idle ${Math.floor(minutesAgo / 60)}h`;
+      
+      // Compact description with what's running
+      const description = isAttached ? 
+        `${ansiCode}🟢 ${mainCommand} • ${session.windows}w • ${activityStr}\x1b[0m` :
+        `${ansiCode}⚪ ${mainCommand} • ${session.windows}w • ${activityStr}\x1b[0m`;
       
       resources.push({
-        uri: `tmux://pane/${paneTarget}`,
-        name: `@${paneTarget}`,
-        description: statusDescription,
-        mimeType: 'application/json'
+        uri: `tmux://${session.name}`,
+        name: `${ansiCode}@${session.name}\x1b[0m`,
+        description,
+        mimeType: 'application/json',
+        annotations: {
+          color,
+          type: 'tmux-session',
+          status: isAttached ? 'attached' : 'detached',
+          priority: isAttached ? 'high' : 'normal',
+          category: 'terminal'
+        }
       });
     });
     
