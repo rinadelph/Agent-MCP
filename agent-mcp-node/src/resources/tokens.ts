@@ -156,16 +156,21 @@ async function getAvailableTokens(): Promise<TokenInfo[]> {
   try {
     // Get admin token from database
     const db = getDbConnection();
-    const adminConfig = db.prepare('SELECT * FROM admin_config LIMIT 1').get() as any;
+    const adminConfig = db.prepare(`
+      SELECT config_value, created_at 
+      FROM admin_config 
+      WHERE config_key = 'admin_token' 
+      LIMIT 1
+    `).get() as any;
     
-    if (adminConfig?.admin_token) {
+    if (adminConfig?.config_value) {
       tokens.push({
         name: 'admin',
-        token: adminConfig.admin_token,
+        token: adminConfig.config_value,
         role: 'admin',
         description: 'Primary admin token for Agent-MCP system',
         created_at: adminConfig.created_at || new Date().toISOString(),
-        usage_count: 0 // Could be tracked in future
+        usage_count: 0
       });
     }
     
