@@ -264,7 +264,8 @@ async function loadToolsConditionally(config: ToolCategories): Promise<void> {
   // Task management tools
   if (config.taskManagement) {
     await import("../../tools/tasks/index.js");
-    if (MCP_DEBUG) console.log("✅ Task management tools loaded");
+    await import("../../tools/testingTasks.js");
+    if (MCP_DEBUG) console.log("✅ Task management tools loaded (including testing tasks)");
   }
   
   // File management tools

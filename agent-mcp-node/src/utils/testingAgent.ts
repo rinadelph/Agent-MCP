@@ -8,6 +8,7 @@ import { buildAgentPrompt } from './promptTemplates.js';
 import { MCP_DEBUG, getProjectDir } from '../core/config.js';
 import { execSync } from 'child_process';
 import * as crypto from 'crypto';
+import { createTestingTask } from '../tools/testingTasks.js';
 
 export interface TestingAgentLaunchResult {
   success: boolean;
@@ -122,7 +123,29 @@ export async function launchTestingAgentForCompletedTask(
       }
     }
     
-    // 5. Create testing agent token and database entry
+    // 5. Create comprehensive testing task first
+    const adminConfig = db.prepare('SELECT config_value FROM admin_config WHERE config_key = ?').get('admin_token') as any;
+    const adminToken = adminConfig?.config_value || '';
+    
+    const testingTaskResult = await createTestingTask.execute({
+      completed_task_id: completedTaskId,
+      completed_by_agent: completedByAgent,
+      testing_agent_id: testingAgentId,
+      admin_token: adminToken
+    });
+    
+    if (!testingTaskResult.success) {
+      console.error(`❌ Failed to create testing task: ${testingTaskResult.error}`);
+      return { success: false, testing_agent_id: testingAgentId, error: `Failed to create testing task: ${testingTaskResult.error}` };
+    }
+    
+    console.log(`✅ Created testing task ${testingTaskResult.testing_task_id} with:`);
+    console.log(`   - ${testingTaskResult.subtasks_found} subtasks to audit`);
+    console.log(`   - ${testingTaskResult.context_entries_found} context entries to review`);
+    console.log(`   - ${testingTaskResult.files_modified} files to check`);
+    console.log(`   - ${testingTaskResult.actions_logged} actions to analyze`);
+    
+    // 6. Create testing agent token and database entry
     const testingToken = generateTestingAgentToken();
     const createdAt = new Date().toISOString();
     
@@ -137,10 +160,10 @@ export async function launchTestingAgentForCompletedTask(
     `).run(
       testingToken,
       testingAgentId,
-      JSON.stringify(['testing', 'validation', 'criticism']),
+      JSON.stringify(['testing', 'validation', 'criticism', 'audit']),
       createdAt,
       'created',
-      completedTaskId, // Set the completed task as current task
+      testingTaskResult.testing_task_id, // Use the testing task ID
       projectDir,
       '#FF0000' // Red color for testing agents
     );
@@ -150,10 +173,7 @@ export async function launchTestingAgentForCompletedTask(
       return { success: false, testing_agent_id: testingAgentId, error: 'Failed to create agent in database' };
     }
     
-    // 6. Build enriched prompt for testing agent
-    const adminConfig = db.prepare('SELECT config_value FROM admin_config WHERE config_key = ?').get('admin_token') as any;
-    const adminToken = adminConfig?.config_value || '';
-    
+    // 7. Build enriched prompt for testing agent with testing task context
     const prompt = buildAgentPrompt(
       testingAgentId,
       testingToken,
@@ -161,10 +181,12 @@ export async function launchTestingAgentForCompletedTask(
       'testing_agent',
       undefined,
       {
+        testing_task_id: testingTaskResult.testing_task_id,
         completed_by_agent: completedByAgent,
         completed_task_id: completedTaskId,
         completed_task_title: task.title || 'Unknown',
-        completed_task_description: task.description || 'No description'
+        completed_task_description: task.description || 'No description',
+        audit_summary: `Found ${testingTaskResult.subtasks_found} subtasks, ${testingTaskResult.context_entries_found} context entries, ${testingTaskResult.files_modified} files modified`
       }
     );
     
@@ -173,7 +195,7 @@ export async function launchTestingAgentForCompletedTask(
       return { success: false, testing_agent_id: testingAgentId, error: 'Failed to build prompt' };
     }
     
-    // 7. Create tmux session for testing agent
+    // 8. Create tmux session for testing agent
     const suffix = adminToken.slice(-4).toLowerCase();
     const sessionName = `${testingAgentId.replace(/[^a-zA-Z0-9_-]/g, '_')}-${suffix}`;
     
