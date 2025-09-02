@@ -91,7 +91,7 @@ export async function getTokenResources(): Promise<TokenResource[]> {
                     color === 'blue' ? '\x1b[1;94m' : '\x1b[1;97m'; // Bold bright colors
     
     return {
-      uri: `token://${token.name}`,
+      uri: `token://${token.name}`,  // Proper token:// URI format
       name: `${ansiCode}@${token.name}\x1b[0m`,
       description: `${ansiCode}${getRoleEmoji(token.role)} ${token.role}\x1b[0m`,
       mimeType: 'text/plain',
@@ -110,7 +110,8 @@ export async function getTokenResources(): Promise<TokenResource[]> {
  * Get content for a specific token resource
  */
 export async function getTokenResourceContent(uri: string): Promise<TokenResourceContent> {
-  const tokenName = uri.replace('token://', '');
+  // Handle both formats: 'admin' and 'token://admin' for backwards compatibility
+  const tokenName = uri.startsWith('token://') ? uri.replace('token://', '') : uri;
   const tokens = await getAvailableTokens();
   const token = tokens.find(t => t.name === tokenName);
   
@@ -174,30 +175,8 @@ async function getAvailableTokens(): Promise<TokenInfo[]> {
       });
     }
     
-    // Get agent tokens from agents table
-    const agentStmt = db.prepare(`
-      SELECT agent_id, token, created_at, status, capabilities 
-      FROM agents 
-      WHERE status IN ('created', 'active', 'terminated')
-      ORDER BY created_at DESC
-    `);
-    
-    const agents = agentStmt.all();
-    agents.forEach((agent: any) => {
-      if (agent.token) {
-        const capabilities = JSON.parse(agent.capabilities || '[]');
-        const isBackgroundAgent = capabilities.includes('background-agent');
-        
-        tokens.push({
-          name: `agent-${agent.agent_id}`,
-          token: agent.token,
-          role: 'agent',
-          description: `${isBackgroundAgent ? 'Background' : 'Regular'} agent token for ${agent.agent_id} (${agent.status})`,
-          created_at: agent.created_at,
-          usage_count: 0 // Could be tracked from agent_actions table
-        });
-      }
-    });
+    // Agent tokens are handled by agents.ts resources, not token resources
+    // This prevents duplicate resources and confusion
     
     // Environment tokens removed for security - API keys should never be exposed
     

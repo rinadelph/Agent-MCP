@@ -145,33 +145,76 @@ export async function launchTestingAgentForCompletedTask(
     console.log(`   - ${testingTaskResult.files_modified} files to check`);
     console.log(`   - ${testingTaskResult.actions_logged} actions to analyze`);
     
-    // 6. Create testing agent token and database entry
-    const testingToken = generateTestingAgentToken();
+    // 6. Create testing agent using the SAME method as normal agents
+    console.log(`🤖 Creating testing agent ${testingAgentId} using normal agent creation flow...`);
+    
+    // Import the create_agent tool logic directly
+    const { generateToken: authGenerateToken, registerActiveAgent } = await import('../core/auth.js');
+    
+    // Generate agent data exactly like normal agents
+    const testingToken = authGenerateToken();
     const createdAt = new Date().toISOString();
-    
-    // Get project directory
     const projectDir = getProjectDir();
+    const agentColor = '#FF0000'; // Red color for testing agents
+    const status = 'created';
+    const capabilities = ['testing', 'validation', 'criticism', 'audit'];
     
-    // Insert testing agent into database
-    const insertResult = db.prepare(`
-      INSERT INTO agents (token, agent_id, capabilities, created_at, status, 
-                        current_task, working_directory, color)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      testingToken,
-      testingAgentId,
-      JSON.stringify(['testing', 'validation', 'criticism', 'audit']),
-      createdAt,
-      'created',
-      testingTaskResult.testing_task_id, // Use the testing task ID
-      projectDir,
-      '#FF0000' // Red color for testing agents
-    );
+    // Begin transaction (same as normal agent creation)
+    const transaction = db.transaction(() => {
+      // Insert agent (same structure as normal agents)
+      const insertAgent = db.prepare(`
+        INSERT INTO agents (
+          token, agent_id, capabilities, created_at, status, 
+          working_directory, color, updated_at, current_task
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      
+      insertAgent.run(
+        testingToken,
+        testingAgentId,
+        JSON.stringify(capabilities),
+        createdAt,
+        status,
+        projectDir,
+        agentColor,
+        createdAt,
+        testingTaskResult.testing_task_id
+      );
+      
+      // Assign the testing task to the agent (same as normal task assignment)
+      const updateTask = db.prepare(`
+        UPDATE tasks 
+        SET assigned_to = ?, status = 'pending', updated_at = ? 
+        WHERE task_id = ?
+      `);
+      
+      const result = updateTask.run(testingAgentId, createdAt, testingTaskResult.testing_task_id);
+      if (result.changes === 0) {
+        throw new Error(`Failed to assign testing task ${testingTaskResult.testing_task_id} to ${testingAgentId}`);
+      }
+      
+      return testingTaskResult.testing_task_id;
+    });
     
-    if (insertResult.changes === 0) {
-      console.error(`❌ Failed to create testing agent ${testingAgentId} in database`);
-      return { success: false, testing_agent_id: testingAgentId, error: 'Failed to create agent in database' };
-    }
+    const assignedTask = transaction();
+    
+    // Register agent in global state (same as normal agents)
+    const agentData = {
+      token: testingToken,
+      agent_id: testingAgentId,
+      capabilities,
+      status: 'created' as const,
+      current_task: assignedTask,
+      working_directory: projectDir,
+      color: agentColor,
+      created_at: createdAt,
+      updated_at: createdAt
+    };
+    
+    // Use the SAME registration method as normal agents
+    registerActiveAgent(testingToken, agentData);
+    
+    console.log(`✅ Created testing agent ${testingAgentId} using normal agent flow with token ${testingToken}`);
     
     // 7. Build enriched prompt for testing agent with testing task context
     const prompt = buildAgentPrompt(
@@ -255,7 +298,7 @@ export async function launchTestingAgentForCompletedTask(
       
       // Log the testing agent creation
       db.prepare(`
-        INSERT INTO agent_actions (agent_id, action_type, details, created_at)
+        INSERT INTO agent_actions (agent_id, action_type, details, timestamp)
         VALUES (?, ?, ?, ?)
       `).run(
         'admin',
@@ -509,8 +552,8 @@ export async function cleanIncorrectProjectContext(
     // Log the context cleaning action
     const logAction = db.prepare(`
       INSERT INTO agent_actions (
-        agent_id, action_type, task_id, timestamp, created_at, details
-      ) VALUES (?, ?, ?, ?, ?, ?)
+        agent_id, action_type, task_id, timestamp, details
+      ) VALUES (?, ?, ?, ?, ?)
     `);
     
     const timestamp = new Date().toISOString();
@@ -518,7 +561,6 @@ export async function cleanIncorrectProjectContext(
       testingAgentId,
       'cleaned_project_context',
       taskId,
-      timestamp,
       timestamp,
       JSON.stringify({
         cleaned_count: cleaned,
