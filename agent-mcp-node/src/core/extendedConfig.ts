@@ -11,6 +11,7 @@ export interface ExtendedConfig {
   embeddingProvider: string;
   cliAgents: string[];
   serverPort: number;
+  projectDirectory?: string;
   configName?: string;
   advancedSettings: {
     embeddingModel?: string;
@@ -46,6 +47,7 @@ export const DEFAULT_EXTENDED_CONFIG: ExtendedConfig = {
   embeddingProvider: 'openai',
   cliAgents: ['claude', 'gemini'],
   serverPort: 3001,
+  projectDirectory: process.cwd(),
   advancedSettings: {
     embeddingModel: 'text-embedding-3-large',
     embeddingDimensions: 1536,

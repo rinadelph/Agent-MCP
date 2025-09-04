@@ -8,6 +8,7 @@ import { launchPracticalConfigurationTUI } from './practical.js';
 export async function launchPreConfigurationTUI(): Promise<{
   toolConfig: ToolCategories;
   serverPort: number;
+  projectDirectory: string;
 }> {
   // Use the practical TUI - no animations, focus on functionality
   const result = await launchPracticalConfigurationTUI();
@@ -16,11 +17,13 @@ export async function launchPreConfigurationTUI(): Promise<{
   if (result.configName) {
     console.log(`${TUIColors.OKBLUE}📋 Using configuration: ${result.configName}${TUIColors.ENDC}`);
   }
+  console.log(`${TUIColors.OKBLUE}📁 Project directory: ${result.projectDirectory}${TUIColors.ENDC}`);
   console.log(`${TUIColors.OKBLUE}🌐 Server will start on port: ${result.serverPort}${TUIColors.ENDC}`);
   console.log();
   
   return {
     toolConfig: result.toolConfig,
-    serverPort: result.serverPort
+    serverPort: result.serverPort,
+    projectDirectory: result.projectDirectory
   };
 }

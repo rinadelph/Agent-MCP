@@ -145,8 +145,15 @@ export const AGENT_COLORS = [
 ];
 
 // Directory helpers
+let configuredProjectDir: string | null = null;
+
+export function setProjectDir(dir: string) {
+  configuredProjectDir = dir;
+}
+
 export function getProjectDir(): string {
-  return process.cwd(); // Use current working directory (will be changed if --project-dir is used)
+  // Use configured project directory if set, otherwise use current working directory
+  return configuredProjectDir || process.cwd();
 }
 
 export function getAgentDir(): string {

@@ -193,6 +193,72 @@ async function handleNamedConfigurations(): Promise<ExtendedConfig | null> {
   return null;
 }
 
+async function selectProjectDirectory(): Promise<string> {
+  console.log(`${TUIColors.OKBLUE}${TUIColors.BOLD}📁 Project Directory Configuration${TUIColors.ENDC}`);
+  console.log('This is the directory where agents will operate and execute tasks.');
+  console.log();
+  
+  const currentDir = process.cwd();
+  console.log(`Current directory: ${TUIColors.OKGREEN}${currentDir}${TUIColors.ENDC}`);
+  console.log();
+  
+  const response = await inquirer.prompt({
+    type: 'list',
+    name: 'choice',
+    message: 'Select project directory for agents:',
+    choices: [
+      { 
+        name: `Use current directory (${currentDir})`, 
+        value: 'current' 
+      },
+      { 
+        name: 'Enter custom path', 
+        value: 'custom' 
+      }
+    ]
+  });
+  
+  if (response.choice === 'custom') {
+    const customPath = await inquirer.prompt({
+      type: 'input',
+      name: 'path',
+      message: 'Enter absolute path to project directory:',
+      default: currentDir,
+      validate: async (input) => {
+        if (!input || input.trim() === '') {
+          return 'Path is required';
+        }
+        const trimmedPath = input.trim();
+        const fs = await import('fs');
+        const path = await import('path');
+        
+        if (!path.isAbsolute(trimmedPath)) {
+          return 'Please enter an absolute path (starting with / or C:\\)';
+        }
+        
+        if (!fs.existsSync(trimmedPath)) {
+          return `Directory does not exist: ${trimmedPath}`;
+        }
+        
+        const stats = fs.statSync(trimmedPath);
+        if (!stats.isDirectory()) {
+          return `Path is not a directory: ${trimmedPath}`;
+        }
+        
+        return true;
+      }
+    });
+    
+    console.log(`${TUIColors.OKGREEN}✅ Project directory set to: ${customPath.path.trim()}${TUIColors.ENDC}`);
+    console.log();
+    return customPath.path.trim();
+  }
+  
+  console.log(`${TUIColors.OKGREEN}✅ Using current directory as project directory${TUIColors.ENDC}`);
+  console.log();
+  return currentDir;
+}
+
 async function selectServerPort(): Promise<number> {
   console.log(`${TUIColors.OKBLUE}${TUIColors.BOLD}🌐 Server Port Configuration${TUIColors.ENDC}`);
   console.log();
@@ -507,12 +573,14 @@ function displayConfigurationSummary(
   config: ToolCategories,
   embeddingProvider: string,
   cliAgents: string[],
-  serverPort: number
+  serverPort: number,
+  projectDirectory: string
 ) {
   console.log(`${TUIColors.HEADER}${TUIColors.BOLD}📋 Configuration Summary${TUIColors.ENDC}`);
   console.log('━'.repeat(50));
   console.log();
   
+  console.log(`${TUIColors.OKBLUE}📁 Project Directory:${TUIColors.ENDC} ${projectDirectory}`);
   console.log(`${TUIColors.OKBLUE}🌐 Server Port:${TUIColors.ENDC} ${serverPort}`);
   console.log();
   
@@ -543,6 +611,7 @@ export async function launchPracticalConfigurationTUI(): Promise<{
   embeddingProvider: string;
   cliAgents: string[];
   serverPort: number;
+  projectDirectory: string;
   configName?: string;
 }> {
   displayHeader();
@@ -555,10 +624,12 @@ export async function launchPracticalConfigurationTUI(): Promise<{
       embeddingProvider: existingConfig.embeddingProvider,
       cliAgents: existingConfig.cliAgents,
       serverPort: existingConfig.serverPort,
+      projectDirectory: existingConfig.projectDirectory || process.cwd(),
       configName: existingConfig.configName
     };
   }
   
+  const projectDirectory = await selectProjectDirectory();
   const serverPort = await selectServerPort();
   const embeddingProvider = await selectEmbeddingProvider();
   const cliAgents = await selectCLIAgents();
@@ -572,7 +643,7 @@ export async function launchPracticalConfigurationTUI(): Promise<{
     toolConfig = configMode as ToolCategories;
   }
   
-  displayConfigurationSummary(toolConfig, embeddingProvider, cliAgents, serverPort);
+  displayConfigurationSummary(toolConfig, embeddingProvider, cliAgents, serverPort, projectDirectory);
   
   const confirm = await inquirer.prompt({
     type: 'confirm',
@@ -626,6 +697,7 @@ export async function launchPracticalConfigurationTUI(): Promise<{
       embeddingProvider,
       cliAgents,
       serverPort,
+      projectDirectory,
       configName,
       advancedSettings: {
         embeddingModel: 'text-embedding-3-large',
@@ -660,6 +732,7 @@ export async function launchPracticalConfigurationTUI(): Promise<{
     embeddingProvider,
     cliAgents,
     serverPort,
+    projectDirectory,
     configName,
     advancedSettings: {
       embeddingModel: 'text-embedding-3-large',
@@ -683,6 +756,7 @@ export async function launchPracticalConfigurationTUI(): Promise<{
     embeddingProvider,
     cliAgents,
     serverPort,
+    projectDirectory,
     configName
   };
 }

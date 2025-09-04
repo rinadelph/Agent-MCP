@@ -38,7 +38,7 @@ import {
 } from "../../core/toolConfig.js";
 import { initializeRuntimeConfigManager, getRuntimeConfigManager } from "../../core/runtimeConfig.js";
 // Resources will be handled directly in server setup
-import { MCP_DEBUG, VERSION, TUIColors, AUTHOR, GITHUB_URL } from "../../core/config.js";
+import { MCP_DEBUG, VERSION, TUIColors, AUTHOR, GITHUB_URL, setProjectDir } from "../../core/config.js";
 
 // Parse command line arguments
 const program = new Command();
@@ -81,9 +81,10 @@ const PORT = parseInt(options.port);
 const HOST = options.host;
 const PROJECT_DIR = resolve(options.projectDir);
 
-// Change to project directory if specified
+// Change to project directory if specified via command line
 if (options.projectDir !== process.cwd()) {
   try {
+    setProjectDir(PROJECT_DIR);
     process.chdir(PROJECT_DIR);
     console.log(`📁 Changed to project directory: ${PROJECT_DIR}`);
   } catch (error) {
@@ -102,6 +103,20 @@ if (options.configMode || options.interactive) {
   const { launchPreConfigurationTUI } = await import("../../tui/prelaunch.js");
   const tuiResult = await launchPreConfigurationTUI();
   toolConfig = tuiResult.toolConfig;
+  
+  // Use project directory from TUI configuration
+  if (tuiResult.projectDirectory) {
+    setProjectDir(tuiResult.projectDirectory);
+    if (tuiResult.projectDirectory !== process.cwd()) {
+      try {
+        process.chdir(tuiResult.projectDirectory);
+        console.log(`${TUIColors.OKGREEN}📁 Changed to project directory: ${tuiResult.projectDirectory}${TUIColors.ENDC}`);
+      } catch (error) {
+        console.error(`❌ Failed to change to project directory: ${tuiResult.projectDirectory}`);
+        console.error(error);
+      }
+    }
+  }
   
   // Use port from TUI configuration if available
   if (tuiResult.serverPort && tuiResult.serverPort !== parseInt(program.opts().port || '3001')) {
@@ -127,6 +142,20 @@ if (options.configMode || options.interactive) {
     const tuiResult = await launchPreConfigurationTUI();
     toolConfig = tuiResult.toolConfig;
     
+    // Use project directory from TUI configuration
+    if (tuiResult.projectDirectory) {
+      setProjectDir(tuiResult.projectDirectory);
+      if (tuiResult.projectDirectory !== process.cwd()) {
+        try {
+          process.chdir(tuiResult.projectDirectory);
+          console.log(`${TUIColors.OKGREEN}📁 Changed to project directory: ${tuiResult.projectDirectory}${TUIColors.ENDC}`);
+        } catch (error) {
+          console.error(`❌ Failed to change to project directory: ${tuiResult.projectDirectory}`);
+          console.error(error);
+        }
+      }
+    }
+    
     // Use port from TUI configuration if available
     if (tuiResult.serverPort && tuiResult.serverPort !== parseInt(program.opts().port || '3001')) {
       console.log(`${TUIColors.OKBLUE}🌐 Using TUI configured port: ${tuiResult.serverPort}${TUIColors.ENDC}`);
@@ -136,6 +165,24 @@ if (options.configMode || options.interactive) {
     // Skip TUI - load existing configuration or use default
     toolConfig = loadToolConfig();
     console.log(`${TUIColors.DIM}🔄 Using saved configuration (use --config-mode to change)${TUIColors.ENDC}`);
+    
+    // Load extended config to get saved project directory if not specified via command line
+    if (!options.projectDir) {
+      const { loadExtendedConfig } = await import("../../core/extendedConfig.js");
+      const extendedConfig = loadExtendedConfig();
+      if (extendedConfig.projectDirectory) {
+        setProjectDir(extendedConfig.projectDirectory);
+        if (extendedConfig.projectDirectory !== process.cwd()) {
+          try {
+            process.chdir(extendedConfig.projectDirectory);
+            console.log(`${TUIColors.OKGREEN}📁 Using saved project directory: ${extendedConfig.projectDirectory}${TUIColors.ENDC}`);
+          } catch (error) {
+            console.error(`❌ Failed to change to saved project directory: ${extendedConfig.projectDirectory}`);
+            console.error(error);
+          }
+        }
+      }
+    }
   }
 }
 
