@@ -38,7 +38,7 @@ import {
 } from "../../core/toolConfig.js";
 import { initializeRuntimeConfigManager, getRuntimeConfigManager } from "../../core/runtimeConfig.js";
 // Resources will be handled directly in server setup
-import { MCP_DEBUG, VERSION, TUIColors, AUTHOR, GITHUB_URL, setProjectDir } from "../../core/config.js";
+import { MCP_DEBUG, VERSION, TUIColors, AUTHOR, GITHUB_URL, setProjectDir, getProjectDir } from "../../core/config.js";
 
 // Parse command line arguments
 const program = new Command();
@@ -370,7 +370,7 @@ initializeRuntimeConfigManager(toolConfig);
 
 // Initialize database and check VSS on startup
 console.log("🚀 Starting Agent-MCP Node.js Server...");
-console.log(`📁 Project Directory: ${PROJECT_DIR}`);
+console.log(`📁 Project Directory: ${getProjectDir()}`);
 console.log(`🌐 Server Host: ${HOST}`);
 console.log(`🌐 Server Port: ${PORT}`);
 console.log(`📊 Checking database extensions...`);
