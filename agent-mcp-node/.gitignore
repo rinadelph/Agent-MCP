@@ -45,3 +45,8 @@ coverage/
 
 # Claude Code package copy (for analysis only)
 claude-code-package/
+
+athena*.md
+*athena*
+Athena*
+*Athena*

@@ -9,7 +9,7 @@ export interface Agent {
   status: AgentStatus;     // 'created', 'active', 'terminated'
   current_task?: string;   // Task ID
   working_directory: string;
-  color?: string;          // For dashboard visualization
+  color?: string;          // For terminal visualization
   terminated_at?: string;  // ISO timestamp
   updated_at: string;      // ISO timestamp
 }

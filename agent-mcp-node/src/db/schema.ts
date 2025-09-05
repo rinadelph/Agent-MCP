@@ -149,7 +149,7 @@ export function initDatabase(): void {
         status TEXT NOT NULL, -- 'created', 'active', 'terminated'
         current_task TEXT,    -- Task ID
         working_directory TEXT NOT NULL,
-        color TEXT,           -- For dashboard visualization
+        color TEXT,           -- For terminal visualization
         terminated_at TEXT,   -- Timestamp of termination
         updated_at TEXT       -- Timestamp of last update
       )

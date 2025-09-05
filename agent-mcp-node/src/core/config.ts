@@ -137,7 +137,7 @@ export const TASK_PLACEMENT_RAG_TIMEOUT = parseInt(process.env.TASK_PLACEMENT_RA
 // Auto-indexing control
 export const DISABLE_AUTO_INDEXING = process.env.DISABLE_AUTO_INDEXING === 'true';
 
-// Agent colors for dashboard visualization
+// Agent colors for terminal visualization
 export const AGENT_COLORS = [
   "#FF5733", "#33FF57", "#3357FF", "#FF33A1", "#A133FF", "#33FFA1",
   "#FFBD33", "#33FFBD", "#BD33FF", "#FF3333", "#33FF33", "#3333FF",
