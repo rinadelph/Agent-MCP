@@ -42,10 +42,10 @@ export const createTestingTask = {
       
       // 3. Get all context entries created/modified by the original agent
       const contextEntries = db.prepare(`
-        SELECT context_key, context_value, description, last_updated
+        SELECT context_key, value as context_value, description, last_updated
         FROM project_context
-        WHERE JSON_EXTRACT(context_value, '$.created_by') = ? 
-           OR JSON_EXTRACT(context_value, '$.modified_by') = ?
+        WHERE JSON_EXTRACT(value, '$.created_by') = ? 
+           OR JSON_EXTRACT(value, '$.modified_by') = ?
            OR context_key LIKE ?
         ORDER BY last_updated DESC
         LIMIT 50
@@ -159,12 +159,13 @@ ${agentActions.length > 20 ? `... and ${agentActions.length - 20} more` : ''}
       };
       
       db.prepare(`
-        INSERT OR REPLACE INTO project_context (context_key, context_value, description, last_updated)
-        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+        INSERT OR REPLACE INTO project_context (context_key, value, description, last_updated, updated_by)
+        VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?)
       `).run(
         `testing_access_${testing_agent_id}`,
         JSON.stringify(accessGrant),
-        `Testing access grant for ${testing_agent_id} to audit ${completed_by_agent}'s work`
+        `Testing access grant for ${testing_agent_id} to audit ${completed_by_agent}'s work`,
+        'testing_system'
       );
       
       console.log(`✅ Created comprehensive testing task ${testingTaskId} for ${testing_agent_id}`);
@@ -239,11 +240,11 @@ export const getAuditReport = {
       
       // Get context changes
       const contextChanges = db.prepare(`
-        SELECT context_key, context_value, description, last_updated
+        SELECT context_key, value as context_value, description, last_updated
         FROM project_context
-        WHERE (JSON_EXTRACT(context_value, '$.created_by') = ? 
-           OR JSON_EXTRACT(context_value, '$.modified_by') = ?
-           OR JSON_EXTRACT(context_value, '$.agent_id') = ?)
+        WHERE (JSON_EXTRACT(value, '$.created_by') = ? 
+           OR JSON_EXTRACT(value, '$.modified_by') = ?
+           OR JSON_EXTRACT(value, '$.agent_id') = ?)
           AND last_updated > datetime('now', '-${hours_back} hours')
         ORDER BY last_updated DESC
       `).all(agent_id, agent_id, agent_id);
