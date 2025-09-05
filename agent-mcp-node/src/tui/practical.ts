@@ -423,13 +423,17 @@ async function selectProjectDirectoryWithTabCompletion(): Promise<string> {
   });
 }
 
-async function selectProjectDirectory(): Promise<string> {
+async function selectProjectDirectory(defaultDir?: string): Promise<string> {
   console.log(`${TUIColors.OKBLUE}${TUIColors.BOLD}📁 Project Directory Configuration${TUIColors.ENDC}`);
   console.log('This is the directory where agents will operate and execute tasks.');
   console.log();
   
-  const currentDir = process.cwd();
-  console.log(`Current directory: ${TUIColors.OKGREEN}${currentDir}${TUIColors.ENDC}`);
+  const currentDir = defaultDir || process.cwd();
+  if (defaultDir) {
+    console.log(`Saved directory: ${TUIColors.OKGREEN}${defaultDir}${TUIColors.ENDC}`);
+  } else {
+    console.log(`Current directory: ${TUIColors.OKGREEN}${currentDir}${TUIColors.ENDC}`);
+  }
   console.log();
   
   const response = await inquirer.prompt({
@@ -438,7 +442,7 @@ async function selectProjectDirectory(): Promise<string> {
     message: 'Select project directory for agents:',
     choices: [
       { 
-        name: `Use current directory (${currentDir})`, 
+        name: defaultDir ? `Use saved directory (${currentDir})` : `Use current directory (${currentDir})`, 
         value: 'current' 
       },
       { 
@@ -518,9 +522,31 @@ async function selectProjectDirectory(): Promise<string> {
   return currentDir;
 }
 
-async function selectServerPort(): Promise<number> {
+async function selectServerPort(defaultPort?: number): Promise<number> {
   console.log(`${TUIColors.OKBLUE}${TUIColors.BOLD}🌐 Server Port Configuration${TUIColors.ENDC}`);
   console.log();
+  
+  if (defaultPort) {
+    const isAvailable = await isPortAvailable(defaultPort);
+    if (isAvailable) {
+      console.log(`Saved port ${defaultPort}: ${TUIColors.OKGREEN}✅ Available${TUIColors.ENDC}`);
+      console.log();
+      
+      const useDefault = await inquirer.prompt({
+        type: 'confirm',
+        name: 'use',
+        message: `Use saved port ${defaultPort}?`,
+        default: true
+      });
+      
+      if (useDefault.use) {
+        return defaultPort;
+      }
+    } else {
+      console.log(`${TUIColors.WARNING}⚠️  Saved port ${defaultPort} is not available${TUIColors.ENDC}`);
+      console.log();
+    }
+  }
   
   const availablePorts = await getPortRecommendations();
   
@@ -865,12 +891,11 @@ export async function launchPracticalConfigurationTUI(): Promise<{
   
   if (existingConfig) {
     console.log(`${TUIColors.OKGREEN}✅ Loaded saved configuration: ${existingConfig.configName}${TUIColors.ENDC}`);
-    console.log(`${TUIColors.DIM}You can now update the port and project directory settings...${TUIColors.ENDC}`);
     console.log();
     
-    // Always ask for port and project directory even when loading existing config
-    const projectDirectory = await selectProjectDirectory();
-    const serverPort = await selectServerPort();
+    // Use saved project directory and port as defaults
+    const projectDirectory = await selectProjectDirectory(existingConfig.projectDirectory);
+    const serverPort = await selectServerPort(existingConfig.serverPort);
     
     // Set project directory so configs are saved to the right place
     setProjectDir(projectDirectory);
