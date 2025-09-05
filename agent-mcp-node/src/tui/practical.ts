@@ -12,7 +12,7 @@ import {
   validateToolConfig,
   getCategoryDescription
 } from '../core/toolConfig.js';
-import { TUIColors } from '../core/config.js';
+import { TUIColors, setProjectDir } from '../core/config.js';
 import { 
   loadExtendedConfig, 
   saveExtendedConfig, 
@@ -872,6 +872,9 @@ export async function launchPracticalConfigurationTUI(): Promise<{
     const projectDirectory = await selectProjectDirectory();
     const serverPort = await selectServerPort();
     
+    // Set project directory so configs are saved to the right place
+    setProjectDir(projectDirectory);
+    
     return {
       toolConfig: existingConfig.toolCategories,
       embeddingProvider: existingConfig.embeddingProvider,
@@ -996,6 +999,9 @@ export async function launchPracticalConfigurationTUI(): Promise<{
     },
     lastUpdated: new Date().toISOString()
   };
+  
+  // Set project directory BEFORE saving configs so they go to the right place
+  setProjectDir(projectDirectory);
   
   saveExtendedConfig(extendedConfig);
   saveToolConfig(toolConfig);
