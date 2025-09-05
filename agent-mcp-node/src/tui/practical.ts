@@ -230,7 +230,11 @@ async function getTabCompletion(partialPath: string): Promise<{ completion: stri
     
     // If only one match, complete it
     if (directories.length === 1) {
-      const completedPath = path.join(searchPath, directories[0]);
+      const firstDir = directories[0];
+      if (!firstDir) {
+        return { completion: partialPath, suggestions: [] };
+      }
+      const completedPath = path.join(searchPath, firstDir);
       return { 
         completion: completedPath.endsWith('/') ? completedPath : completedPath + '/', 
         suggestions: [completedPath] 
@@ -238,11 +242,14 @@ async function getTabCompletion(partialPath: string): Promise<{ completion: stri
     }
     
     // Multiple matches - find common prefix
-    let commonPrefix = directories[0];
+    let commonPrefix = directories[0] || '';
     for (let i = 1; i < directories.length; i++) {
+      const currentDir = directories[i];
+      if (!currentDir) continue;
+      
       let j = 0;
-      while (j < commonPrefix.length && j < directories[i].length && 
-             commonPrefix[j].toLowerCase() === directories[i][j].toLowerCase()) {
+      while (j < commonPrefix.length && j < currentDir.length && 
+             commonPrefix[j]?.toLowerCase() === currentDir[j]?.toLowerCase()) {
         j++;
       }
       commonPrefix = commonPrefix.substring(0, j);
@@ -250,7 +257,7 @@ async function getTabCompletion(partialPath: string): Promise<{ completion: stri
     
     const suggestions = directories.map(dir => path.join(searchPath, dir));
     
-    if (commonPrefix.length > prefix.length) {
+    if (commonPrefix && commonPrefix.length > prefix.length) {
       const completedPath = path.join(searchPath, commonPrefix);
       return { completion: completedPath, suggestions };
     }
@@ -519,8 +526,7 @@ async function selectServerPort(): Promise<number> {
   
   if (availablePorts.length === 0) {
     console.log(`${TUIColors.WARNING}⚠️  No common ports available, finding alternative...${TUIColors.ENDC}`);
-    const alternativePort = await findAvailablePort(3001, 9999);
-    return alternativePort;
+    return await findAvailablePort(3001, 9999);
   }
   
   console.log('Available Ports Found:');
