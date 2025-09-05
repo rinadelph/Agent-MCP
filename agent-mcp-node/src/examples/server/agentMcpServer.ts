@@ -38,7 +38,7 @@ import {
 } from "../../core/toolConfig.js";
 import { initializeRuntimeConfigManager, getRuntimeConfigManager } from "../../core/runtimeConfig.js";
 // Resources will be handled directly in server setup
-import { MCP_DEBUG, VERSION, TUIColors, AUTHOR, GITHUB_URL, setProjectDir, getProjectDir } from "../../core/config.js";
+import { MCP_DEBUG, VERSION, TUIColors, AUTHOR, GITHUB_URL, setProjectDir, getProjectDir, DISABLE_AUTO_INDEXING } from "../../core/config.js";
 
 // Parse command line arguments
 const program = new Command();
@@ -414,6 +414,23 @@ try {
 } catch (error) {
   console.error("❌ OpenAI service initialization failed:", error);
   console.log("⚠️  Continuing without OpenAI (RAG functionality will be limited)");
+}
+
+// Start RAG indexing if enabled and vector search is available
+if (vssAvailable && !DISABLE_AUTO_INDEXING) {
+  console.log("📚 Initializing RAG indexing...");
+  try {
+    const { startPeriodicIndexing } = await import("../../features/rag/indexing.js");
+    startPeriodicIndexing(300); // Index every 5 minutes
+    console.log("✅ RAG indexing started (updates every 5 minutes)");
+  } catch (error) {
+    console.error("⚠️  RAG indexing initialization failed:", error);
+    console.log("   Continuing without automatic indexing");
+  }
+} else if (DISABLE_AUTO_INDEXING) {
+  console.log("ℹ️  Auto-indexing disabled via DISABLE_AUTO_INDEXING");
+} else {
+  console.log("ℹ️  RAG indexing skipped (vector search not available)");
 }
 
 // Create server factory function
