@@ -40,6 +40,28 @@ export async function getPortStatus(ports: number[]): Promise<{ port: number; av
   return results;
 }
 
-export function getPortRecommendations(): number[] {
-  return [3001, 3002, 3003, 8000, 8001, 8080, 8081, 9000, 9001, 5000];
+export async function getPortRecommendations(): Promise<number[]> {
+  const commonRanges = [
+    // Common development ports
+    { start: 3000, end: 3010 },
+    { start: 8000, end: 8010 },
+    { start: 9000, end: 9010 },
+    { start: 5000, end: 5010 },
+    { start: 4000, end: 4010 }
+  ];
+  
+  const availablePorts: number[] = [];
+  
+  for (const range of commonRanges) {
+    for (let port = range.start; port <= range.end; port++) {
+      if (await isPortAvailable(port)) {
+        availablePorts.push(port);
+        if (availablePorts.length >= 10) { // Limit to first 10 available
+          return availablePorts;
+        }
+      }
+    }
+  }
+  
+  return availablePorts;
 }

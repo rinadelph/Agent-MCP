@@ -46,7 +46,7 @@ program
   .name('agent-mcp-server')
   .description('Agent-MCP Node.js Server with Multi-Agent Collaboration Protocol')
   .version(VERSION)
-  .option('-p, --port <number>', 'port to run the server on', '3001')
+  .option('-p, --port <number>', 'port to run the server on')
   .option('-h, --host <host>', 'host to bind the server to', '0.0.0.0')
   .option('--project-dir <path>', 'project directory to operate in', process.cwd())
   .option('--config-mode', 'launch interactive configuration TUI (same as default)')
@@ -77,9 +77,21 @@ Configuration is saved to .agent/tool-config.json for persistence.
   .parse();
 
 const options = program.opts();
-const PORT = parseInt(options.port);
 const HOST = options.host;
 const PROJECT_DIR = resolve(options.projectDir);
+
+// Import port utilities
+const { findAvailablePort } = await import("../../core/portChecker.js");
+
+// Auto-select available port if not specified
+let PORT: number;
+if (options.port) {
+  PORT = parseInt(options.port);
+} else {
+  // Auto-find an available port starting from 3001
+  PORT = await findAvailablePort(3001, 9999);
+  console.log(`${TUIColors.OKCYAN}🌐 Auto-selected available port: ${PORT}${TUIColors.ENDC}`);
+}
 
 // Change to project directory if specified via command line
 if (options.projectDir !== process.cwd()) {
@@ -119,9 +131,9 @@ if (options.configMode || options.interactive) {
   }
   
   // Use port from TUI configuration if available
-  if (tuiResult.serverPort && tuiResult.serverPort !== parseInt(program.opts().port || '3001')) {
+  if (tuiResult.serverPort && tuiResult.serverPort !== PORT) {
     console.log(`${TUIColors.OKBLUE}🌐 Using TUI configured port: ${tuiResult.serverPort}${TUIColors.ENDC}`);
-    program.setOptionValue('port', tuiResult.serverPort.toString());
+    PORT = tuiResult.serverPort;
   }
 } else if (options.mode) {
   // Use predefined mode
@@ -157,9 +169,9 @@ if (options.configMode || options.interactive) {
     }
     
     // Use port from TUI configuration if available
-    if (tuiResult.serverPort && tuiResult.serverPort !== parseInt(program.opts().port || '3001')) {
+    if (tuiResult.serverPort && tuiResult.serverPort !== PORT) {
       console.log(`${TUIColors.OKBLUE}🌐 Using TUI configured port: ${tuiResult.serverPort}${TUIColors.ENDC}`);
-      program.setOptionValue('port', tuiResult.serverPort.toString());
+      PORT = tuiResult.serverPort;
     }
   } else {
     // Skip TUI - load existing configuration or use default

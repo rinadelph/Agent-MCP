@@ -193,6 +193,229 @@ async function handleNamedConfigurations(): Promise<ExtendedConfig | null> {
   return null;
 }
 
+async function getTabCompletion(partialPath: string): Promise<{ completion: string; suggestions: string[] }> {
+  try {
+    const fs = await import('fs');
+    const path = await import('path');
+    const os = await import('os');
+    
+    let searchPath = partialPath;
+    let prefix = '';
+    
+    // Handle home directory expansion
+    if (partialPath.startsWith('~')) {
+      searchPath = partialPath.replace('~', os.homedir());
+    }
+    
+    // If path doesn't exist, get parent directory and prefix
+    if (!fs.existsSync(searchPath)) {
+      prefix = path.basename(searchPath);
+      searchPath = path.dirname(searchPath);
+    }
+    
+    if (!fs.existsSync(searchPath)) {
+      return { completion: partialPath, suggestions: [] };
+    }
+    
+    const entries = fs.readdirSync(searchPath, { withFileTypes: true });
+    const directories = entries
+      .filter(entry => entry.isDirectory())
+      .map(entry => entry.name)
+      .filter(name => prefix ? name.toLowerCase().startsWith(prefix.toLowerCase()) : true)
+      .sort();
+    
+    if (directories.length === 0) {
+      return { completion: partialPath, suggestions: [] };
+    }
+    
+    // If only one match, complete it
+    if (directories.length === 1) {
+      const completedPath = path.join(searchPath, directories[0]);
+      return { 
+        completion: completedPath.endsWith('/') ? completedPath : completedPath + '/', 
+        suggestions: [completedPath] 
+      };
+    }
+    
+    // Multiple matches - find common prefix
+    let commonPrefix = directories[0];
+    for (let i = 1; i < directories.length; i++) {
+      let j = 0;
+      while (j < commonPrefix.length && j < directories[i].length && 
+             commonPrefix[j].toLowerCase() === directories[i][j].toLowerCase()) {
+        j++;
+      }
+      commonPrefix = commonPrefix.substring(0, j);
+    }
+    
+    const suggestions = directories.map(dir => path.join(searchPath, dir));
+    
+    if (commonPrefix.length > prefix.length) {
+      const completedPath = path.join(searchPath, commonPrefix);
+      return { completion: completedPath, suggestions };
+    }
+    
+    return { completion: partialPath, suggestions };
+  } catch (error) {
+    return { completion: partialPath, suggestions: [] };
+  }
+}
+
+async function selectProjectDirectoryWithTabCompletion(): Promise<string> {
+  const fs = await import('fs');
+  const path = await import('path');
+  const os = await import('os');
+  
+  console.log(`${TUIColors.DIM}💡 Type path and press TAB to complete, ENTER when done${TUIColors.ENDC}`);
+  console.log(`${TUIColors.DIM}   Use '~' for home directory, Ctrl+C to cancel${TUIColors.ENDC}`);
+  console.log();
+  
+  return new Promise((resolve, reject) => {
+    let currentInput = '';
+    let cursorPosition = 0;
+    
+    // Set raw mode to capture individual key presses
+    if (process.stdin.setRawMode) {
+      process.stdin.setRawMode(true);
+    }
+    process.stdin.resume();
+    
+    // Display initial prompt
+    process.stdout.write('📁 Enter project directory path: ');
+    
+    const cleanup = () => {
+      if (process.stdin.setRawMode) {
+        process.stdin.setRawMode(false);
+      }
+      process.stdin.removeAllListeners('data');
+    };
+    
+    process.stdin.on('data', async (key) => {
+      const keyStr = key.toString();
+      
+      // Handle Ctrl+C
+      if (key[0] === 3) {
+        cleanup();
+        console.log('\n');
+        reject(new Error('Directory selection cancelled'));
+        return;
+      }
+      
+      // Handle Enter
+      if (keyStr === '\r' || keyStr === '\n') {
+        cleanup();
+        console.log('\n');
+        
+        let finalPath = currentInput.trim();
+        
+        if (!finalPath) {
+          reject(new Error('No path provided'));
+          return;
+        }
+        
+        // Expand home directory
+        if (finalPath.startsWith('~')) {
+          finalPath = finalPath.replace('~', os.homedir());
+        }
+        
+        // Validate path
+        try {
+          if (!path.isAbsolute(finalPath)) {
+            console.log(`${TUIColors.FAIL}❌ Path must be absolute${TUIColors.ENDC}`);
+            reject(new Error('Path must be absolute'));
+            return;
+          }
+          
+          if (!fs.existsSync(finalPath)) {
+            console.log(`${TUIColors.FAIL}❌ Directory does not exist: ${finalPath}${TUIColors.ENDC}`);
+            reject(new Error('Directory does not exist'));
+            return;
+          }
+          
+          const stats = fs.statSync(finalPath);
+          if (!stats.isDirectory()) {
+            console.log(`${TUIColors.FAIL}❌ Path is not a directory: ${finalPath}${TUIColors.ENDC}`);
+            reject(new Error('Path is not a directory'));
+            return;
+          }
+          
+          resolve(finalPath);
+        } catch (error) {
+          console.log(`${TUIColors.FAIL}❌ Invalid path: ${finalPath}${TUIColors.ENDC}`);
+          reject(error);
+        }
+        return;
+      }
+      
+      // Handle TAB (ASCII 9)
+      if (key[0] === 9) {
+        const result = await getTabCompletion(currentInput);
+        
+        if (result.suggestions.length === 0) {
+          // No matches - beep
+          process.stdout.write('\x07');
+        } else if (result.suggestions.length === 1) {
+          // Single match - complete it
+          const completion = result.completion;
+          // Clear current line and rewrite with completion
+          process.stdout.write('\r\x1b[K'); // Clear line
+          process.stdout.write('📁 Enter project directory path: ' + completion);
+          currentInput = completion;
+          cursorPosition = completion.length;
+        } else {
+          // Multiple matches - show options
+          console.log('\n');
+          const suggestions = result.suggestions.map(s => path.basename(s)).join('  ');
+          console.log(`${TUIColors.DIM}Options: ${suggestions}${TUIColors.ENDC}`);
+          
+          // Complete to common prefix if any
+          if (result.completion !== currentInput) {
+            currentInput = result.completion;
+            cursorPosition = currentInput.length;
+          }
+          
+          // Redraw prompt
+          process.stdout.write('📁 Enter project directory path: ' + currentInput);
+        }
+        return;
+      }
+      
+      // Handle Delete key (escape sequence \x1b[3~)
+      if (keyStr === '\x1b[3~') {
+        // Delete character at cursor (for now just ignore since we don't track cursor properly)
+        return;
+      }
+      
+      // Handle Arrow keys and other escape sequences
+      if (keyStr.startsWith('\x1b[')) {
+        // Ignore arrow keys and other escape sequences for now
+        return;
+      }
+      
+      // Handle Backspace (ASCII 8 or 127)
+      if (key[0] === 8 || key[0] === 127) {
+        if (currentInput.length > 0) {
+          currentInput = currentInput.slice(0, -1);
+          cursorPosition = currentInput.length;
+          // Move cursor back and clear
+          process.stdout.write('\b \b');
+        }
+        return;
+      }
+      
+      // Handle printable characters
+      if (keyStr.length === 1 && keyStr >= ' ' && keyStr <= '~') {
+        currentInput += keyStr;
+        cursorPosition = currentInput.length;
+        process.stdout.write(keyStr);
+        return;
+      }
+      
+      // Ignore other non-printable characters
+    });
+  });
+}
+
 async function selectProjectDirectory(): Promise<string> {
   console.log(`${TUIColors.OKBLUE}${TUIColors.BOLD}📁 Project Directory Configuration${TUIColors.ENDC}`);
   console.log('This is the directory where agents will operate and execute tasks.');
@@ -212,13 +435,30 @@ async function selectProjectDirectory(): Promise<string> {
         value: 'current' 
       },
       { 
-        name: 'Enter custom path', 
-        value: 'custom' 
+        name: 'Browse with tab completion (type and TAB)', 
+        value: 'browse' 
+      },
+      { 
+        name: 'Enter custom path manually', 
+        value: 'manual' 
       }
     ]
   });
   
-  if (response.choice === 'custom') {
+  if (response.choice === 'browse') {
+    try {
+      const selectedPath = await selectProjectDirectoryWithTabCompletion();
+      console.log(`${TUIColors.OKGREEN}✅ Project directory set to: ${selectedPath}${TUIColors.ENDC}`);
+      console.log();
+      return selectedPath;
+    } catch (error) {
+      console.log(`${TUIColors.WARNING}⚠️  Selection cancelled, using current directory${TUIColors.ENDC}`);
+      console.log();
+      return currentDir;
+    }
+  }
+  
+  if (response.choice === 'manual') {
     const customPath = await inquirer.prompt({
       type: 'input',
       name: 'path',
@@ -231,27 +471,39 @@ async function selectProjectDirectory(): Promise<string> {
         const trimmedPath = input.trim();
         const fs = await import('fs');
         const path = await import('path');
+        const os = await import('os');
         
-        if (!path.isAbsolute(trimmedPath)) {
+        let finalPath = trimmedPath;
+        if (finalPath.startsWith('~')) {
+          finalPath = finalPath.replace('~', os.homedir());
+        }
+        
+        if (!path.isAbsolute(finalPath)) {
           return 'Please enter an absolute path (starting with / or C:\\)';
         }
         
-        if (!fs.existsSync(trimmedPath)) {
-          return `Directory does not exist: ${trimmedPath}`;
+        if (!fs.existsSync(finalPath)) {
+          return `Directory does not exist: ${finalPath}`;
         }
         
-        const stats = fs.statSync(trimmedPath);
+        const stats = fs.statSync(finalPath);
         if (!stats.isDirectory()) {
-          return `Path is not a directory: ${trimmedPath}`;
+          return `Path is not a directory: ${finalPath}`;
         }
         
         return true;
       }
     });
     
-    console.log(`${TUIColors.OKGREEN}✅ Project directory set to: ${customPath.path.trim()}${TUIColors.ENDC}`);
+    let finalPath = customPath.path.trim();
+    if (finalPath.startsWith('~')) {
+      const os = await import('os');
+      finalPath = finalPath.replace('~', os.homedir());
+    }
+    
+    console.log(`${TUIColors.OKGREEN}✅ Project directory set to: ${finalPath}${TUIColors.ENDC}`);
     console.log();
-    return customPath.path.trim();
+    return finalPath;
   }
   
   console.log(`${TUIColors.OKGREEN}✅ Using current directory as project directory${TUIColors.ENDC}`);
@@ -263,38 +515,25 @@ async function selectServerPort(): Promise<number> {
   console.log(`${TUIColors.OKBLUE}${TUIColors.BOLD}🌐 Server Port Configuration${TUIColors.ENDC}`);
   console.log();
   
-  const recommendations = getPortRecommendations();
-  const portStatus = await Promise.all(
-    recommendations.map(async port => ({
-      port,
-      available: await isPortAvailable(port),
-      name: `Port ${port}${port === 3001 ? ' (default)' : ''}`,
-      value: port
-    }))
-  );
-  
-  const availablePorts = portStatus.filter(p => p.available);
-  
-  console.log('Port Status:');
-  portStatus.forEach(p => {
-    const status = p.available ? 
-      `${TUIColors.OKGREEN}✅ Available${TUIColors.ENDC}` : 
-      `${TUIColors.FAIL}❌ In use${TUIColors.ENDC}`;
-    console.log(`  Port ${p.port}: ${status}`);
-  });
-  console.log();
+  const availablePorts = await getPortRecommendations();
   
   if (availablePorts.length === 0) {
-    console.log(`${TUIColors.WARNING}⚠️  No recommended ports available, finding alternative...${TUIColors.ENDC}`);
-    const alternativePort = await findAvailablePort(3001, 3100);
+    console.log(`${TUIColors.WARNING}⚠️  No common ports available, finding alternative...${TUIColors.ENDC}`);
+    const alternativePort = await findAvailablePort(3001, 9999);
     return alternativePort;
   }
   
+  console.log('Available Ports Found:');
+  availablePorts.forEach(port => {
+    console.log(`  Port ${port}: ${TUIColors.OKGREEN}✅ Available${TUIColors.ENDC}`);
+  });
+  console.log();
+  
   const choices = [
-    ...availablePorts.map(p => ({
-      name: `${p.name} - Available`,
-      value: p.port,
-      short: `${p.port}`
+    ...availablePorts.map(port => ({
+      name: `Port ${port} - Available`,
+      value: port,
+      short: `${port}`
     })),
     { name: 'Enter custom port', value: 'custom', short: 'Custom' }
   ];
@@ -619,12 +858,20 @@ export async function launchPracticalConfigurationTUI(): Promise<{
   const existingConfig = await handleNamedConfigurations();
   
   if (existingConfig) {
+    console.log(`${TUIColors.OKGREEN}✅ Loaded saved configuration: ${existingConfig.configName}${TUIColors.ENDC}`);
+    console.log(`${TUIColors.DIM}You can now update the port and project directory settings...${TUIColors.ENDC}`);
+    console.log();
+    
+    // Always ask for port and project directory even when loading existing config
+    const projectDirectory = await selectProjectDirectory();
+    const serverPort = await selectServerPort();
+    
     return {
       toolConfig: existingConfig.toolCategories,
       embeddingProvider: existingConfig.embeddingProvider,
       cliAgents: existingConfig.cliAgents,
-      serverPort: existingConfig.serverPort,
-      projectDirectory: existingConfig.projectDirectory || process.cwd(),
+      serverPort: serverPort,
+      projectDirectory: projectDirectory,
       configName: existingConfig.configName
     };
   }
