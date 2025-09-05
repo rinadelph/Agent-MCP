@@ -3,7 +3,7 @@
 
 import { join } from 'path';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
-import { getAgentDir } from './config.js';
+import { getAgentDir, ensureAgentDir } from './config.js';
 
 // Tool category definitions
 export interface ToolCategories {
@@ -160,6 +160,8 @@ export function loadToolConfig(): ToolCategories {
 }
 
 export function saveToolConfig(categories: ToolCategories, mode?: string): void {
+  // Ensure directory exists before saving
+  ensureAgentDir();
   const configPath = getConfigPath();
   
   // Ensure basic tools are always enabled

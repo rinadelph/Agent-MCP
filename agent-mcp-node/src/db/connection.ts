@@ -5,7 +5,7 @@ import Database from 'better-sqlite3';
 import * as sqliteVec from 'sqlite-vec';
 import { existsSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
-import { getDbPath, MCP_DEBUG } from '../core/config.js';
+import { getDbPath, MCP_DEBUG, ensureAgentDir } from '../core/config.js';
 import type { DatabaseConfig } from '../types/database.js';
 
 // Global state for VSS loadability (matching Python implementation)
@@ -70,13 +70,18 @@ export function isVssLoadable(): boolean {
 export function createDbConnection(config?: Partial<DatabaseConfig>): Database.Database {
   const dbPath = config?.dbPath || getDbPath();
   
-  // Ensure directory exists
-  const dbDir = dirname(dbPath);
-  if (!existsSync(dbDir)) {
-    try {
-      mkdirSync(dbDir, { recursive: true });
-    } catch (error) {
-      throw new Error(`Failed to create database directory: ${error}`);
+  // Ensure .agent directory exists if using default path
+  if (!config?.dbPath) {
+    ensureAgentDir();
+  } else {
+    // For custom paths, ensure the directory exists
+    const dbDir = dirname(dbPath);
+    if (!existsSync(dbDir)) {
+      try {
+        mkdirSync(dbDir, { recursive: true });
+      } catch (error) {
+        throw new Error(`Failed to create database directory: ${error}`);
+      }
     }
   }
 

@@ -3,7 +3,7 @@
 
 import { join } from 'path';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
-import { getAgentDir } from './config.js';
+import { getAgentDir, ensureAgentDir } from './config.js';
 import { ToolCategories } from './toolConfig.js';
 
 export interface ExtendedConfig {
@@ -96,13 +96,9 @@ export function loadExtendedConfig(): ExtendedConfig {
 
 export function saveExtendedConfig(config: ExtendedConfig): void {
   try {
+    // Ensure directory exists before saving
+    ensureAgentDir();
     const configPath = getExtendedConfigPath();
-    const configDir = getAgentDir();
-    
-    // Create directory if it doesn't exist
-    if (!existsSync(configDir)) {
-      mkdirSync(configDir, { recursive: true });
-    }
     
     // Update timestamp
     config.lastUpdated = new Date().toISOString();
@@ -232,12 +228,9 @@ export function loadNamedConfigs(): NamedConfig[] {
 
 export function saveNamedConfigs(configs: NamedConfig[]): void {
   try {
+    // Ensure directory exists before saving
+    ensureAgentDir();
     const configPath = getNamedConfigsPath();
-    const configDir = getAgentDir();
-    
-    if (!existsSync(configDir)) {
-      mkdirSync(configDir, { recursive: true });
-    }
     
     writeFileSync(configPath, JSON.stringify(configs, null, 2));
   } catch (error) {

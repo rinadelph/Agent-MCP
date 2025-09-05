@@ -157,7 +157,11 @@ export function getProjectDir(): string {
 }
 
 export function getAgentDir(): string {
-  const agentDir = join(getProjectDir(), '.agent');
+  return join(getProjectDir(), '.agent');
+}
+
+export function ensureAgentDir(): string {
+  const agentDir = getAgentDir();
   if (!existsSync(agentDir)) {
     mkdirSync(agentDir, { recursive: true });
   }
