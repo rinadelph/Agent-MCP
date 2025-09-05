@@ -148,7 +148,7 @@ if (options.configMode || options.interactive) {
   console.log(`📝 Using ${predefinedMode.name}: ${predefinedMode.description}`);
 } else {
   // Default behavior: Show TUI unless explicitly skipped
-  if (!options.noTui && !process.env.CI && !process.env.AGENT_MCP_SKIP_TUI) {
+  if (!options.noTui && !process.env.CI && process.env.AGENT_MCP_SKIP_TUI !== 'true') {
     // Launch pre-configuration TUI by default
     const { launchPreConfigurationTUI } = await import("../../tui/prelaunch.js");
     const tuiResult = await launchPreConfigurationTUI();
