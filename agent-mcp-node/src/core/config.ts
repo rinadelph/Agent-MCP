@@ -76,6 +76,12 @@ export const PROVIDER_MODEL_DIMENSIONS: Record<string, Record<string, number>> =
     'all-minilm': 384,
     'mxbai-embed-large': 1024,
     'snowflake-arctic-embed': 1024,
+    'qwen2.5:0.5b': 896,
+    'qwen2.5:1.5b': 896,
+    'qwen2.5:3b': 2048,
+    'qwen2.5:7b': 3584,
+    'qwen3-embedding:0.6b': 1024,
+    'qwen3-embedding:latest': 1024,
   },
   gemini: {
     'text-embedding-004': 768,

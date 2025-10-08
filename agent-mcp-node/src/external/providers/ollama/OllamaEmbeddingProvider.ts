@@ -67,11 +67,8 @@ export class OllamaEmbeddingProvider extends BaseEmbeddingProvider {
   }
   
   protected async generateEmbeddingsInternal(texts: string[]): Promise<number[][]> {
-    // TODO: Implement Ollama embedding generation
-    // Example implementation:
-    /*
     const embeddings: number[][] = [];
-    
+
     // Ollama processes one text at a time for embeddings
     for (const text of texts) {
       const response = await fetch(`${PROVIDER_CONFIG.OLLAMA_BASE_URL}/api/embeddings`, {
@@ -82,19 +79,17 @@ export class OllamaEmbeddingProvider extends BaseEmbeddingProvider {
           prompt: text
         })
       });
-      
+
       if (!response.ok) {
-        throw new Error(`Ollama error: ${response.status}`);
+        const errorText = await response.text();
+        throw new Error(`Ollama error (${response.status}): ${errorText}`);
       }
-      
+
       const data = await response.json();
       embeddings.push(data.embedding);
     }
-    
+
     return embeddings;
-    */
-    
-    throw new Error('Ollama provider not implemented. Please implement generateEmbeddingsInternal method.');
   }
   
   /**
@@ -103,29 +98,30 @@ export class OllamaEmbeddingProvider extends BaseEmbeddingProvider {
   async ensureModelAvailable(): Promise<boolean> {
     const available = await this.isAvailable();
     if (available) return true;
-    
+
     console.log(`📥 Pulling Ollama model ${this.getModel()}...`);
-    
-    // TODO: Implement model pulling
-    /*
-    const response = await fetch(`${PROVIDER_CONFIG.OLLAMA_BASE_URL}/api/pull`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: this.getModel(),
-        stream: false
-      })
-    });
-    
-    if (!response.ok) {
-      throw new Error(`Failed to pull model: ${response.status}`);
+
+    try {
+      const response = await fetch(`${PROVIDER_CONFIG.OLLAMA_BASE_URL}/api/pull`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: this.getModel(),
+          stream: false
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to pull model (${response.status}): ${errorText}`);
+      }
+
+      console.log(`✅ Model ${this.getModel()} pulled successfully`);
+      return true;
+    } catch (error) {
+      console.error(`❌ Failed to pull model ${this.getModel()}:`, error);
+      return false;
     }
-    
-    console.log(`✅ Model ${this.getModel()} pulled successfully`);
-    return true;
-    */
-    
-    return false;
   }
 }
 

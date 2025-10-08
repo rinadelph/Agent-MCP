@@ -100,18 +100,20 @@ export function createDbConnection(config?: Partial<DatabaseConfig>): Database.D
     db.pragma('cache_size = 10000');   // Increase cache size for better performance
     db.pragma('temp_store = MEMORY');  // Store temporary tables in memory
 
-    // Try to load sqlite-vec extension if available
-    if (vssLoadSuccessful) {
-      try {
-        sqliteVec.load(db);
-        if (MCP_DEBUG) {
-          console.log("✅ sqlite-vec loaded for database connection");
-        }
-      } catch (error) {
-        console.error("⚠️  Failed to load sqlite-vec for this connection:", error);
+    // Try to load sqlite-vec extension
+    try {
+      sqliteVec.load(db);
+      vssLoadSuccessful = true;
+      vssLoadTested = true;
+      if (MCP_DEBUG) {
+        console.log("✅ sqlite-vec loaded for database connection");
       }
-    } else if (MCP_DEBUG) {
-      console.log("ℹ️  sqlite-vec not loaded (extension not available)");
+    } catch (error) {
+      vssLoadSuccessful = false;
+      vssLoadTested = true;
+      if (MCP_DEBUG) {
+        console.log("ℹ️  sqlite-vec not loaded (extension not available):", error instanceof Error ? error.message : error);
+      }
     }
 
   } catch (error) {
