@@ -43,19 +43,21 @@ async def mcp_call_tool_handler(name: str, arguments: dict) -> List[mcp_types.Te
 # The SseServerTransport handles /messages/ (POST for tool calls) and /sse (GET for connections)
 sse_transport = SseServerTransport("/messages/") # Path from original main.py:1943
 
-async def sse_connection_handler(request): # Matches original handle_sse in main.py:1945
+async def sse_connection_handler(request): # Starlette Request object
     """Handles new SSE client connections."""
     try:
         # Client ID generation (original main.py:1947)
         # While SseServerTransport might manage its own client IDs, logging this is useful.
         client_id_log = str(uuid.uuid4())[:8] # For logging this specific connection attempt
-        logger.info(f"SSE connection request from {request.client.host} (Log ID: {client_id_log})")
+        client_host = request.client.host if request.client else 'unknown'
+        logger.info(f"SSE connection request from {client_host} (Log ID: {client_id_log})")
         # The original also printed to console, which logger now handles.
-        # print(f"[{datetime.datetime.now().isoformat()}] SSE connection request from {request.client.host} (ID: {client_id_log})")
+        # print(f"[{datetime.datetime.now().isoformat()}] SSE connection request from {client_host} (ID: {client_id_log})")
 
         # `connect_sse` is a context manager from SseServerTransport
+        # Extract ASGI components from Starlette Request
         async with sse_transport.connect_sse(
-            request.scope, request.receive, request._send # Starlette's low-level ASGI send
+            request.scope, request.receive, request._send # ASGI scope, receive, send callables
         ) as streams:
             # streams[0] is input_stream, streams[1] is output_stream
             actual_client_id = streams[2] if len(streams) > 2 else client_id_log # Get actual client ID if provided by transport
@@ -134,10 +136,19 @@ def create_app(project_dir: str, admin_token_cli: Optional[str] = None) -> Starl
     # We need to add the SSE specific routes here.
     all_routes = list(http_routes) # Start with routes from app/routes.py
 
+    # Create ASGI app wrapper for handle_post_message
+    # The sse_transport.handle_post_message is already a proper ASGI callable
+    # We just need to wrap it as an ASGI app class for Mount to work
+    class MessageHandlerApp:
+        """ASGI app wrapper for SseServerTransport.handle_post_message"""
+        async def __call__(self, scope, receive, send):
+            # Directly call the ASGI-compatible handle_post_message method
+            await sse_transport.handle_post_message(scope, receive, send)
+
     # Add SSE routes (Original main.py:2113-2114)
     all_routes.append(Route('/sse', endpoint=sse_connection_handler, name="sse_connect"))
-    # Mount the SseServerTransport's POST message handler
-    all_routes.append(Mount('/messages', app=sse_transport.handle_post_message, name="mcp_post_message"))
+    # Add the SseServerTransport's POST message handler as a Mount with ASGI app wrapper
+    all_routes.append(Mount('/messages', app=MessageHandlerApp(), name="mcp_post_message"))
 
     # Note: Static file serving removed - dashboard is now served separately via npm run dev
     
