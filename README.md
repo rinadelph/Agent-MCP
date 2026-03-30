@@ -54,6 +54,10 @@ Your project's entire context lives in a searchable, persistent memory bank. Age
 
 Monitor every agent's status, assigned tasks, and recent activity. The system automatically manages task dependencies, prevents conflicts, and ensures work flows smoothly from planning to implementation.
 
+## Hosted deployment
+
+A hosted deployment is available on [Fronteir AI](https://fronteir.ai/mcp/rinadelph-agent-mcp).
+
 ## Quick Start
 
 ### Python Implementation (Recommended)
