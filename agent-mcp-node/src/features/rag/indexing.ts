@@ -6,7 +6,7 @@ import { glob } from 'glob';
 import { readFile, stat } from 'fs/promises';
 import { join, relative } from 'path';
 import { getDbConnection, isVssLoadable } from '../../db/connection.js';
-import { generateEmbeddings } from '../../external/openai_service.js';
+import { getEmbeddingProvider } from '../../external/embeddingProviderFactory.js';
 import { simpleChunker } from './chunking.js';
 import { insertChunkWithEmbedding, removeChunksBySource } from './vectorSearch.js';
 import { getProjectDir, MCP_DEBUG, DISABLE_AUTO_INDEXING, ADVANCED_EMBEDDINGS } from '../../core/config.js';
@@ -437,9 +437,10 @@ async function processSources(sources: ContentSource[]): Promise<void> {
 
     console.log(`📝 Generated ${allChunks.length} total chunks, generating embeddings...`);
 
-    // Generate embeddings for all chunks
+    // Generate embeddings for all chunks using the configured provider
     const chunkTexts = allChunks.map(item => item.chunk.text);
-    const embeddings = await generateEmbeddings(chunkTexts);
+    const provider = await getEmbeddingProvider();
+    const embeddings = await provider.generateEmbeddings(chunkTexts);
 
     // Insert chunks with embeddings
     let successCount = 0;

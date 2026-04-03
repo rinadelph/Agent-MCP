@@ -2,8 +2,8 @@
 // Ported from Python RAG query system with sqlite-vec integration
 
 import { getDbConnection, isVssLoadable, createDbConnection } from '../../db/connection.js';
-import { generateSingleEmbedding } from '../../external/openai_service.js';
-import { MCP_DEBUG, EMBEDDING_MODEL, EMBEDDING_DIMENSION } from '../../core/config.js';
+import { getEmbeddingProvider } from '../../external/embeddingProviderFactory.js';
+import { MCP_DEBUG } from '../../core/config.js';
 
 /**
  * Interface for vector search results
@@ -23,9 +23,7 @@ export interface VectorSearchResult {
  */
 export async function performVectorSearch(
   queryText: string,
-  k: number = 10,
-  model: string = EMBEDDING_MODEL,
-  dimensions: number = EMBEDDING_DIMENSION
+  k: number = 10
 ): Promise<VectorSearchResult[]> {
   // Check if vector search is available
   if (!isVssLoadable()) {
@@ -53,7 +51,13 @@ export async function performVectorSearch(
       console.log(`🔍 Generating embedding for query: "${queryText.substring(0, 100)}..."`);
     }
 
-    const queryEmbedding = await generateSingleEmbedding(queryText, model, dimensions);
+    const provider = await getEmbeddingProvider();
+    const queryEmbeddings = await provider.generateEmbeddings([queryText]);
+    const queryEmbedding = queryEmbeddings[0];
+    if (!queryEmbedding) {
+      console.error('Failed to generate query embedding');
+      return [];
+    }
     const queryEmbeddingJson = JSON.stringify(queryEmbedding);
 
     // Perform vector similarity search
@@ -240,7 +244,9 @@ export async function insertChunkWithEmbedding(
     // Generate embedding if not provided
     let chunkEmbedding = embedding;
     if (!chunkEmbedding) {
-      chunkEmbedding = await generateSingleEmbedding(chunkText);
+      const provider = await getEmbeddingProvider();
+      const embeddings = await provider.generateEmbeddings([chunkText]);
+      chunkEmbedding = embeddings[0] ?? undefined;
     }
 
     if (!chunkEmbedding) {
