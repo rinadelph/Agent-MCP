@@ -74,7 +74,7 @@ nvm use  # Uses the version specified in .nvmrc
 # Configure environment
 cp .env.example .env  # Add your OpenAI API key
 uv venv
-uv install
+uv pip install -e .
 
 # Start the server
 uv run -m agent_mcp.cli --port 8080 --project-dir path-to-directory
@@ -94,7 +94,7 @@ cd Agent-MCP/agent-mcp-node
 npm install
 
 # Configure environment
-cp .env.example .env  # Add your OpenAI API key
+cp ../.env.example .env  # Add your OpenAI API key from the repository root
 
 # Start the server
 npm run server
@@ -123,14 +123,13 @@ Agent-MCP can function as an MCP server, exposing its multi-agent capabilities t
 ```bash
 # 1. Install Agent-MCP
 uv venv
-uv install
+uv pip install -e .
 
 # 2. Start the MCP server
 uv run -m agent_mcp.cli --port 8080
 
-# 3. Configure your MCP client to connect to:
-# HTTP: http://localhost:8000/mcp
-# WebSocket: ws://localhost:8000/mcp/ws
+# 3. Configure your MCP client to use the Python server's SSE endpoint:
+# http://localhost:8080/sse
 ```
 
 #### MCP Server Configuration
@@ -226,23 +225,13 @@ Once connected, you can use these MCP tools directly in Claude:
 
 **Custom Transport Options**:
 ```bash
-# HTTP with custom port
-uv run -m agent_mcp.cli --port 8080
-
-# WebSocket with authentication
-uv run -m agent_mcp.cli --port 8080 --auth-token your-secret-token
-
-# Unix socket (Linux/macOS)
-uv run -m agent_mcp.cli --port 8080
+# SSE with a custom port and admin token
+uv run -m agent_mcp.cli --transport sse --port 8080 --admin-token your-secret-token
 ```
 
 **Environment Variables**:
 ```bash
-export AGENT_MCP_HOST=0.0.0.0          # Server host
-export AGENT_MCP_PORT=8000              # Server port  
-export AGENT_MCP_LOG_LEVEL=INFO         # Logging level
-export AGENT_MCP_PROJECT_DIR=/your/project  # Default project directory
-export AGENT_MCP_MAX_AGENTS=10          # Maximum concurrent agents
+export PORT=8080                        # Python SSE and dashboard port
 ```
 
 ### MCP Client Examples
@@ -253,7 +242,7 @@ import asyncio
 from mcp import Client
 
 async def main():
-    async with Client("http://localhost:8000/mcp") as client:
+    async with Client("http://localhost:8080/sse") as client:
         # Create a backend agent
         result = await client.call_tool("create_agent", {
             "role": "backend",
@@ -279,7 +268,7 @@ asyncio.run(main())
 ```javascript
 import { MCPClient } from '@modelcontextprotocol/client';
 
-const client = new MCPClient('http://localhost:8000/mcp');
+const client = new MCPClient('http://localhost:8080/sse');
 
 async function createAgent() {
   await client.connect();
@@ -301,14 +290,11 @@ createAgent().catch(console.error);
 
 **Connection Issues**:
 ```bash
-# Check if MCP server is running
-curl http://localhost:8000/mcp/health
-
-# Verify WebSocket connection
-wscat -c ws://localhost:8000/mcp/ws
+# Check the Python dashboard/status endpoint
+curl http://localhost:8080/api/status
 
 # Check server logs
-uv run -m agent_mcp.cli --port 8080 --log-level DEBUG
+uv run -m agent_mcp.cli --port 8080 --debug
 ```
 
 **Common Issues**:
@@ -323,22 +309,10 @@ uv run -m agent_mcp.cli --port 8080 --log-level DEBUG
 Use the MCP extension to integrate Agent-MCP directly into your editor workflow.
 
 **Terminal Usage**:
-```bash
-# Quick task assignment via curl
-curl -X POST http://localhost:8000/mcp/tools/assign_task \
-  -H "Content-Type: application/json" \
-  -d '{"task": "Add error handling to API endpoints", "agent_role": "backend"}'
-```
+Use an MCP-compatible client configured for `http://localhost:8080/sse` to call the `assign_task` tool. MCP tool calls use the negotiated transport session; they are not direct REST requests to `/mcp/tools/...`.
 
 **CI/CD Integration**:
-```yaml
-# GitHub Actions example
-- name: Run Agent-MCP Code Review
-  run: |
-    uv run -m agent_mcp.cli --port 8080 --daemon
-    curl -X POST localhost:8000/mcp/tools/assign_task \
-      -d '{"task": "Review PR for security issues", "agent_role": "security"}'
-```
+Start the server as a managed background process and connect with an MCP-compatible client configured for `http://localhost:8080/sse`. The Python CLI runs in the foreground and does not provide a `--daemon` option.
 
 ## How It Works: Breaking Complexity into Simple Steps
 
@@ -789,8 +763,8 @@ Run memory garbage collection through the dashboard or restart with `--refresh-m
 - [Getting Started Guide](./docs/getting-started.md) - Complete walkthrough with examples
 - [MCD Creation Guide](./docs/mcd-guide.md) - Write effective project blueprints
 - [Theoretical Foundation](./docs/chapter-1-cognitive-empathy.md) - Understanding AI cognition
-- [Architecture Overview](./docs/architecture.md) - System design and components
-- [API Reference](./docs/api-reference.md) - Complete technical documentation
+- [Context Foundation](./docs/chapter-2-context-foundation.md) - Context and project structure
+- [MCD Guide](./docs/mcd-guide.md) - Create a Main Context Document
 
 ## Community and Support
 
