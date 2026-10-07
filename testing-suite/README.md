@@ -8,8 +8,9 @@ Automated testing environment for Agent-MCP with Claude Code integration.
 # Start test environment
 ./run-test.sh
 
-# Clean up when done
-./cleanup.sh
+# Stop the server and Claude sessions when done
+tmux kill-session -t agentmcp-test
+tmux kill-session -t claude-test
 ```
 
 ## What It Does
@@ -35,7 +36,6 @@ testing-suite/
 │       │   └── src/
 │       └── test-info.txt     # Test environment details
 ├── run-test.sh              # Main test script
-├── cleanup.sh               # Cleanup script
 └── README.md               # This file
 ```
 
@@ -81,7 +81,8 @@ tmux send-keys -t claude-test 'your message here' Enter
 1. **Start environment**: `./run-test.sh`
 2. **Test features** in Claude session (auto-attached)
 3. **View server logs** in MCP session if needed
-4. **Clean up**: `./cleanup.sh` when done
+4. **Stop the sessions** when done:
+   `tmux kill-session -t agentmcp-test` and `tmux kill-session -t claude-test`
 
 ## Admin Agent
 
@@ -98,14 +99,14 @@ Ready to:
 - Coordinate development work
 - Test the new testing agent auto-launch feature
 
-## Cleanup Options
+## Stopping the Sessions
 
 ```bash
-# Clean up sessions only (preserve files)
-./cleanup.sh
+# Stop the MCP server session
+tmux kill-session -t agentmcp-test
 
-# Clean up everything including test files
-./cleanup.sh --remove-files
+# Stop the Claude Code session
+tmux kill-session -t claude-test
 ```
 
 ## Dependencies
@@ -113,6 +114,7 @@ Ready to:
 - `uv` - Python package manager
 - `tmux` - Terminal multiplexer
 - `claude` - Claude Code CLI
+- `netstat` and `realpath` - Used by `run-test.sh`
 - `curl` - For server health checks
 
 ## Troubleshooting
@@ -125,7 +127,7 @@ Ready to:
 ### Claude Connection Issues
 - Ensure MCP server is running first
 - Check Claude MCP configuration: `claude mcp list`
-- Verify SSE endpoint: `curl http://localhost:8002/sse`
+- Check the server status: `curl http://localhost:8002/api/status`
 
 ### Token Extraction Failed
 - MCP server may not have started properly

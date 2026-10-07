@@ -11,7 +11,7 @@ Welcome to Agent-MCP! This guide will take you from installation to your first s
 - **AI assistant experience** (Claude Code, Cursor, or similar)
 
 ### Required Software
-- **Python 3.8+** with pip/uv
+- **Python 3.10+** with pip/uv
 - **Node.js 18+** with npm
 - **Git** for version control
 - **AI Coding Assistant** (Claude Code recommended)
