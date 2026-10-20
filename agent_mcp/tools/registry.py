@@ -51,7 +51,7 @@ def register_tool(
     description: str,
     input_schema: Dict[str, Any],
     implementation: Callable[..., Awaitable[List[mcp_types.TextContent]]],
-    enabled: Optional[Callable[[], bool]] = None,
+    enabled: Callable[[], bool] | None = None,
 ):
     """
     Registers a tool's schema and its implementation.
