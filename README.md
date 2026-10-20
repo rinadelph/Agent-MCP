@@ -108,6 +108,8 @@ npm install -g agent-mcp-node
 agent-mcp --port 8080 --project-dir path-to-directory
 ```
 
+Python agents can also use built-in free web search and page fetching with [web research tools](docs/web-research.md), powered by Parallel Search MCP. No search account or API key is required.
+
 ## MCP Integration Guide
 
 ### What is MCP?

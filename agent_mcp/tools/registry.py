@@ -41,6 +41,7 @@ tool_implementations: Dict[str, Callable[..., Awaitable[List[mcp_types.TextConte
 # "inputSchema": { ... schema ... }
 # }
 tool_schemas: List[Dict[str, Any]] = []
+tool_enabled: Dict[str, Callable[[], bool]] = {}
 
 
 # --- Core Tool Registry Functions ---
@@ -49,7 +50,8 @@ def register_tool(
     name: str,
     description: str,
     input_schema: Dict[str, Any],
-    implementation: Callable[..., Awaitable[List[mcp_types.TextContent]]]
+    implementation: Callable[..., Awaitable[List[mcp_types.TextContent]]],
+    enabled: Optional[Callable[[], bool]] = None,
 ):
     """
     Registers a tool's schema and its implementation.
@@ -68,6 +70,10 @@ def register_tool(
         # mcp.types.Tool in the original also had an outputSchema, which can be added if needed.
     })
     tool_implementations[name] = implementation
+    if enabled is None:
+        tool_enabled.pop(name, None)
+    else:
+        tool_enabled[name] = enabled
     logger.info(f"Registered tool: {name}")
 
 
@@ -88,6 +94,9 @@ async def list_available_tools() -> List[mcp_types.Tool]:
     
     mcp_tool_list: List[mcp_types.Tool] = []
     for schema_dict in tool_schemas:
+        is_enabled = tool_enabled.get(schema_dict["name"])
+        if is_enabled is not None and not is_enabled():
+            continue
         try:
             # Assuming mcp_types.Tool can be initialized like this:
             # Tool(name="...", description="...", inputSchema={...})
@@ -173,6 +182,11 @@ async def dispatch_tool_call(
 
     # Dispatch to the correct tool implementation (main.py:1879 onwards)
     if tool_name in tool_implementations:
+        is_enabled = tool_enabled.get(tool_name)
+        if is_enabled is not None and not is_enabled():
+            return [mcp_types.TextContent(
+                type="text", text=f"Error: Tool '{tool_name}' is disabled."
+            )]
         implementation_func = tool_implementations[tool_name]
         try:
             # The core logic of each tool (e.g., create_agent_tool_impl)

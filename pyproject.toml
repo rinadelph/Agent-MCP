@@ -21,13 +21,13 @@ dependencies = [
     "anyio",
     "click",
     "openai",
-    "starlette",
+    "starlette>=0.27,<1",
     "uvicorn",
     "jinja2",
     "python-dotenv",
     "sqlite-vec",
     "httpx",
-    "mcp>=1.8.1",
+    "mcp>=1.8.1,<2",
 ]
 
 [project.optional-dependencies]
