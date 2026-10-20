@@ -30,6 +30,7 @@ from . import agent_tools
 from . import rag_tools
 from . import utility_tools
 from . import agent_communication_tools
+from . import web_research_tools as web_research_tools
 
 # After all imports, the tool registry in tools.registry should be populated.
 # We can optionally add a log here to confirm, or check the registry's state.
