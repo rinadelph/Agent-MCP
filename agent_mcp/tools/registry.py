@@ -41,7 +41,7 @@ tool_implementations: Dict[str, Callable[..., Awaitable[List[mcp_types.TextConte
 # "inputSchema": { ... schema ... }
 # }
 tool_schemas: List[Dict[str, Any]] = []
-tool_enabled: Dict[str, Callable[[], bool]] = {}
+tool_enabled: dict[str, Callable[[], bool]] = {}
 
 
 # --- Core Tool Registry Functions ---
